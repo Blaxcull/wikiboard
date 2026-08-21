@@ -22,6 +22,13 @@ type WindowsStore = {
 };
 
 let windowCount = 0;
+const CASCADE_STEP = 30;
+const CASCADE_WRAP = 240;
+
+/** Increasing offset so overlapping windows cascade diagonally */
+export function nextCascadeOffset(): number {
+  return (windowCount++ * CASCADE_STEP) % CASCADE_WRAP;
+}
 
 export const useWindows = create<WindowsStore>((set) => ({
   windows: [],
@@ -33,7 +40,7 @@ export const useWindows = create<WindowsStore>((set) => ({
         {
           id: crypto.randomUUID(),
           url: "",
-          title: `Window ${++windowCount}`,
+          title: `Window ${windowCount}`,
           links: [],
           active: true,
           ...data,

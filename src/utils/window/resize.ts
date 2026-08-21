@@ -1,4 +1,11 @@
+import { isDraggingWindow } from "./drag";
+
+// shared flag so OnEdge etc. can skip work while a resize is active
+export let isResizingWindow = false;
+
 export function Resize(e: React.MouseEvent<HTMLDivElement>) {
+        if (isDraggingWindow || isResizingWindow) return
+
         const target = e.currentTarget
 
             const rect = target.getBoundingClientRect()
@@ -10,20 +17,40 @@ export function Resize(e: React.MouseEvent<HTMLDivElement>) {
             const startTop = rect.top
             const cursor = getComputedStyle(target).cursor
 
+            if (cursor === 'default') return
+
+            // Freeze the iframe at its current pixel size so its huge DOM
+            // doesn't reflow on every frame. Restored once on mouseup.
+            const iframe = target.querySelector<HTMLElement>('iframe')
+            if (iframe) {
+                const fr = iframe.getBoundingClientRect()
+                iframe.style.width = `${fr.width}px`
+                iframe.style.height = `${fr.height}px`
+            }
+
+            isResizingWindow = true
             let frameRequested = false
 
             document.body.style.cursor = cursor
             document.body.style.userSelect = 'none'
+            target.classList.add('resizing')
+            document.body.classList.add('gesture-active')
 
+            // always remember the latest pointer position so no movement
+            // is dropped between animation frames (prevents stepping)
+            let lastX = startX
+            let lastY = startY
 
             function onMouseMove(ev: MouseEvent) {
-                if (frameRequested) return
+                lastX = ev.clientX
+                lastY = ev.clientY
+                if (isDraggingWindow || frameRequested) return
                     frameRequested = true
 
                 requestAnimationFrame(() => {
                     frameRequested = false
-                    const dx = ev.clientX - startX
-                    const dy = ev.clientY - startY
+                    const dx = lastX - startX
+                    const dy = lastY - startY
 
                     // handle horizontal & vertical at once for corners
                     switch (cursor) {
@@ -89,6 +116,13 @@ export function Resize(e: React.MouseEvent<HTMLDivElement>) {
             function onMouseUp() {
                 document.body.style.cursor = 'default'
                 document.body.style.userSelect = ''
+                target.classList.remove('resizing')
+                document.body.classList.remove('gesture-active')
+                if (iframe) {
+                    iframe.style.width = ''
+                    iframe.style.height = ''
+                }
+                isResizingWindow = false
                 document.removeEventListener('mousemove', onMouseMove)
                 document.removeEventListener('mouseup', onMouseUp)
             }

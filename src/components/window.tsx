@@ -1,6 +1,8 @@
+import { useRef } from "react";
 import startDrag from "@/utils/window/drag";
 import { Resize } from "@/utils/window/resize";
 import { OnEdge } from "@/utils/window/onEdge";
+import { nextCascadeOffset } from "@/store/windows";
 
 type WindowProps = {
   /** Inner content to display */
@@ -25,8 +27,18 @@ export default function Window({
   onClose,
   onActivate,
 }: React.PropsWithChildren<WindowProps>) {
+  const positioned = useRef(false);
+
   return (
     <div
+      ref={(el) => {
+        if (el && !positioned.current) {
+          positioned.current = true;
+          const offset = nextCascadeOffset();
+          el.style.top = `${80 + offset}px`;
+          el.style.left = `${80 + offset}px`;
+        }
+      }}
       className={`window ${className}`}
       onMouseMove={(e) => OnEdge(e)}
       onMouseDown={(e) => {

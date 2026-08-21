@@ -1,4 +1,11 @@
+import { isDraggingWindow } from "./drag";
+import { isResizingWindow } from "./resize";
+
+let lastCursor = "";
+
 export function OnEdge(e: React.MouseEvent<HTMLDivElement>) {
+    if (isDraggingWindow || isResizingWindow) return
+
     const element = e.currentTarget
     const rect = element.getBoundingClientRect()
 
@@ -10,14 +17,21 @@ export function OnEdge(e: React.MouseEvent<HTMLDivElement>) {
         const nearTop = Math.abs(y - rect.top) <= EDGE_MARGIN
         const nearBottom = Math.abs(y - rect.bottom) <= EDGE_MARGIN
 
+        let cursor = 'default'
+
         // Corners take priority
-        if (nearTop && nearLeft) element.style.cursor = 'nw-resize'
-            else if (nearTop && nearRight) element.style.cursor = 'ne-resize'
-                else if (nearBottom && nearLeft) element.style.cursor = 'sw-resize'
-                    else if (nearBottom && nearRight) element.style.cursor = 'se-resize'
-                        else if (nearLeft) element.style.cursor = 'w-resize'
-                            else if (nearRight) element.style.cursor = 'e-resize'
-                                else if (nearTop) element.style.cursor = 'n-resize'
-                                    else if (nearBottom) element.style.cursor = 's-resize'
-                                        else element.style.cursor = 'default'
+        if (nearTop && nearLeft) cursor = 'nw-resize'
+            else if (nearTop && nearRight) cursor = 'ne-resize'
+                else if (nearBottom && nearLeft) cursor = 'sw-resize'
+                    else if (nearBottom && nearRight) cursor = 'se-resize'
+                        else if (nearLeft) cursor = 'w-resize'
+                            else if (nearRight) cursor = 'e-resize'
+                                else if (nearTop) cursor = 'n-resize'
+                                    else if (nearBottom) cursor = 's-resize'
+
+        // only touch the DOM when the value actually changes
+        if (cursor !== lastCursor) {
+            element.style.cursor = cursor
+            lastCursor = cursor
+        }
 }

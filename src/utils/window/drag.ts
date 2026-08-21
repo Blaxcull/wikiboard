@@ -1,3 +1,6 @@
+// shared flag so other handlers can skip work while a drag is active
+export let isDraggingWindow = false;
+
 export default function startDrag(e: React.MouseEvent<HTMLDivElement>) {
   const target = e.currentTarget.parentElement;
   if (!target) return;
@@ -24,6 +27,11 @@ export default function startDrag(e: React.MouseEvent<HTMLDivElement>) {
   function beginDragging() {
     if (!target) return;
     isDragging = true;
+    isDraggingWindow = true;
+
+    target.classList.add("dragging");
+    document.body.classList.add("gesture-active");
+    document.body.style.cursor = "move";
 
     const rectNow = target.getBoundingClientRect();
     shiftX = startX - rectNow.left;
@@ -44,14 +52,13 @@ export default function startDrag(e: React.MouseEvent<HTMLDivElement>) {
   }
 
   function onMouseMove(ev: MouseEvent) {
-    if (!target) return;
-    target.style.cursor = "move";
+    if (!isDragging && !framePending) {
+      const dx = Math.abs(ev.clientX - startX);
+      const dy = Math.abs(ev.clientY - startY);
 
-    const dx = Math.abs(ev.clientX - startX);
-    const dy = Math.abs(ev.clientY - startY);
-
-    if (!isDragging && (dx > 10 || dy > 10)) {
-      beginDragging();
+      if (dx > 4 || dy > 4) {
+        beginDragging();
+      }
     }
 
     if (!isDragging) return;
@@ -67,6 +74,10 @@ export default function startDrag(e: React.MouseEvent<HTMLDivElement>) {
 
   function onMouseUp() {
     isDragging = false;
+    isDraggingWindow = false;
+    target?.classList.remove("dragging");
+    document.body.classList.remove("gesture-active");
+    document.body.style.cursor = "";
     document.removeEventListener("mousemove", onMouseMove);
     document.removeEventListener("mouseup", onMouseUp);
   }

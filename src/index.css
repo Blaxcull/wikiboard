@@ -18,6 +18,19 @@ body {
   border: 2px solid #333;
   background: #fff;
   overflow: hidden;
+  contain: layout paint;
+  will-change: top, left;
+}
+
+.window.dragging iframe,
+.window.resizing iframe {
+  pointer-events: none;
+}
+
+/* during any window gesture, stop the browser from routing mouse events
+   into cross-origin iframes of overlapping windows (causes stalls) */
+body.gesture-active iframe {
+  pointer-events: none !important;
 }
 
 .window.active {
@@ -135,6 +148,25 @@ body {
   height: 100%;
   border: none;
   display: block;
+}
+
+.article-view {
+  position: relative;
+  background: #fff;
+}
+
+.article-view.loading .article-frame {
+  visibility: hidden;
+}
+
+.article-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: #666;
 }
 
 .link-empty {

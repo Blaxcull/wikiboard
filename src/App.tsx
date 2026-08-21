@@ -1,6 +1,7 @@
 import Window from './components/window'
 import LinkEditor from './components/linkEditor'
 import SearchBox from './components/searchBox'
+import ArticleView from './components/articleView'
 import { useWindows } from './store/windows'
 
 function App() {
@@ -20,7 +21,7 @@ function App() {
           onActivate={() => setActive(w.id)}
           onClose={() => removeWindow(w.id)}
         >
-          <LinkEditor win={w} />
+          {w.url ? <ArticleView win={w} /> : <LinkEditor win={w} />}
         </Window>
       ))}
     </>

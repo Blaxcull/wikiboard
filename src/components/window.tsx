@@ -9,23 +9,37 @@ type WindowProps = {
   children?: React.ReactNode;
   /** CSS class overrides for the entire window */
   className?: string;
+  /** CSS style overrides for the entire window */
+  style?: React.CSSProperties;
   /** CSS class overrides for the title bar area */
   titleBarClassName?: string;
   /** Content displayed inside the title bar */
   titleBarContent?: React.ReactNode;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
   /** Called when the close button is clicked */
   onClose?: () => void;
   /** Called when the window is focused (mouse down anywhere on it) */
   onActivate?: () => void;
+  /** Called when the window position or size changes */
+  onPositionChange?: (pos: { x?: number; y?: number; width?: number; height?: number }) => void;
 };
 
 export default function Window({
   children,
   className = "",
+  style,
   titleBarClassName = "",
   titleBarContent,
+  x,
+  y,
+  width,
+  height,
   onClose,
   onActivate,
+  onPositionChange,
 }: React.PropsWithChildren<WindowProps>) {
   const positioned = useRef(false);
 
@@ -34,21 +48,35 @@ export default function Window({
       ref={(el) => {
         if (el && !positioned.current) {
           positioned.current = true;
-          const offset = nextCascadeOffset();
-          el.style.top = `${80 + offset}px`;
-          el.style.left = `${80 + offset}px`;
+          if (x !== undefined && y !== undefined) {
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+          } else {
+            const offset = nextCascadeOffset();
+            el.style.top = `${80 + offset}px`;
+            el.style.left = `${80 + offset}px`;
+          }
+          if (width !== undefined) el.style.width = `${width}px`;
+          if (height !== undefined) el.style.height = `${height}px`;
         }
       }}
       className={`window ${className}`}
+      style={style}
       onMouseMove={(e) => OnEdge(e)}
       onMouseDown={(e) => {
-        Resize(e);
+        Resize(e, (rect) => {
+          onPositionChange?.(rect);
+        });
         onActivate?.();
       }}
     >
       <div
         className={`titlebar ${titleBarClassName}`}
-        onMouseDown={(e) => startDrag(e)}
+        onMouseDown={(e) => {
+          startDrag(e, (pos) => {
+            onPositionChange?.(pos);
+          });
+        }}
       >
         <div>{titleBarContent}</div>
         {onClose && (

@@ -1,7 +1,10 @@
 // shared flag so other handlers can skip work while a drag is active
 export let isDraggingWindow = false;
 
-export default function startDrag(e: React.MouseEvent<HTMLDivElement>) {
+export default function startDrag(
+  e: React.MouseEvent<HTMLDivElement>,
+  onDragEnd?: (pos: { x: number; y: number }) => void,
+) {
   const target = e.currentTarget.parentElement;
   if (!target) return;
 
@@ -73,6 +76,11 @@ export default function startDrag(e: React.MouseEvent<HTMLDivElement>) {
   }
 
   function onMouseUp() {
+    if (isDragging && target) {
+      const left = parseFloat(target.style.left) || 0;
+      const top = parseFloat(target.style.top) || 0;
+      onDragEnd?.({ x: left, y: top });
+    }
     isDragging = false;
     isDraggingWindow = false;
     target?.classList.remove("dragging");

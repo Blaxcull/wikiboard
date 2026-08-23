@@ -10,6 +10,106 @@ export function extractTitle(url: string): string | null {
   }
 }
 
+export const WIKI_STYLESHEET_URL =
+  `${WIKI_ORIGIN}/w/load.php?lang=en&modules=site.styles%7Cmediawiki.page.media%7Cskins.vector.styles&only=styles`;
+
+function absolutize(url: string): string {
+  try {
+    return new URL(url, `${WIKI_ORIGIN}/`).href;
+  } catch {
+    return url;
+  }
+}
+
+/** Resolve relative URLs so content also renders outside the iframe (static preview) */
+function absolutizeSrcset(value: string): string {
+  return value
+    .split(",")
+    .map((part) => {
+      const tokens = part.trim().split(/\s+/);
+      if (tokens[0]) tokens[0] = absolutize(tokens[0]);
+      return tokens.join(" ");
+    })
+    .join(", ");
+}
+
+/** Page chrome & template fluff that has no place inside a board window */
+const STRIP_SELECTORS = [
+  "script",
+  "noscript",
+  ".mw-editsection", // [edit] links next to headings
+  ".navbox", // bottom-of-article template navigation boxes
+  ".vertical-navbox",
+  ".navigation-not-searchable",
+  ".mw-jump-link", // "jump to content" accessibility link
+  ".mw-indicators",
+  "#siteSub", // "From Wikipedia, the free encyclopedia"
+  "#contentSub",
+  "#contentSub2",
+  ".metadata", // maintenance tags
+  ".noprint", // print-hidden chrome (coordinates banners etc.)
+  ".side-box", // sister-project boxes
+  ".spoken-wikipedia",
+  ".catlinks", // category links
+  ".mw-empty-elt", // empty elements
+].join(",");
+
+/** Slim a parsed Wikipedia article: drop scripts/chrome/fluff, lazy images,
+ *  absolute URLs, and heavy metadata attributes. Runs once per article before
+ *  the HTML is cached/reused. */
+export function cleanArticleHtml(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+
+  doc.querySelectorAll(STRIP_SELECTORS).forEach((el) => el.remove());
+
+  // Strip all inline event handlers, RDFa, and Wikipedia data attributes
+  doc.querySelectorAll("*").forEach((el) => {
+    for (const attr of Array.from(el.attributes)) {
+      if (
+        attr.name.startsWith("data-") ||
+        attr.name.startsWith("on") ||
+        attr.name === "typeof" ||
+        attr.name === "about" ||
+        attr.name === "resource" ||
+        attr.name === "property"
+      ) {
+        el.removeAttribute(attr.name);
+      }
+    }
+  });
+
+  doc.querySelectorAll("img").forEach((img) => {
+    img.setAttribute("loading", "lazy");
+    img.setAttribute("decoding", "async");
+  });
+
+  doc.querySelectorAll("a[href], link[href], area[href]").forEach((el) => {
+    el.setAttribute("href", absolutize(el.getAttribute("href") ?? ""));
+  });
+  doc.querySelectorAll("img[src], source[src]").forEach((el) => {
+    el.setAttribute("src", absolutize(el.getAttribute("src") ?? ""));
+  });
+  doc
+    .querySelectorAll("img[srcset], source[srcset]")
+    .forEach((el) =>
+      el.setAttribute("srcset", absolutizeSrcset(el.getAttribute("srcset") ?? "")),
+    );
+
+  return doc.body.innerHTML;
+}
+
+export function extractFirstParagraph(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const firstP = doc.querySelector("p");
+  return firstP?.textContent?.trim() ?? "";
+}
+
+export function extractFirstImage(html: string): string | null {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const img = doc.querySelector("img");
+  return img?.getAttribute("src") ?? null;
+}
+
 export async function fetchArticle(title: string): Promise<string> {
   const api = `${WIKI_ORIGIN}/w/api.php?action=parse&page=${encodeURIComponent(
     title,
@@ -18,26 +118,8 @@ export async function fetchArticle(title: string): Promise<string> {
   if (!res.ok) throw new Error(`Wikipedia API error ${res.status}`);
   const data = await res.json();
   if (data.error) throw new Error(data.error.info);
-  return data.parse.text["*"] as string;
+  return cleanArticleHtml(data.parse.text["*"] as string);
 }
-
-const INTERCEPT_SCRIPT = `
-document.addEventListener('mousedown', function () {
-  parent.postMessage({ type: 'wiki-focus' }, '*');
-}, true);
-
-document.addEventListener('click', function (e) {
-  var a = e.target.closest && e.target.closest('a[href]');
-  if (!a) return;
-  var href = a.getAttribute('href') || '';
-  var m = href.match(/^\\/wiki\\/([^#?]+)/);
-  if (m) {
-    e.preventDefault();
-    e.stopPropagation();
-    parent.postMessage({ type: 'wiki-link', title: decodeURIComponent(m[1]) }, '*');
-  }
-}, true);
-`;
 
 export function escapeHtml(s: string): string {
   return s
@@ -45,33 +127,4 @@ export function escapeHtml(s: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-export function buildSrcdoc(html: string, title: string): string {
-  const displayTitle = escapeHtml(title.replace(/_/g, " "));
-  return `<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<base href="${WIKI_ORIGIN}/">
-<link rel="stylesheet" href="${WIKI_ORIGIN}/w/load.php?lang=en&modules=site.styles%7Cmediawiki.page.media%7Cskins.vector.styles&only=styles">
-<style>
-body { margin: 8px; }
-.wiki-title {
-  font-family: sans-serif;
-  font-size: 1.75rem;
-  font-weight: 400;
-  line-height: 1.3;
-  margin: 0 0 0.2em;
-  padding-bottom: 0.1em;
-  border-bottom: 1px solid #a2a9b1;
-}
-</style>
-<script>${INTERCEPT_SCRIPT}</script>
-</head>
-<body class="mw-parser-output">
-<h1 class="wiki-title">${displayTitle}</h1>
-${html}
-</body>
-</html>`;
 }

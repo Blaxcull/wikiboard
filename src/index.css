@@ -41,6 +41,11 @@ body.gesture-active iframe {
   z-index: 1;
 }
 
+.window.inactive .window-content {
+  content-visibility: auto;
+  contain-intrinsic-size: 384px 360px;
+}
+
 .titlebar {
   height: 24px;
   background: #111;
@@ -150,9 +155,94 @@ body.gesture-active iframe {
   display: block;
 }
 
+/* frozen full-page preview shown while a window's iframe is discarded */
+.static-preview {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background: #fff;
+}
+
+/* lightweight stub for frozen windows — no Shadow DOM, no heavy HTML */
+.frozen-preview {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background: #fafafa;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  cursor: default;
+}
+
+.frozen-preview:hover {
+  background: #f5f5f5;
+}
+
+.frozen-title {
+  font-family: sans-serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0 0 8px;
+  color: #222;
+}
+
+.frozen-thumbnail {
+  max-width: 100%;
+  max-height: 120px;
+  object-fit: cover;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.frozen-snippet {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #444;
+  margin: 0 0 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.frozen-hint {
+  margin-top: auto;
+  font-size: 11px;
+  color: #999;
+  text-align: center;
+  padding-top: 8px;
+  border-top: 1px solid #eee;
+}
+
+.window.frozen {
+  opacity: 0.85;
+}
+
 .article-view {
   position: relative;
   background: #fff;
+}
+
+/* placeholder for a window that never finished loading its article */
+.article-view:has(.discarded-note) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.discarded-note {
+  text-align: center;
+  color: #666;
+  font-size: 13px;
+  padding: 16px;
+}
+
+.discarded-note strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 15px;
+  color: #222;
 }
 
 .article-view.loading .article-frame {

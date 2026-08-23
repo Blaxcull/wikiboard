@@ -1,79 +1,119 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { WindowData } from "../store/windows";
 import { useWindows } from "../store/windows";
-import { buildSrcdoc, extractTitle, fetchArticle } from "../utils/wiki";
+import {
+  extractTitle,
+  fetchArticle,
+  extractFirstParagraph,
+  extractFirstImage,
+} from "../utils/wiki";
+import {
+  getCachedArticle,
+  setCachedArticle,
+} from "../utils/articleCache";
+import { getScroll, setScroll } from "../utils/scrollMemory";
+import StaticPreview from "./staticPreview";
 
 type Props = { win: WindowData };
 
 export default function ArticleView({ win }: Props) {
   const updateWindow = useWindows((s) => s.updateWindow);
   const addWindow = useWindows((s) => s.addWindow);
-  const setActive = useWindows((s) => s.setActive);
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const [srcdoc, setSrcdoc] = useState("");
-  const [loading, setLoading] = useState(true);
+
+  const title = extractTitle(win.url) ?? "";
+  const [prevUrl, setPrevUrl] = useState(win.url);
+  const [article, setArticle] = useState<{
+    html: string | null;
+    preview: string;
+    thumbnail: string | null;
+  }>(() => {
+    const cached = title ? getCachedArticle(title) : undefined;
+    return {
+      html: cached?.html ?? null,
+      preview: cached?.preview ?? "",
+      thumbnail: cached?.thumbnail ?? null,
+    };
+  });
+  const [loading, setLoading] = useState<boolean>(() => {
+    const cached = title ? getCachedArticle(title) : undefined;
+    return !cached && Boolean(title);
+  });
+
+  if (prevUrl !== win.url) {
+    setPrevUrl(win.url);
+    setScroll(win.id, 0, 0);
+    const cached = title ? getCachedArticle(title) : undefined;
+    setArticle({
+      html: cached?.html ?? null,
+      preview: cached?.preview ?? "",
+      thumbnail: cached?.thumbnail ?? null,
+    });
+    setLoading(!cached && Boolean(title));
+  }
+
+  const handleScrollChange = useCallback(
+    (y: number) => setScroll(win.id, 0, y),
+    [win.id],
+  );
 
   useEffect(() => {
     let cancelled = false;
-    const title = extractTitle(win.url);
-    const timer = setTimeout(() => {
-      if (!title) {
-        setSrcdoc("");
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
-      fetchArticle(title)
-        .then((html) => {
-          if (!cancelled) {
-            setSrcdoc(buildSrcdoc(html, title));
-            setLoading(false);
-          }
-        })
-        .catch(() => {
-          if (!cancelled) setLoading(false);
+    const articleTitle = extractTitle(win.url);
+    if (!articleTitle || getCachedArticle(articleTitle) !== undefined) {
+      return;
+    }
+
+    fetchArticle(articleTitle)
+      .then((fetchedHtml) => {
+        if (cancelled) return;
+        const p = extractFirstParagraph(fetchedHtml);
+        const img = extractFirstImage(fetchedHtml);
+        setCachedArticle(articleTitle, fetchedHtml, p, img);
+        setArticle({
+          html: fetchedHtml,
+          preview: p,
+          thumbnail: img,
         });
-    }, 0);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
+
     return () => {
       cancelled = true;
-      clearTimeout(timer);
     };
   }, [win.url]);
 
-  useEffect(() => {
-    function onMessage(e: MessageEvent) {
-      if (e.source !== iframeRef.current?.contentWindow) return;
-      const data = e.data as { type?: string; title?: string };
-      if (data?.type === "wiki-focus") {
-        setActive(win.id);
-        return;
-      }
-      if (data?.type !== "wiki-link" || !data.title) return;
-      const title = data.title;
-      const url = `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`;
-      const current = useWindows
-        .getState()
-        .windows.find((w) => w.id === win.id);
-      if (!current || current.links.some((l) => l.href === url)) return;
-      updateWindow(win.id, {
-        links: [...current.links, { label: title.replace(/_/g, " "), href: url }],
-      });
-      addWindow({ title: title.replace(/_/g, " "), url });
-    }
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-  }, [win.id, updateWindow, addWindow, setActive]);
+  function handleLinkClick(wikiTitle: string) {
+    const url = `https://en.wikipedia.org/wiki/${encodeURIComponent(wikiTitle)}`;
+    const current = useWindows.getState().windows.find((w) => w.id === win.id);
+    if (!current || current.links.some((l) => l.href === url)) return;
+    updateWindow(win.id, {
+      links: [...current.links, { label: wikiTitle.replace(/_/g, " "), href: url }],
+    });
+    addWindow({ title: wikiTitle.replace(/_/g, " "), url });
+  }
 
   return (
     <div className={`article-view ${loading ? "loading" : ""}`}>
       {loading && <div className="article-loading">Loading article…</div>}
-      <iframe
-        ref={iframeRef}
-        className="article-frame"
-        title={win.title}
-        srcDoc={srcdoc}
-        onLoad={() => setLoading(false)}
-      />
+      {article.html !== null ? (
+        <StaticPreview
+          title={title}
+          html={article.html}
+          scrollTop={getScroll(win.id)?.y ?? 0}
+          onLinkClick={handleLinkClick}
+          onScrollChange={handleScrollChange}
+        />
+      ) : (
+        !loading && (
+          <div className="discarded-note">
+            <strong>{win.title.replace(/_/g, " ")}</strong>
+            <p>Could not load article</p>
+          </div>
+        )
+      )}
     </div>
   );
 }

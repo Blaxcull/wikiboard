@@ -3,7 +3,10 @@ import { isDraggingWindow } from "./drag";
 // shared flag so OnEdge etc. can skip work while a resize is active
 export let isResizingWindow = false;
 
-export function Resize(e: React.MouseEvent<HTMLDivElement>) {
+export function Resize(
+  e: React.MouseEvent<HTMLDivElement>,
+  onResizeEnd?: (rect: { x: number; y: number; width: number; height: number }) => void,
+) {
         if (isDraggingWindow || isResizingWindow) return
 
         const target = e.currentTarget
@@ -122,6 +125,11 @@ export function Resize(e: React.MouseEvent<HTMLDivElement>) {
                     iframe.style.width = ''
                     iframe.style.height = ''
                 }
+                const left = parseFloat(target.style.left) || target.getBoundingClientRect().left;
+                const top = parseFloat(target.style.top) || target.getBoundingClientRect().top;
+                const width = parseFloat(target.style.width) || target.getBoundingClientRect().width;
+                const height = parseFloat(target.style.height) || target.getBoundingClientRect().height;
+                onResizeEnd?.({ x: left, y: top, width, height });
                 isResizingWindow = false
                 document.removeEventListener('mousemove', onMouseMove)
                 document.removeEventListener('mouseup', onMouseUp)

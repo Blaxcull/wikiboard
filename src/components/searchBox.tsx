@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useWindows } from '../store/windows'
+import { prefetchArticles } from '../utils/articleCache'
 
 type Suggestion = { title: string; url: string }
 
@@ -33,6 +34,7 @@ export default function SearchBox() {
           titles.map((title, i) => ({ title, url: urls[i] })),
         )
         setOpen(true)
+        prefetchArticles(titles.slice(0, 3))
       } catch {
         /* aborted or failed */
       }

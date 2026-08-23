@@ -31,11 +31,12 @@ type WindowsStore = {
   updateWindow: (id: string, patch: Partial<Omit<WindowData, "id">>) => void;
   freezeWindow: (id: string) => void;
   unfreezeWindow: (id: string) => void;
+  spawnWindows: (count: number, startIdx: number, titles?: string[]) => void;
 };
 
 let windowCount = 0;
-const CASCADE_STEP = 30;
-const CASCADE_WRAP = 240;
+const CASCADE_STEP = 5;
+const CASCADE_WRAP = 500;
 
 /** Increasing offset so overlapping windows cascade diagonally */
 export function nextCascadeOffset(): number {
@@ -129,6 +130,35 @@ export const useWindows = create<WindowsStore>((set) => ({
               }
             : { ...w, active: false },
         ),
+      };
+    }),
+
+  spawnWindows: (count: number, startIdx: number, titles?: string[]) =>
+    set((state) => {
+      const windows = [...state.windows];
+      for (let i = 0; i < count; i++) {
+        const idx = startIdx + i;
+        const offset = nextCascadeOffset();
+        const title = titles?.[i] ?? `Article_${idx}`;
+        const wikiPath = title.replace(/ /g, "_");
+        windows.push({
+          id: crypto.randomUUID(),
+          url: `https://en.wikipedia.org/wiki/${wikiPath}`,
+          title,
+          links: [],
+          active: false,
+          lastFocusedAt: Date.now(),
+          frozen: false,
+          zIndex: state.maxZIndex + i + 1,
+          x: 80 + offset,
+          y: 80 + offset,
+          width: 384,
+          height: 384,
+        });
+      }
+      return {
+        maxZIndex: state.maxZIndex + count,
+        windows,
       };
     }),
 }));

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { WIKI_STYLESHEET_URL, escapeHtml, extractTitle } from "../utils/wiki";
+import { prefetchArticles } from "../utils/articleCache";
 
 type Props = {
   title: string;
@@ -31,6 +32,83 @@ const SHADOW_STYLES = `
   }
   .freeze a:hover {
     text-decoration: underline;
+  }
+  .freeze figure {
+    margin: 0.5em 0;
+    padding: 0;
+  }
+  .freeze .mw-file-description,
+  .freeze .mw-file-element {
+    max-width: 100%;
+    height: auto;
+  }
+  .freeze .mw-default-size img {
+    max-width: 100%;
+    height: auto;
+  }
+  .freeze .side-box {
+    border: 1px solid #a2a9b1;
+    padding: 8px;
+    margin: 0.5em 0;
+    font-size: 0.85em;
+  }
+  .freeze .side-box-flex {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .freeze .side-box-image img {
+    max-width: 50px;
+  }
+  .freeze .shortdescription {
+    display: none;
+  }
+  .freeze .mw-references-wrap {
+    font-size: 0.85em;
+    margin: 0.5em 0;
+  }
+  .freeze .reference-text {
+    font-size: 0.9em;
+  }
+  .freeze p {
+    margin: 0.5em 0;
+    line-height: 1.5;
+  }
+  .freeze h1, .freeze h2, .freeze h3, .freeze h4 {
+    margin: 1em 0 0.3em;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  .freeze h2 {
+    font-size: 1.3em;
+    border-bottom: 1px solid #a2a9b1;
+    padding-bottom: 0.2em;
+  }
+  .freeze ul, .freeze ol {
+    margin: 0.3em 0 0.3em 1.5em;
+    padding: 0;
+  }
+  .freeze li {
+    margin: 0.2em 0;
+  }
+  .freeze table {
+    border-collapse: collapse;
+    margin: 0.5em 0;
+    font-size: 0.9em;
+  }
+  .freeze th, .freeze td {
+    border: 1px solid #a2a9b1;
+    padding: 4px 8px;
+  }
+  .freeze th {
+    background: #f8f9fa;
+    font-weight: 600;
+  }
+  .freeze .hatnote {
+    font-style: italic;
+    color: #54595d;
+    margin: 0.3em 0;
+    font-size: 0.9em;
   }
 `;
 
@@ -124,7 +202,17 @@ export default function StaticPreview({ title, html, scrollTop, onLinkClick, onS
       }
     };
 
+    const handleHover = (e: Event) => {
+      const target = e.target as HTMLElement | null;
+      const a = target?.closest?.("a[href]");
+      if (!a) return;
+      const href = a.getAttribute("href") || "";
+      const wikiTitle = extractTitle(href);
+      if (wikiTitle) prefetchArticles([wikiTitle]);
+    };
+
     root.addEventListener("click", handleClick);
+    root.addEventListener("mouseover", handleHover);
     host.addEventListener("scroll", handleScroll, { passive: true });
     host.addEventListener("wheel", markUserInteraction, { passive: true });
     host.addEventListener("pointerdown", markUserInteraction, { passive: true });
@@ -188,6 +276,7 @@ export default function StaticPreview({ title, html, scrollTop, onLinkClick, onS
       host.removeEventListener("touchstart", markUserInteraction);
       host.removeEventListener("keydown", markUserInteraction);
       root.removeEventListener("click", handleClick);
+      root.removeEventListener("mouseover", handleHover);
     };
   }, [title, html, scrollTop]);
 

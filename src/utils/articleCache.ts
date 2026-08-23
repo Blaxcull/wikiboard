@@ -1,23 +1,11 @@
-/** Bounded cache of cleaned article data.
- *  A string costs ~0.1–1 MB vs tens of MB for a live iframe document,
- *  so a discarded window can render its frozen page instantly without
- *  refetching.
- *
- *  Each entry stores the full HTML plus a lightweight preview snippet
- *  (first paragraph + optional thumbnail) used by frozen windows.
- *
- *  Retention rules:
- *  - Articles belonging to currently OPEN windows are never evicted
- *    (guarantees every discarded window has content to show).
- *  - Leftovers from closed windows rotate out via LRU beyond MAX_ENTRIES. */
-
 import { useWindows } from "../store/windows";
-import { extractTitle } from "./wiki";
+import { extractTitle, fetchArticle, extractFirstParagraph, extractFirstImage } from "./wiki";
 
 export type CacheEntry = {
   html: string;
   preview: string;
   thumbnail: string | null;
+  summaryHtml: string | null;
 };
 
 const cache = new Map<string, CacheEntry>();
@@ -45,7 +33,33 @@ export function setCachedArticle(
   html: string,
   preview: string,
   thumbnail: string | null,
+  summaryHtml?: string | null,
 ): void {
-  cache.set(key, { html, preview, thumbnail });
+  const existing = cache.get(key);
+  cache.set(key, {
+    html,
+    preview,
+    thumbnail,
+    summaryHtml: summaryHtml ?? existing?.summaryHtml ?? null,
+  });
   evictClosedWindowArticles();
+}
+
+export async function prefetchArticles(titles: string[], concurrency = 15): Promise<void> {
+  const queue = [...titles];
+  const workers = Array.from({ length: concurrency }, async () => {
+    while (queue.length > 0) {
+      const title = queue.shift()!;
+      if (cache.has(title)) continue;
+      try {
+        const html = await fetchArticle(title);
+        const preview = extractFirstParagraph(html);
+        const thumbnail = extractFirstImage(html);
+        cache.set(title, { html, preview, thumbnail, summaryHtml: null });
+      } catch {
+        // skip failed articles
+      }
+    }
+  });
+  await Promise.all(workers);
 }

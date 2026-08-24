@@ -83,6 +83,8 @@ export function cleanArticleHtml(html: string): string {
 
   doc.querySelectorAll("*").forEach((el) => {
     for (const attr of Array.from(el.attributes)) {
+      // Preserve typeof on <figure> — Wikipedia's CSS uses figure[typeof~='mw:File/Thumb']
+      if (attr.name === "typeof" && el.tagName === "FIGURE") continue;
       if (
         attr.name.startsWith("data-") ||
         attr.name.startsWith("on") ||
@@ -156,6 +158,27 @@ export function extractFirstImage(html: string): string | null {
   const doc = new DOMParser().parseFromString(html, "text/html");
   const img = doc.querySelector("img");
   return img?.getAttribute("src") ?? null;
+}
+
+export async function fetchFileUrl(title: string): Promise<{ url: string; width: number; height: number } | null> {
+  const res = await fetch(
+    `${WIKI_ORIGIN}/w/api.php?action=query&titles=${encodeURIComponent(title)}&prop=imageinfo&iiprop=url|size|mime&format=json&origin=*`,
+  );
+  if (!res.ok) return null;
+  const data = await res.json();
+  const pages = data.query?.pages;
+  if (!pages) return null;
+  const page = Object.values(pages)[0] as Record<string, unknown>;
+  const imageinfo = page?.imageinfo as Array<Record<string, unknown>> | undefined;
+  if (!imageinfo?.[0]) return null;
+  const info = imageinfo[0];
+  const mime = info.mime as string;
+  if (!mime?.startsWith("image/")) return null;
+  return {
+    url: info.url as string,
+    width: (info.width as number) ?? 300,
+    height: (info.height as number) ?? 300,
+  };
 }
 
 export function escapeHtml(s: string): string {

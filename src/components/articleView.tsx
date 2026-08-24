@@ -5,6 +5,7 @@ import {
   extractTitle,
   fetchArticle,
   fetchArticleSummary,
+  fetchFileUrl,
 } from "../utils/wiki";
 import {
   getCachedArticle,
@@ -41,6 +42,8 @@ export default function ArticleView({ win }: Props) {
     return !cached && Boolean(title);
   });
 
+  const [fileInfo, setFileInfo] = useState<{ url: string; width: number; height: number } | null>(null);
+
   if (prevUrl !== win.url) {
     setPrevUrl(win.url);
     setScroll(win.id, 0, 0);
@@ -50,6 +53,7 @@ export default function ArticleView({ win }: Props) {
     setSummaryDesc("");
     setFullHtml(cached?.html ?? null);
     setLoading(!cached && Boolean(title));
+    setFileInfo(null);
   }
 
   const handleScrollChange = useCallback(
@@ -61,6 +65,18 @@ export default function ArticleView({ win }: Props) {
     let cancelled = false;
     const articleTitle = extractTitle(win.url);
     if (!articleTitle) return;
+
+    if (articleTitle.startsWith("File:")) {
+      fetchFileUrl(articleTitle).then((info) => {
+        if (!cancelled) setFileInfo(info);
+      }).catch(() => {});
+      return;
+    }
+
+    if (articleTitle.startsWith("Special:") || articleTitle.startsWith("Help:") || articleTitle.startsWith("Wikipedia:")) {
+      setLoading(false);
+      return;
+    }
 
     const cached = getCachedArticle(articleTitle);
     if (cached) return;
@@ -113,10 +129,12 @@ export default function ArticleView({ win }: Props) {
   function handleLinkClick(wikiTitle: string) {
     const url = `https://en.wikipedia.org/wiki/${wikiTitle.replace(/ /g, "_")}`;
     const current = useWindows.getState().windows.find((w) => w.id === win.id);
-    if (!current || current.links.some((l) => l.href === url)) return;
-    updateWindow(win.id, {
-      links: [...current.links, { label: wikiTitle.replace(/_/g, " "), href: url }],
-    });
+    if (!current) return;
+    if (!current.links.some((l) => l.href === url)) {
+      updateWindow(win.id, {
+        links: [...current.links, { label: wikiTitle.replace(/_/g, " "), href: url }],
+      });
+    }
     addWindow({ title: wikiTitle.replace(/_/g, " "), url });
   }
 
@@ -161,6 +179,41 @@ export default function ArticleView({ win }: Props) {
               style={{ fontSize: 14, lineHeight: 1.5 }}
             />
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // File page — show the image
+  if (title.startsWith("File:")) {
+    return (
+      <div className="article-view">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", background: "#f8f9fa" }}>
+          {fileInfo ? (
+            <img
+              src={fileInfo.url}
+              alt={title.replace(/_/g, " ")}
+              style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+            />
+          ) : (
+            <div className="discarded-note">
+              <strong>{title.replace(/_/g, " ")}</strong>
+              <p>Loading image…</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Non-article page (Special:, Help:, Wikipedia:)
+  if (title.startsWith("Special:") || title.startsWith("Help:") || title.startsWith("Wikipedia:")) {
+    return (
+      <div className="article-view">
+        <div className="discarded-note">
+          <strong>{title.replace(/_/g, " ")}</strong>
+          <p>Not an article</p>
+          <p style={{ fontSize: 11, color: "#999" }}>{title.split(":")[0]} pages can't be displayed</p>
         </div>
       </div>
     );

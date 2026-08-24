@@ -36,7 +36,6 @@ const STRIP_SELECTORS = [
   "script",
   "noscript",
   ".mw-empty-elt",
-  "style",
   "link[rel=dns-prefetch]",
   "meta",
   "base",
@@ -46,7 +45,41 @@ const STRIP_SELECTORS = [
 export function cleanArticleHtml(html: string): string {
   const doc = new DOMParser().parseFromString(html, "text/html");
 
+  // Before removing .mw-empty-elt, hoist any <style> children out so
+  // Wikipedia's template styles (hlist, navbar, navbox, etc.) survive.
+  doc.querySelectorAll(".mw-empty-elt").forEach((el) => {
+    el.querySelectorAll("style").forEach((s) => el.parentElement?.insertBefore(s, el));
+  });
+
   doc.querySelectorAll(STRIP_SELECTORS).forEach((el) => el.remove());
+
+  // Wrap consecutive <figure> elements in a single container so they float
+  // as one block (text wraps around the group, not between individual images).
+  function wrapConsecutiveFigures(parent: Element) {
+    let figures: Element[] = [];
+    const toWrap: Element[][] = [];
+
+    for (const child of Array.from(parent.children)) {
+      if (child.tagName === "FIGURE") {
+        figures.push(child);
+      } else {
+        if (figures.length > 1) toWrap.push(figures);
+        figures = [];
+      }
+    }
+    if (figures.length > 1) toWrap.push(figures);
+
+    // Process in reverse so earlier indices stay valid
+    for (let k = toWrap.length - 1; k >= 0; k--) {
+      const group = toWrap[k];
+      const wrapper = doc.createElement("div");
+      wrapper.className = "wiki-figure-group";
+      group[0].parentNode?.insertBefore(wrapper, group[0]);
+      group.forEach((fig) => wrapper.appendChild(fig));
+    }
+  }
+
+  doc.querySelectorAll("p, section, div").forEach(wrapConsecutiveFigures);
 
   doc.querySelectorAll("*").forEach((el) => {
     for (const attr of Array.from(el.attributes)) {

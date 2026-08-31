@@ -18,9 +18,16 @@ body {
   border: 2px solid #333;
   background: #fff;
   overflow: hidden;
-  will-change: top, left;
 }
 
+.window.dragging,
+.window.resizing {
+  contain: layout paint style;
+  will-change: transform;
+}
+
+.window.dragging .window-content,
+.window.resizing .window-content,
 .window.dragging iframe,
 .window.resizing iframe {
   pointer-events: none;
@@ -28,7 +35,8 @@ body {
 
 /* during any window gesture, stop the browser from routing mouse events
    into cross-origin iframes of overlapping windows (causes stalls) */
-body.gesture-active iframe {
+body.gesture-active .window:not(.dragging):not(.resizing) iframe,
+body.gesture-active .window:not(.dragging):not(.resizing) .window-content {
   pointer-events: none !important;
 }
 

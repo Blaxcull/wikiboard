@@ -1,7 +1,6 @@
-import { useRef } from "react";
+import { useRef, memo } from "react";
 import startDrag from "@/utils/window/drag";
 import { Resize } from "@/utils/window/resize";
-import { OnEdge } from "@/utils/window/onEdge";
 import { nextCascadeOffset } from "@/store/windows";
 
 type WindowProps = {
@@ -27,7 +26,7 @@ type WindowProps = {
   onPositionChange?: (pos: { x?: number; y?: number; width?: number; height?: number }) => void;
 };
 
-export default function Window({
+const Window = memo(function Window({
   children,
   className = "",
   style,
@@ -62,7 +61,6 @@ export default function Window({
       }}
       className={`window ${className}`}
       style={style}
-      onMouseMove={(e) => OnEdge(e)}
       onMouseDown={(e) => {
         Resize(e, (rect) => {
           onPositionChange?.(rect);
@@ -73,6 +71,8 @@ export default function Window({
       <div
         className={`titlebar ${titleBarClassName}`}
         onMouseDown={(e) => {
+          e.stopPropagation();
+          onActivate?.();
           startDrag(e, (pos) => {
             onPositionChange?.(pos);
           });
@@ -94,4 +94,6 @@ export default function Window({
       {children && <div className="window-content">{children}</div>}
     </div>
   );
-}
+});
+
+export default Window;

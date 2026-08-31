@@ -27,6 +27,10 @@ export default function startDrag(
   let shiftX = 0;
   let shiftY = 0;
 
+  // base position captured at drag start — transform offsets from this
+  let baseLeft = 0;
+  let baseTop = 0;
+
   function beginDragging() {
     if (!target) return;
     isDragging = true;
@@ -36,22 +40,27 @@ export default function startDrag(
     document.body.classList.add("gesture-active");
     document.body.style.cursor = "move";
 
-    const rectNow = target.getBoundingClientRect();
-    shiftX = startX - rectNow.left;
-    shiftY = startY - rectNow.top;
+    // freeze base position so transform is relative to it
+    const parsedLeft = parseFloat(target.style.left);
+    const parsedTop = parseFloat(target.style.top);
+    baseLeft = isNaN(parsedLeft) ? rect.left : parsedLeft;
+    baseTop = isNaN(parsedTop) ? rect.top : parsedTop;
+
+    shiftX = startX - baseLeft;
+    shiftY = startY - baseTop;
   }
 
   function updatePosition() {
     if (!target) return;
     framePending = false;
-    let newLeft = mouseX - shiftX;
-    let newTop = mouseY - shiftY;
+    let dx = mouseX - shiftX - baseLeft;
+    let dy = mouseY - shiftY - baseTop;
 
-    if (newLeft < 0) newLeft = 0;
-    if (newTop < 0) newTop = 0;
+    if (baseLeft + dx < 0) dx = -baseLeft;
+    if (baseTop + dy < 0) dy = -baseTop;
 
-    target.style.left = `${newLeft}px`;
-    target.style.top = `${newTop}px`;
+    // GPU-composited move — no layout, no paint
+    target.style.transform = `translate(${dx}px, ${dy}px)`;
   }
 
   function onMouseMove(ev: MouseEvent) {
@@ -77,9 +86,17 @@ export default function startDrag(
 
   function onMouseUp() {
     if (isDragging && target) {
-      const left = parseFloat(target.style.left) || 0;
-      const top = parseFloat(target.style.top) || 0;
-      onDragEnd?.({ x: left, y: top });
+      // commit transform offset to layout properties
+      const dx = parseFloat(target.style.transform?.match(/translate\(([-\d.]+)px/)?.[1] || "0");
+      const dy = parseFloat(target.style.transform?.match(/translate\([-\d.]+px,\s*([-\d.]+)px/)?.[1] || "0");
+      const finalLeft = Math.max(0, baseLeft + dx);
+      const finalTop = Math.max(0, baseTop + dy);
+
+      target.style.transform = "";
+      target.style.left = `${finalLeft}px`;
+      target.style.top = `${finalTop}px`;
+
+      onDragEnd?.({ x: finalLeft, y: finalTop });
     }
     isDragging = false;
     isDraggingWindow = false;

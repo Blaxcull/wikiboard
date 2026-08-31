@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import { escapeHtml, extractTitle, WIKI_STYLESHEET_URL } from "../utils/wiki";
 import { prefetchArticles } from "../utils/articleCache";
 
@@ -136,7 +136,7 @@ const SHADOW_STYLES = `
   .freeze .hatnote { font-style: italic; color: #54595d; margin: 0.5em 0; font-size: 0.9em; padding-left: 1.6em; }
 `;
 
-export default function StaticPreview({ title, html, scrollTop, onLinkClick, onScrollChange }: Props) {
+const StaticPreview = memo(function StaticPreview({ title, html, scrollTop, onLinkClick, onScrollChange }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const callbacksRef = useRef({ onLinkClick, onScrollChange });
 
@@ -279,4 +279,6 @@ export default function StaticPreview({ title, html, scrollTop, onLinkClick, onS
   }, [title, html, scrollTop]);
 
   return <div ref={hostRef} className="static-preview" />;
-}
+});
+
+export default StaticPreview;

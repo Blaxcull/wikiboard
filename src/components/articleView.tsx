@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import type { WindowData } from "../store/windows";
 import { useWindows } from "../store/windows";
 import {
@@ -16,7 +16,7 @@ import StaticPreview from "./staticPreview";
 
 type Props = { win: WindowData };
 
-export default function ArticleView({ win }: Props) {
+const ArticleView = memo(function ArticleView({ win }: Props) {
   const updateWindow = useWindows((s) => s.updateWindow);
   const addWindow = useWindows((s) => s.addWindow);
 
@@ -231,4 +231,6 @@ export default function ArticleView({ win }: Props) {
       )}
     </div>
   );
-}
+});
+
+export default ArticleView;

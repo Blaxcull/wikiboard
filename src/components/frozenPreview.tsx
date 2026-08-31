@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { memo, useRef } from "react";
 
 type Props = {
   title: string;
@@ -7,7 +7,7 @@ type Props = {
   onWakeUp: () => void;
 };
 
-export default function FrozenPreview({
+const FrozenPreview = memo(function FrozenPreview({
   title,
   preview,
   thumbnail,
@@ -38,4 +38,6 @@ export default function FrozenPreview({
       <div className="frozen-hint">Hover or scroll to load full article</div>
     </div>
   );
-}
+});
+
+export default FrozenPreview;

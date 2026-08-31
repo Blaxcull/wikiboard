@@ -52,10 +52,13 @@ export const useWindows = create<WindowsStore>((set) => ({
       const nextZIndex = state.maxZIndex + 1;
       const offset = nextCascadeOffset();
       const defaultPos = 80 + offset;
+      const activeIdx = state.windows.findIndex((w) => w.active);
       return {
         maxZIndex: nextZIndex,
         windows: [
-          ...state.windows.map((w) => ({ ...w, active: false })),
+          ...state.windows.map((w, i) =>
+            i === activeIdx ? { ...w, active: false } : w,
+          ),
           {
             id: crypto.randomUUID(),
             url: "",
@@ -82,21 +85,20 @@ export const useWindows = create<WindowsStore>((set) => ({
 
   setActive: (id) =>
     set((state) => {
-      const target = state.windows.find((w) => w.id === id);
-      if (!target || target.active) return state;
+      const targetIdx = state.windows.findIndex((w) => w.id === id);
+      if (targetIdx === -1) return state;
+      const target = state.windows[targetIdx];
+      if (target.active) return state;
       const nextZIndex = state.maxZIndex + 1;
+      const now = Date.now();
       return {
         maxZIndex: nextZIndex,
-        windows: state.windows.map((w) =>
-          w.id === id
-            ? {
-                ...w,
-                active: true,
-                lastFocusedAt: Date.now(),
-                zIndex: nextZIndex,
-              }
-            : { ...w, active: false },
-        ),
+        windows: state.windows.map((w, i) => {
+          if (i === targetIdx)
+            return { ...w, active: true, lastFocusedAt: now, zIndex: nextZIndex };
+          if (w.active) return { ...w, active: false };
+          return w;
+        }),
       };
     }),
 
@@ -116,20 +118,18 @@ export const useWindows = create<WindowsStore>((set) => ({
 
   unfreezeWindow: (id) =>
     set((state) => {
+      const targetIdx = state.windows.findIndex((w) => w.id === id);
+      if (targetIdx === -1) return state;
       const nextZIndex = state.maxZIndex + 1;
+      const now = Date.now();
       return {
         maxZIndex: nextZIndex,
-        windows: state.windows.map((w) =>
-          w.id === id
-            ? {
-                ...w,
-                frozen: false,
-                lastFocusedAt: Date.now(),
-                zIndex: nextZIndex,
-                active: true,
-              }
-            : { ...w, active: false },
-        ),
+        windows: state.windows.map((w, i) => {
+          if (i === targetIdx)
+            return { ...w, frozen: false, lastFocusedAt: now, zIndex: nextZIndex, active: true };
+          if (w.active) return { ...w, active: false };
+          return w;
+        }),
       };
     }),
 

@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { useWindows, type WindowData } from '@/store/windows'
 
-export default function LinkEditor({ win }: { win: WindowData }) {
+const LinkEditor = memo(function LinkEditor({ win }: { win: WindowData }) {
   const updateWindow = useWindows((s) => s.updateWindow)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [label, setLabel] = useState('')
@@ -73,4 +73,6 @@ export default function LinkEditor({ win }: { win: WindowData }) {
       )}
     </>
   )
-}
+})
+
+export default LinkEditor

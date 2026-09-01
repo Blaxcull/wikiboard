@@ -45,7 +45,7 @@ export function setCachedArticle(
   evictClosedWindowArticles();
 }
 
-export async function prefetchArticles(titles: string[], concurrency = 15): Promise<void> {
+export async function prefetchArticles(titles: string[], concurrency = 4): Promise<void> {
   const queue = [...titles];
   const workers = Array.from({ length: concurrency }, async () => {
     while (queue.length > 0) {

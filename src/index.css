@@ -17,12 +17,14 @@ body {
   min-height: 100px;
   border: 2px solid #333;
   background: #fff;
-  overflow: hidden;
+  contain: strict;
 }
 
-.window.dragging,
+.window.dragging {
+  will-change: transform;
+}
+
 .window.resizing {
-  contain: layout paint style;
   will-change: transform;
 }
 
@@ -35,6 +37,10 @@ body {
 
 /* during any window gesture, stop the browser from routing mouse events
    into cross-origin iframes of overlapping windows (causes stalls) */
+body.gesture-active .window:not(.dragging):not(.resizing) {
+  pointer-events: none;
+}
+
 body.gesture-active .window:not(.dragging):not(.resizing) iframe,
 body.gesture-active .window:not(.dragging):not(.resizing) .window-content {
   pointer-events: none !important;
@@ -48,10 +54,6 @@ body.gesture-active .window:not(.dragging):not(.resizing) .window-content {
   z-index: 1;
 }
 
-.window.inactive .window-content {
-  content-visibility: auto;
-  contain-intrinsic-size: 384px 360px;
-}
 
 .titlebar {
   height: 24px;
@@ -84,6 +86,7 @@ body.gesture-active .window:not(.dragging):not(.resizing) .window-content {
   height: calc(100% - 24px);
   padding: 8px;
   overflow: auto;
+  contain: content;
 }
 
 .link-area {

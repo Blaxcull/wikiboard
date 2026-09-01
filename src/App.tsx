@@ -114,6 +114,44 @@ function App() {
       >
         Spawn 100 Windows
       </button>
+      <button
+        onClick={async () => {
+          try {
+            const res = await fetch(
+              'https://en.wikipedia.org/w/api.php?action=query&list=random&rnnamespace=0&rnlimit=50&format=json&origin=*',
+            )
+            if (!res.ok) throw new Error(`HTTP ${res.status}`)
+            const data = await res.json()
+            const titles = data.query.random.map((r: { title: string }) => r.title)
+            spawnWindows(50, 0, titles)
+          } catch (e) {
+            console.error('Failed to fetch random articles, spawning with fallback titles:', e)
+            spawnWindows(50, 0)
+          }
+        }}
+        style={{ position: 'fixed', top: 40, right: 10, zIndex: 9999 }}
+      >
+        Spawn 50 Windows
+      </button>
+      <button
+        onClick={async () => {
+          try {
+            const res = await fetch(
+              'https://en.wikipedia.org/w/api.php?action=query&list=random&rnnamespace=0&rnlimit=75&format=json&origin=*',
+            )
+            if (!res.ok) throw new Error(`HTTP ${res.status}`)
+            const data = await res.json()
+            const titles = data.query.random.map((r: { title: string }) => r.title)
+            spawnWindows(75, 0, titles)
+          } catch (e) {
+            console.error('Failed to fetch random articles, spawning with fallback titles:', e)
+            spawnWindows(75, 0)
+          }
+        }}
+        style={{ position: 'fixed', top: 70, right: 10, zIndex: 9999 }}
+      >
+        Spawn 75 Windows
+      </button>
 
       {windows.map((w) => (
         <WindowItem key={w.id} w={w} />

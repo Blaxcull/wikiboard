@@ -64,18 +64,16 @@ const Window = memo(function Window({
       onMouseDown={(e) => {
         Resize(e, (rect) => {
           onPositionChange?.(rect);
-        });
-        onActivate?.();
+        }, onActivate);
       }}
     >
       <div
         className={`titlebar ${titleBarClassName}`}
         onMouseDown={(e) => {
           e.stopPropagation();
-          onActivate?.();
           startDrag(e, (pos) => {
             onPositionChange?.(pos);
-          });
+          }, onActivate);
         }}
       >
         <div>{titleBarContent}</div>

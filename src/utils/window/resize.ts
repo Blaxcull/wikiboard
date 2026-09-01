@@ -1,3 +1,4 @@
+import { useWindows } from "../../store/windows";
 import { isDraggingWindow } from "./drag";
 
 // shared flag so OnEdge etc. can skip work while a resize is active
@@ -16,6 +17,7 @@ function isNearEdge(e: React.MouseEvent<HTMLDivElement>, rect: DOMRect): boolean
 export function Resize(
   e: React.MouseEvent<HTMLDivElement>,
   onResizeEnd?: (rect: { x: number; y: number; width: number; height: number }) => void,
+  onActivate?: () => void,
 ) {
   if (isDraggingWindow || isResizingWindow) return;
 
@@ -34,12 +36,9 @@ export function Resize(
 
   if (cursor === "default") return;
 
-
-
   isResizingWindow = true;
   let frameRequested = false;
 
-  // base layout values captured at resize start — transform offsets from these
   const baseLeft = startLeft;
   const baseTop = startTop;
 
@@ -48,8 +47,9 @@ export function Resize(
   target.classList.add("resizing");
   document.body.classList.add("gesture-active");
 
-  // always remember the latest pointer position so no movement
-  // is dropped between animation frames (prevents stepping)
+  const nextZ = (useWindows.getState().maxZIndex) + 1;
+  target.style.zIndex = String(nextZ);
+
   let lastX = startX;
   let lastY = startY;
 
@@ -64,16 +64,15 @@ export function Resize(
       const dx = lastX - startX;
       const dy = lastY - startY;
 
-      // Position changes (west/north edges): use transform for GPU compositing
       const needsLeft = cursor.includes("w");
       const needsTop = cursor.includes("n");
+
       if (needsLeft || needsTop) {
         const tx = needsLeft && startWidth - dx > 100 ? dx : 0;
         const ty = needsTop && startHeight - dy > 100 ? dy : 0;
-        target.style.transform = `translate(${tx}px, ${ty}px)`;
+        target.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
       }
 
-      // Size changes: write width/height (unavoidable, but isolated by contain:layout)
       if (cursor.includes("e") && startWidth + dx > 100) {
         target.style.width = `${startWidth + dx}px`;
       }
@@ -95,10 +94,11 @@ export function Resize(
     target.classList.remove("resizing");
     document.body.classList.remove("gesture-active");
 
+    const dx = lastX - startX;
+    const dy = lastY - startY;
 
-    // commit transform offset to layout properties
-    const txMatch = target.style.transform?.match(/translate\(([-\d.]+)px/);
-    const tyMatch = target.style.transform?.match(/translate\([-\d.]+px,\s*([-\d.]+)px/);
+    const txMatch = target.style.transform?.match(/translate3d\(([-\d.]+)px/);
+    const tyMatch = target.style.transform?.match(/translate3d\([-\d.]+px,\s*([-\d.]+)px/);
     const tx = txMatch ? parseFloat(txMatch[1]) : 0;
     const ty = tyMatch ? parseFloat(tyMatch[1]) : 0;
 
@@ -109,9 +109,26 @@ export function Resize(
     target.style.left = `${finalLeft}px`;
     target.style.top = `${finalTop}px`;
 
+    if (cursor.includes("e") && startWidth + dx > 100) {
+      target.style.width = `${startWidth + dx}px`;
+    }
+    if (cursor.includes("w") && startWidth - dx > 100) {
+      target.style.width = `${startWidth - dx}px`;
+    }
+    if (cursor.includes("s") && startHeight + dy > 100) {
+      target.style.height = `${startHeight + dy}px`;
+    }
+    if (cursor.includes("n") && startHeight - dy > 100) {
+      target.style.height = `${startHeight - dy}px`;
+    }
+
     const width = parseFloat(target.style.width) || target.getBoundingClientRect().width;
     const height = parseFloat(target.style.height) || target.getBoundingClientRect().height;
     onResizeEnd?.({ x: finalLeft, y: finalTop, width, height });
+
+    useWindows.setState({ maxZIndex: nextZ });
+    onActivate?.();
+
     isResizingWindow = false;
     document.removeEventListener("mousemove", onMouseMove);
     document.removeEventListener("mouseup", onMouseUp);

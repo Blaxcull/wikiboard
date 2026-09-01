@@ -297,3 +297,4 @@ Build includes `tsc -b` (TypeScript project references build) before Vite build.
 8. **z-index management** — always use `maxZIndex` counter from store, never hardcode z-index values
 9. **Edge detection** — resize cursors only show within 5px of window edges, handled by `OnEdge`
 10. **URL absolutization** — all Wikipedia URLs must be absolutized to `https://en.wikipedia.org` origin
+11. **Performance reference** — see `PERFORMANCE.md` for full documentation of every optimization with explanations of what each one does to the browser

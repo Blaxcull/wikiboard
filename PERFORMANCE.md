@@ -572,6 +572,25 @@ body.gesture-active .window:not(.dragging):not(.resizing) .window-content {
 
 ---
 
+
+## During the gesture (the critical path):
+1. **mousedown** — all setup done upfront (classes, cursor, z-index)
+2. **mousemove** — just stores mouseX/mouseY in variables, queues one rAF if not already pending
+3. **rAF callback** — one target.style.transform = translate3d(...) write, compositor-only, no layout, no paint
+4. **mouseup** — Zustand sync, class cleanup
+That's it. One DOM write per frame, on the GPU thread. The main thread is free.
+
+## What was removed from the hot path:
+- **Zustand setState** → deferred to mouseup (was causing 100 component diffs during drag)
+- **getBoundingClientRect()** → cached start positions in variables (was forcing layout reflow)
+- **Multiple rAFs** → framePending flag coalesces to one (was doing 2-3 writes per frame at 120Hz)
+- **left/top writes** → translate3d (was triggering layout, now compositor-only)
+
+## What prevents other windows from degrading it:
+- **contain**: strict — image loads in other windows can't cascade reflow to the dragged window
+- **pointer-events**: none on all siblings — browser skips hit-testing 100+ windows
+- **will-change**: transform only on active window — 1 GPU layer, not 100
+
 ## Summary Table
 
 | # | Optimization | Problem it solves | Solution |

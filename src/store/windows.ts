@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { screenToWorld } from "../utils/camera";
 
 export type WindowLink = {
   label: string;
@@ -50,8 +51,11 @@ export const useWindows = create<WindowsStore>((set) => ({
   addWindow: (data) =>
     set((state) => {
       const nextZIndex = state.maxZIndex + 1;
+      const center = screenToWorld(
+        (typeof window !== "undefined" ? window.innerWidth : 800) / 2,
+        (typeof window !== "undefined" ? window.innerHeight : 600) / 2,
+      );
       const offset = nextCascadeOffset();
-      const defaultPos = 80 + offset;
       const activeIdx = state.windows.findIndex((w) => w.active);
       return {
         maxZIndex: nextZIndex,
@@ -68,8 +72,8 @@ export const useWindows = create<WindowsStore>((set) => ({
             lastFocusedAt: Date.now(),
             frozen: false,
             zIndex: nextZIndex,
-            x: data?.x ?? defaultPos,
-            y: data?.y ?? defaultPos,
+            x: data?.x ?? (center.x - 192 + offset),
+            y: data?.y ?? (center.y - 192 + offset),
             width: data?.width ?? 384,
             height: data?.height ?? 384,
             ...data,
@@ -135,10 +139,24 @@ export const useWindows = create<WindowsStore>((set) => ({
 
   spawnWindows: (count: number, startIdx: number, titles?: string[]) =>
     set((state) => {
+      const center = screenToWorld(
+        (typeof window !== "undefined" ? window.innerWidth : 800) / 2,
+        (typeof window !== "undefined" ? window.innerHeight : 600) / 2,
+      );
+
+      const cols = Math.ceil(Math.sqrt(count));
+      const rows = Math.ceil(count / cols);
+      const spacing = 400;
+      const gridW = cols * spacing;
+      const gridH = rows * spacing;
+      const originX = center.x - gridW / 2;
+      const originY = center.y - gridH / 2;
+
       const windows = [...state.windows];
       for (let i = 0; i < count; i++) {
         const idx = startIdx + i;
-        const offset = nextCascadeOffset();
+        const col = i % cols;
+        const row = Math.floor(i / cols);
         const title = titles?.[i] ?? `Article_${idx}`;
         const wikiPath = title.replace(/ /g, "_");
         windows.push({
@@ -150,8 +168,8 @@ export const useWindows = create<WindowsStore>((set) => ({
           lastFocusedAt: Date.now(),
           frozen: false,
           zIndex: state.maxZIndex + i + 1,
-          x: 80 + offset,
-          y: 80 + offset,
+          x: originX + col * spacing,
+          y: originY + row * spacing,
           width: 384,
           height: 384,
         });

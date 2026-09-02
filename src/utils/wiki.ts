@@ -139,27 +139,6 @@ export function cleanArticleHtml(html: string): string {
   return doc.body.innerHTML;
 }
 
-export type ArticleSummary = {
-  title: string;
-  description: string;
-  extractHtml: string;
-  thumbnail: string | null;
-};
-
-export async function fetchArticleSummary(title: string): Promise<ArticleSummary> {
-  const res = await fetch(
-    `${WIKI_ORIGIN}/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
-  );
-  if (!res.ok) throw new Error(`Wikipedia summary API error ${res.status}`);
-  const data = await res.json();
-  return {
-    title: data.title ?? title,
-    description: data.description ?? "",
-    extractHtml: data.extract_html ?? "",
-    thumbnail: data.thumbnail?.source ?? null,
-  };
-}
-
 export async function fetchArticle(title: string): Promise<string> {
   const res = await fetch(
     `${WIKI_ORIGIN}/api/rest_v1/page/html/${encodeURIComponent(title)}`,

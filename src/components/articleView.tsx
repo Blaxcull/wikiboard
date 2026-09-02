@@ -4,7 +4,6 @@ import { useWindows } from "../store/windows";
 import {
   extractTitle,
   fetchArticle,
-  fetchArticleSummary,
   fetchFileUrl,
 } from "../utils/wiki";
 import {
@@ -23,16 +22,6 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
   const title = extractTitle(win.url) ?? "";
   const [prevUrl, setPrevUrl] = useState(win.url);
 
-  const [summaryHtml, setSummaryHtml] = useState<string | null>(() => {
-    const cached = title ? getCachedArticle(title) : undefined;
-    return cached?.summaryHtml ?? null;
-  });
-  const [summaryThumb, setSummaryThumb] = useState<string | null>(() => {
-    const cached = title ? getCachedArticle(title) : undefined;
-    return cached?.thumbnail ?? null;
-  });
-  const [summaryDesc, setSummaryDesc] = useState<string>("");
-
   const [fullHtml, setFullHtml] = useState<string | null>(() => {
     const cached = title ? getCachedArticle(title) : undefined;
     return cached?.html ?? null;
@@ -48,9 +37,6 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
     setPrevUrl(win.url);
     setScroll(win.id, 0, 0);
     const cached = title ? getCachedArticle(title) : undefined;
-    setSummaryHtml(cached?.summaryHtml ?? null);
-    setSummaryThumb(cached?.thumbnail ?? null);
-    setSummaryDesc("");
     setFullHtml(cached?.html ?? null);
     setLoading(!cached && Boolean(title));
     setFileInfo(null);
@@ -81,41 +67,12 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
     const cached = getCachedArticle(articleTitle);
     if (cached) return;
 
-    // Phase 1: fetch summary (~50ms)
-    fetchArticleSummary(articleTitle)
-      .then((summary) => {
-        if (cancelled) return;
-        setSummaryHtml(summary.extractHtml);
-        setSummaryThumb(summary.thumbnail);
-        setSummaryDesc(summary.description);
-        setLoading(false);
-
-        const existing = getCachedArticle(articleTitle);
-        setCachedArticle(
-          articleTitle,
-          existing?.html ?? "",
-          existing?.preview ?? "",
-          summary.thumbnail,
-          summary.extractHtml,
-        );
-      })
-      .catch(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    // Phase 2: fetch full article (runs in parallel)
     fetchArticle(articleTitle)
       .then((html) => {
         if (cancelled) return;
         setFullHtml(html);
-        const existing = getCachedArticle(articleTitle);
-        setCachedArticle(
-          articleTitle,
-          html,
-          existing?.preview ?? "",
-          existing?.thumbnail ?? null,
-          existing?.summaryHtml ?? null,
-        );
+        setLoading(false);
+        setCachedArticle(articleTitle, html, "", null);
       })
       .catch(() => {
         if (!cancelled) setLoading(false);
@@ -138,7 +95,6 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
     addWindow({ title: wikiTitle.replace(/_/g, " "), url });
   }
 
-  // Full article ready — render it
   if (fullHtml) {
     return (
       <div className="article-view">
@@ -153,38 +109,6 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
     );
   }
 
-  // Summary available — render lightweight preview
-  if (summaryHtml) {
-    return (
-      <div className="article-view">
-        <div className="static-preview" style={{ overflow: "auto" }}>
-          <div style={{ padding: 12 }}>
-            {summaryThumb && (
-              <img
-                src={summaryThumb}
-                alt={title}
-                style={{ maxWidth: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 4, marginBottom: 8 }}
-              />
-            )}
-            <h2 style={{ margin: "0 0 4px", fontSize: "1.25rem", fontWeight: 600 }}>
-              {title.replace(/_/g, " ")}
-            </h2>
-            {summaryDesc && (
-              <p style={{ margin: "0 0 8px", fontSize: 12, color: "#666" }}>
-                {summaryDesc}
-              </p>
-            )}
-            <div
-              dangerouslySetInnerHTML={{ __html: summaryHtml }}
-              style={{ fontSize: 14, lineHeight: 1.5 }}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // File page — show the image
   if (title.startsWith("File:")) {
     return (
       <div className="article-view">
@@ -206,7 +130,6 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
     );
   }
 
-  // Non-article page (Special:, Help:, Wikipedia:)
   if (title.startsWith("Special:") || title.startsWith("Help:") || title.startsWith("Wikipedia:")) {
     return (
       <div className="article-view">
@@ -219,7 +142,6 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
     );
   }
 
-  // Still loading
   return (
     <div className={`article-view ${loading ? "loading" : ""}`}>
       {loading && <div className="article-loading">Loading article…</div>}

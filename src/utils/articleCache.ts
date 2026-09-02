@@ -5,7 +5,6 @@ export type CacheEntry = {
   html: string;
   preview: string;
   thumbnail: string | null;
-  summaryHtml: string | null;
 };
 
 const cache = new Map<string, CacheEntry>();
@@ -33,14 +32,11 @@ export function setCachedArticle(
   html: string,
   preview: string,
   thumbnail: string | null,
-  summaryHtml?: string | null,
 ): void {
-  const existing = cache.get(key);
   cache.set(key, {
     html,
     preview,
     thumbnail,
-    summaryHtml: summaryHtml ?? existing?.summaryHtml ?? null,
   });
   evictClosedWindowArticles();
 }
@@ -55,7 +51,7 @@ export async function prefetchArticles(titles: string[], concurrency = 4): Promi
         const html = await fetchArticle(title);
         const preview = extractFirstParagraph(html);
         const thumbnail = extractFirstImage(html);
-        cache.set(title, { html, preview, thumbnail, summaryHtml: null });
+        cache.set(title, { html, preview, thumbnail });
       } catch {
         // skip failed articles
       }

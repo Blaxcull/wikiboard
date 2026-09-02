@@ -139,16 +139,26 @@ const SHADOW_STYLES = `
 const StaticPreview = memo(function StaticPreview({ title, html, scrollTop, onLinkClick, onScrollChange }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const callbacksRef = useRef({ onLinkClick, onScrollChange });
+  const scrollTopRef = useRef(scrollTop);
 
   useEffect(() => {
     callbacksRef.current = { onLinkClick, onScrollChange };
   }, [onLinkClick, onScrollChange]);
 
+  // Sync scrollTop ref without rebuilding the Shadow DOM
+  useEffect(() => {
+    scrollTopRef.current = scrollTop;
+    const host = hostRef.current;
+    if (host && !host.contains(document.activeElement)) {
+      host.scrollTop = scrollTop;
+    }
+  }, [scrollTop]);
+
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
 
-    const targetScroll = scrollTop;
+    const targetScroll = scrollTopRef.current;
     let userInteracted = false;
     let isRestoring = true;
 
@@ -276,7 +286,7 @@ const StaticPreview = memo(function StaticPreview({ title, html, scrollTop, onLi
       root.removeEventListener("click", handleClick);
       root.removeEventListener("mouseover", handleHover);
     };
-  }, [title, html, scrollTop]);
+  }, [title, html]);
 
   return <div ref={hostRef} className="static-preview" />;
 });

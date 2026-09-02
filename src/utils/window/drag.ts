@@ -1,4 +1,5 @@
 import { useWindows } from "../../store/windows";
+import { getCamera } from "../camera";
 
 // shared flag so other handlers can skip work while a drag is active
 export let isDraggingWindow = false;
@@ -14,49 +15,70 @@ export default function startDrag(
 
   const startX = e.clientX;
   const startY = e.clientY;
-  const rect = target.getBoundingClientRect();
 
+  // Read geometry from style — these are world-space coordinates
+  const baseLeft = parseFloat(target.style.left) || 0;
+  const baseTop = parseFloat(target.style.top) || 0;
+  const width = parseFloat(target.style.width) || 384;
+  const height = parseFloat(target.style.height) || 384;
+
+  // Edge margin check in screen space
+  const cam = getCamera();
   const EDGE_MARGIN = 5;
+  const screenLeft = baseLeft * cam.zoom + cam.panX;
+  const screenTop = baseTop * cam.zoom + cam.panY;
+  const screenW = width * cam.zoom;
+  const screenH = height * cam.zoom;
+  const relX = startX - screenLeft;
+  const relY = startY - screenTop;
   if (
-    Math.abs(e.clientX - rect.left) <= EDGE_MARGIN ||
-    Math.abs(e.clientX - rect.right) <= EDGE_MARGIN ||
-    Math.abs(e.clientY - rect.top) <= EDGE_MARGIN ||
-    Math.abs(e.clientY - rect.bottom) <= EDGE_MARGIN
+    relX <= EDGE_MARGIN || relX >= screenW - EDGE_MARGIN ||
+    relY <= EDGE_MARGIN || relY >= screenH - EDGE_MARGIN
   ) return;
 
   isDraggingWindow = true;
 
-  const baseLeft = parseFloat(target.style.left) || rect.left;
-  const baseTop = parseFloat(target.style.top) || rect.top;
-  const shiftX = startX - baseLeft;
-  const shiftY = startY - baseTop;
-
-  // All heavy work done on mousedown — before any mousemove
-  target.classList.add("dragging");
-  document.body.classList.add("gesture-active");
-  document.body.style.cursor = "move";
+  const shiftX = startX - screenLeft;
+  const shiftY = startY - screenTop;
 
   const nextZ = useWindows.getState().maxZIndex + 1;
-  target.style.zIndex = String(nextZ);
 
   let framePending = false;
   let mouseX = startX;
   let mouseY = startY;
-  let lastDx = 0;
-  let lastDy = 0;
+  let lastWorldDx = 0;
+  let lastWorldDy = 0;
+  let setupDone = false;
+
+  function applyGestureSetup() {
+    if (setupDone) return;
+    setupDone = true;
+    target.classList.add("dragging");
+    target.closest(".canvas-world")?.classList.add("gesture-active");
+    document.body.style.cursor = "move";
+    target.style.zIndex = String(nextZ);
+  }
 
   function updatePosition() {
     framePending = false;
-    let dx = mouseX - shiftX - baseLeft;
-    let dy = mouseY - shiftY - baseTop;
+    applyGestureSetup();
 
-    if (baseLeft + dx < 0) dx = -baseLeft;
-    if (baseTop + dy < 0) dy = -baseTop;
+    const curCam = getCamera();
+    const screenDx = mouseX - shiftX - screenLeft;
+    const screenDy = mouseY - shiftY - screenTop;
+    // Transform is inside the scaled world container, so use world-space units
+    const worldDx = screenDx / curCam.zoom;
+    const worldDy = screenDy / curCam.zoom;
 
-    lastDx = dx;
-    lastDy = dy;
+    // Round to nearest pixel to avoid sub-pixel shift when switching from
+    // transform to left/top on mouseup
+    const rdx = Math.round(worldDx);
+    const rdy = Math.round(worldDy);
 
-    target.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+    lastWorldDx = rdx;
+    lastWorldDy = rdy;
+
+    target.style.transform = `translate3d(${rdx}px, ${rdy}px, 0)`;
   }
 
   function onMouseMove(ev: MouseEvent) {
@@ -70,14 +92,15 @@ export default function startDrag(
   }
 
   function onMouseUp() {
-    const finalLeft = Math.max(0, baseLeft + lastDx);
-    const finalTop = Math.max(0, baseTop + lastDy);
+    applyGestureSetup();
+
+    const finalLeft = baseLeft + lastWorldDx;
+    const finalTop = baseTop + lastWorldDy;
 
     target.style.transform = "";
     target.style.left = `${finalLeft}px`;
     target.style.top = `${finalTop}px`;
 
-    // Commit z-index to Zustand on mouseup — skips re-renders during gesture
     useWindows.setState({ maxZIndex: nextZ });
 
     onDragEnd?.({ x: finalLeft, y: finalTop });
@@ -85,7 +108,7 @@ export default function startDrag(
 
     isDraggingWindow = false;
     target.classList.remove("dragging");
-    document.body.classList.remove("gesture-active");
+    target.closest(".canvas-world")?.classList.remove("gesture-active");
     document.body.style.cursor = "";
     document.removeEventListener("mousemove", onMouseMove);
     document.removeEventListener("mouseup", onMouseUp);

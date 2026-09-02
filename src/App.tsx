@@ -6,6 +6,9 @@ import ArticleView from './components/articleView'
 import { useWindows, type WindowData } from './store/windows'
 import { deleteScroll } from './utils/scrollMemory'
 import { evictClosedWindowArticles } from './utils/articleCache'
+import { subscribeCamera } from './utils/camera'
+import { startCanvasPan } from './utils/canvas/pan'
+import { handleZoom } from './utils/canvas/zoom'
 
 function Fps() {
   const ref = useRef<HTMLDivElement>(null);
@@ -89,6 +92,40 @@ function App() {
   const windows = useWindows((s) => s.windows)
   const spawnWindows = useWindows((s) => s.spawnWindows)
 
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const worldRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const viewport = viewportRef.current!;
+    const world = worldRef.current!;
+    const grid = gridRef.current!;
+
+    const unsub = subscribeCamera((cam) => {
+      world.style.transform = `translate(${cam.panX}px, ${cam.panY}px) scale(${cam.zoom})`;
+      grid.style.backgroundPosition = `${cam.panX % (24 * cam.zoom)}px ${cam.panY % (24 * cam.zoom)}px`;
+      grid.style.backgroundSize = `${24 * cam.zoom}px ${24 * cam.zoom}px`;
+    });
+
+    function onPanMouseDown(e: MouseEvent) {
+      startCanvasPan(e, viewport, grid, world);
+    }
+    function onWheel(e: WheelEvent) {
+      if (e.ctrlKey) {
+        handleZoom(e);
+      }
+    }
+
+    viewport.addEventListener("mousedown", onPanMouseDown);
+    viewport.addEventListener("wheel", onWheel, { passive: false });
+
+    return () => {
+      unsub();
+      viewport.removeEventListener("mousedown", onPanMouseDown);
+      viewport.removeEventListener("wheel", onWheel);
+    };
+  }, []);
+
   async function spawnWithRealTitles() {
     try {
       const res = await fetch(
@@ -153,9 +190,14 @@ function App() {
         Spawn 75 Windows
       </button>
 
-      {windows.map((w) => (
-        <WindowItem key={w.id} w={w} />
-      ))}
+      <div ref={viewportRef} className="canvas-viewport">
+        <div ref={gridRef} className="canvas-grid" />
+        <div ref={worldRef} className="canvas-world">
+          {windows.map((w) => (
+            <WindowItem key={w.id} w={w} />
+          ))}
+        </div>
+      </div>
     </>
   )
 }

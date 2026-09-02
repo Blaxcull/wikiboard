@@ -5,6 +5,42 @@
 body {
   margin: 0;
   font-family: system-ui, sans-serif;
+  overflow: hidden;
+}
+
+/* ── Infinite canvas viewport ─────────────────────────────── */
+
+.canvas-viewport {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  cursor: grab;
+  background: #e8e8e8;
+}
+
+.canvas-viewport.panning {
+  cursor: grabbing;
+}
+
+/* Dotted grid — background-position/size synced imperatively with camera */
+.canvas-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle, #ccc 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: 0 0;
+  z-index: 0;
+}
+
+/* World container — transform: translate(panX, panY) scale(zoom) applied imperatively */
+.canvas-world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  transform-origin: 0 0;
 }
 
 .window {
@@ -37,12 +73,12 @@ body {
 
 /* during any window gesture, stop the browser from routing mouse events
    into cross-origin iframes of overlapping windows (causes stalls) */
-body.gesture-active .window:not(.dragging):not(.resizing) {
+.canvas-world.gesture-active > .window:not(.dragging):not(.resizing) {
   pointer-events: none;
 }
 
-body.gesture-active .window:not(.dragging):not(.resizing) iframe,
-body.gesture-active .window:not(.dragging):not(.resizing) .window-content {
+.canvas-world.gesture-active > .window:not(.dragging):not(.resizing) iframe,
+.canvas-world.gesture-active > .window:not(.dragging):not(.resizing) .window-content {
   pointer-events: none !important;
 }
 
@@ -94,7 +130,11 @@ body.gesture-active .window:not(.dragging):not(.resizing) .window-content {
 }
 
 .search-wrap {
-  position: relative;
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
   display: inline-block;
 }
 

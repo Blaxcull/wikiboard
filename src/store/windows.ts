@@ -16,6 +16,8 @@ export type WindowData = {
   lastFocusedAt: number;
   /** When true, window shows a lightweight stub instead of full Shadow DOM */
   frozen: boolean;
+  /** ID of the parent window that spawned this one via link click */
+  parentId?: string;
   zIndex?: number;
   x?: number;
   y?: number;
@@ -34,6 +36,9 @@ type WindowsStore = {
   unfreezeWindow: (id: string) => void;
   spawnWindows: (count: number, startIdx: number, titles?: string[]) => void;
 };
+
+export const DEFAULT_WIDTH = 540;
+export const DEFAULT_HEIGHT = 550;
 
 let windowCount = 0;
 const CASCADE_STEP = 5;
@@ -57,6 +62,33 @@ export const useWindows = create<WindowsStore>((set) => ({
       );
       const offset = nextCascadeOffset();
       const activeIdx = state.windows.findIndex((w) => w.active);
+
+      const childW = data?.width ?? DEFAULT_WIDTH;
+      const childH = data?.height ?? DEFAULT_HEIGHT;
+      let posX: number;
+      let posY: number;
+
+      if (data?.parentId && data?.x == null && data?.y == null) {
+        const parent = state.windows.find((w) => w.id === data.parentId);
+        if (parent) {
+          const pw = parent.width ?? DEFAULT_WIDTH;
+          const ph = parent.height ?? DEFAULT_HEIGHT;
+          const GAP = 20;
+          posX = (parent.x ?? 0) + pw + GAP;
+          posY = parent.y ?? 0;
+          if (posX > center.x + 400) {
+            posX = parent.x ?? 0;
+            posY = (parent.y ?? 0) + ph + GAP;
+          }
+        } else {
+          posX = center.x - DEFAULT_WIDTH / 2 + offset;
+          posY = center.y - DEFAULT_HEIGHT / 2 + offset;
+        }
+      } else {
+        posX = data?.x ?? (center.x - DEFAULT_WIDTH / 2 + offset);
+        posY = data?.y ?? (center.y - DEFAULT_HEIGHT / 2 + offset);
+      }
+
       return {
         maxZIndex: nextZIndex,
         windows: [
@@ -72,10 +104,10 @@ export const useWindows = create<WindowsStore>((set) => ({
             lastFocusedAt: Date.now(),
             frozen: false,
             zIndex: nextZIndex,
-            x: data?.x ?? (center.x - 192 + offset),
-            y: data?.y ?? (center.y - 192 + offset),
-            width: data?.width ?? 384,
-            height: data?.height ?? 384,
+            x: posX,
+            y: posY,
+            width: childW,
+            height: childH,
             ...data,
           },
         ],
@@ -170,8 +202,8 @@ export const useWindows = create<WindowsStore>((set) => ({
           zIndex: state.maxZIndex + i + 1,
           x: originX + col * spacing,
           y: originY + row * spacing,
-          width: 384,
-          height: 384,
+          width: DEFAULT_WIDTH,
+          height: DEFAULT_HEIGHT,
         });
       }
       return {

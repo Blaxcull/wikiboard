@@ -6,6 +6,8 @@ import { nextCascadeOffset } from "@/store/windows";
 type WindowProps = {
   /** Inner content to display */
   children?: React.ReactNode;
+  /** HTML id attribute */
+  id?: string;
   /** CSS class overrides for the entire window */
   className?: string;
   /** CSS style overrides for the entire window */
@@ -28,6 +30,7 @@ type WindowProps = {
 
 const Window = memo(function Window({
   children,
+  id,
   className = "",
   style,
   titleBarClassName = "",
@@ -59,6 +62,7 @@ const Window = memo(function Window({
           if (height !== undefined) el.style.height = `${height}px`;
         }
       }}
+      id={id}
       className={`window ${className}`}
       style={style}
       onMouseDown={(e) => {

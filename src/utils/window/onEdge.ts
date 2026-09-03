@@ -36,8 +36,8 @@ export function OnEdge(e: React.MouseEvent<HTMLDivElement>) {
     // Read from style — these are world-space coordinates
     const left = parseFloat(element.style.left) || 0;
     const top = parseFloat(element.style.top) || 0;
-    const width = parseFloat(element.style.width) || 384;
-    const height = parseFloat(element.style.height) || 384;
+    const width = parseFloat(element.style.width) || 540;
+    const height = parseFloat(element.style.height) || 550;
 
     // Convert screen mouse to world coords
     const cam = getCamera();
@@ -67,8 +67,8 @@ export function attachEdgeDelegate() {
         // Read from style — these are world-space coordinates
         const left = parseFloat(target.style.left) || 0;
         const top = parseFloat(target.style.top) || 0;
-        const width = parseFloat(target.style.width) || 384;
-        const height = parseFloat(target.style.height) || 384;
+        const width = parseFloat(target.style.width) || 540;
+        const height = parseFloat(target.style.height) || 550;
 
         // Convert screen mouse to world coords
         const cam = getCamera();

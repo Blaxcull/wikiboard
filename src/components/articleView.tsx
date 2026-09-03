@@ -92,7 +92,7 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
         links: [...current.links, { label: wikiTitle.replace(/_/g, " "), href: url }],
       });
     }
-    addWindow({ title: wikiTitle.replace(/_/g, " "), url });
+    addWindow({ title: wikiTitle.replace(/_/g, " "), url, parentId: win.id });
   }
 
   if (fullHtml) {

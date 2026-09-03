@@ -42,8 +42,8 @@ export function Resize(
   // Read geometry from style — these are world-space coordinates
   const baseLeft = parseFloat(target.style.left) || 0;
   const baseTop = parseFloat(target.style.top) || 0;
-  const startWidth = parseFloat(target.style.width) || 384;
-  const startHeight = parseFloat(target.style.height) || 384;
+  const startWidth = parseFloat(target.style.width) || 540;
+  const startHeight = parseFloat(target.style.height) || 550;
 
   // Convert screen mouse to world coords for edge detection
   const cam = getCamera();

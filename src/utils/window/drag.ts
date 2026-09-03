@@ -19,8 +19,8 @@ export default function startDrag(
   // Read geometry from style — these are world-space coordinates
   const baseLeft = parseFloat(target.style.left) || 0;
   const baseTop = parseFloat(target.style.top) || 0;
-  const width = parseFloat(target.style.width) || 384;
-  const height = parseFloat(target.style.height) || 384;
+  const width = parseFloat(target.style.width) || 540;
+  const height = parseFloat(target.style.height) || 550;
 
   // Edge margin check in screen space
   const cam = getCamera();

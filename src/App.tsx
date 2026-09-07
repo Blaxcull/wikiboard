@@ -156,7 +156,8 @@ const ConnectionArrows = memo(function ConnectionArrows({
     const arrowSvg = arrowSvgRef.current;
     if (!lineSvg || !arrowSvg) return;
 
-    const children = windows.filter((w) => w.parentId);
+    const parentIds = new Set(windows.map((w) => w.id));
+    const children = windows.filter((w) => w.parentId && parentIds.has(w.parentId));
     const existing = new Set(elRefs.current.keys());
     const needed = new Set(children.map((w) => w.id));
 

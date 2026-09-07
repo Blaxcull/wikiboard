@@ -233,6 +233,10 @@ const StaticPreview = memo(function StaticPreview({ title, html, scrollTop, onLi
           ? (a.querySelector("img")?.getAttribute("src") ?? undefined)
           : undefined;
         callbacksRef.current.onLinkClick(wikiTitle, imageUrl);
+      } else if (href && !href.startsWith("#")) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.open(href, "_blank", "noopener,noreferrer");
       }
     };
 

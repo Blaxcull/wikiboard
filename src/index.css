@@ -57,7 +57,7 @@ body {
   min-height: 100px;
   border: 2px solid #333;
   background: #fff;
-  contain: strict;
+  contain: size layout;
 }
 
 .window.dragging {
@@ -85,6 +85,27 @@ body {
 .canvas-world.gesture-active > .window:not(.dragging):not(.resizing) .window-content {
   pointer-events: none !important;
 }
+
+.connection-point {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #999;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.window:hover > .connection-point {
+  opacity: 1;
+}
+
+.connection-point.point-top    { top: -5px;  left: 50%;  transform: translateX(-50%); }
+.connection-point.point-right  { right: -5px; top: 50%;  transform: translateY(-50%); }
+.connection-point.point-bottom { bottom: -5px; left: 50%; transform: translateX(-50%); }
+.connection-point.point-left   { left: -5px;  top: 50%;  transform: translateY(-50%); }
 
 .window.active {
   z-index: 10;
@@ -215,62 +236,6 @@ body {
   height: 100%;
   overflow: auto;
   background: #fff;
-}
-
-/* lightweight stub for frozen windows — no Shadow DOM, no heavy HTML */
-.frozen-preview {
-  width: 100%;
-  height: 100%;
-  overflow: auto;
-  background: #fafafa;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  cursor: default;
-}
-
-.frozen-preview:hover {
-  background: #f5f5f5;
-}
-
-.frozen-title {
-  font-family: sans-serif;
-  font-size: 1.25rem;
-  font-weight: 600;
-  margin: 0 0 8px;
-  color: #222;
-}
-
-.frozen-thumbnail {
-  max-width: 100%;
-  max-height: 120px;
-  object-fit: cover;
-  border-radius: 4px;
-  margin-bottom: 8px;
-}
-
-.frozen-snippet {
-  font-size: 13px;
-  line-height: 1.5;
-  color: #444;
-  margin: 0 0 8px;
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.frozen-hint {
-  margin-top: auto;
-  font-size: 11px;
-  color: #999;
-  text-align: center;
-  padding-top: 8px;
-  border-top: 1px solid #eee;
-}
-
-.window.frozen {
-  opacity: 0.85;
 }
 
 .article-view {

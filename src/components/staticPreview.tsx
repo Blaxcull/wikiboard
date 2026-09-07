@@ -37,7 +37,7 @@ type Props = {
   title: string;
   html: string;
   scrollTop: number;
-  onLinkClick?: (title: string) => void;
+  onLinkClick?: (title: string, imageUrl?: string) => void;
   onScrollChange?: (scrollTop: number) => void;
 };
 
@@ -229,7 +229,10 @@ const StaticPreview = memo(function StaticPreview({ title, html, scrollTop, onLi
       if (wikiTitle && callbacksRef.current.onLinkClick) {
         e.preventDefault();
         e.stopPropagation();
-        callbacksRef.current.onLinkClick(wikiTitle);
+        const imageUrl = wikiTitle.startsWith("File:")
+          ? (a.querySelector("img")?.getAttribute("src") ?? undefined)
+          : undefined;
+        callbacksRef.current.onLinkClick(wikiTitle, imageUrl);
       }
     };
 

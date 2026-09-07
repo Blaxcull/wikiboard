@@ -53,9 +53,11 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
     if (!articleTitle) return;
 
     if (articleTitle.startsWith("File:")) {
-      fetchFileUrl(articleTitle).then((info) => {
-        if (!cancelled) setFileInfo(info);
-      }).catch(() => {});
+      if (!win.directImageUrl) {
+        fetchFileUrl(articleTitle).then((info) => {
+          if (!cancelled) setFileInfo(info);
+        }).catch(() => {});
+      }
       return;
     }
 
@@ -81,9 +83,9 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [win.url]);
+  }, [win.url, win.directImageUrl]);
 
-  function handleLinkClick(wikiTitle: string) {
+  function handleLinkClick(wikiTitle: string, imageUrl?: string) {
     const url = `https://en.wikipedia.org/wiki/${wikiTitle.replace(/ /g, "_")}`;
     const current = useWindows.getState().windows.find((w) => w.id === win.id);
     if (!current) return;
@@ -92,7 +94,12 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
         links: [...current.links, { label: wikiTitle.replace(/_/g, " "), href: url }],
       });
     }
-    addWindow({ title: wikiTitle.replace(/_/g, " "), url, parentId: win.id });
+    addWindow({
+      title: wikiTitle.replace(/_/g, " "),
+      url,
+      parentId: win.id,
+      ...(imageUrl ? { directImageUrl: imageUrl } : {}),
+    });
   }
 
   if (fullHtml) {
@@ -110,12 +117,13 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
   }
 
   if (title.startsWith("File:")) {
+    const imgUrl = win.directImageUrl ?? fileInfo?.url;
     return (
       <div className="article-view">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", background: "#f8f9fa" }}>
-          {fileInfo ? (
+          {imgUrl ? (
             <img
-              src={fileInfo.url}
+              src={imgUrl}
               alt={title.replace(/_/g, " ")}
               style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
             />

@@ -14,10 +14,10 @@ export type WindowData = {
   active: boolean;
   /** Recency timestamp driving the "keep last N loaded" LRU policy */
   lastFocusedAt: number;
-  /** When true, window shows a lightweight stub instead of full Shadow DOM */
-  frozen: boolean;
   /** ID of the parent window that spawned this one via link click */
   parentId?: string;
+  /** Pre-extracted image src for File: pages — skips the fetchFileUrl API call */
+  directImageUrl?: string;
   zIndex?: number;
   x?: number;
   y?: number;
@@ -32,8 +32,6 @@ type WindowsStore = {
   removeWindow: (id: string) => void;
   setActive: (id: string) => void;
   updateWindow: (id: string, patch: Partial<Omit<WindowData, "id">>) => void;
-  freezeWindow: (id: string) => void;
-  unfreezeWindow: (id: string) => void;
   spawnWindows: (count: number, startIdx: number, titles?: string[]) => void;
 };
 
@@ -102,7 +100,6 @@ export const useWindows = create<WindowsStore>((set) => ({
             links: [],
             active: true,
             lastFocusedAt: Date.now(),
-            frozen: false,
             zIndex: nextZIndex,
             x: posX,
             y: posY,
@@ -145,30 +142,6 @@ export const useWindows = create<WindowsStore>((set) => ({
       ),
     })),
 
-  freezeWindow: (id) =>
-    set((state) => ({
-      windows: state.windows.map((w) =>
-        w.id === id ? { ...w, frozen: true } : w,
-      ),
-    })),
-
-  unfreezeWindow: (id) =>
-    set((state) => {
-      const targetIdx = state.windows.findIndex((w) => w.id === id);
-      if (targetIdx === -1) return state;
-      const nextZIndex = state.maxZIndex + 1;
-      const now = Date.now();
-      return {
-        maxZIndex: nextZIndex,
-        windows: state.windows.map((w, i) => {
-          if (i === targetIdx)
-            return { ...w, frozen: false, lastFocusedAt: now, zIndex: nextZIndex, active: true };
-          if (w.active) return { ...w, active: false };
-          return w;
-        }),
-      };
-    }),
-
   spawnWindows: (count: number, startIdx: number, titles?: string[]) =>
     set((state) => {
       const center = screenToWorld(
@@ -198,7 +171,6 @@ export const useWindows = create<WindowsStore>((set) => ({
           links: [],
           active: false,
           lastFocusedAt: Date.now(),
-          frozen: false,
           zIndex: state.maxZIndex + i + 1,
           x: originX + col * spacing,
           y: originY + row * spacing,

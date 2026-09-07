@@ -94,6 +94,11 @@ const Window = memo(function Window({
       </div>
 
       {children && <div className="window-content">{children}</div>}
+
+      <div className="connection-point point-top" />
+      <div className="connection-point point-right" />
+      <div className="connection-point point-bottom" />
+      <div className="connection-point point-left" />
     </div>
   );
 });

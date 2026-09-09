@@ -116,6 +116,12 @@ body {
   border-color: #b0b0b0;
 }
 
+.window.qa-glow {
+  box-shadow: 0 0 20px 4px rgba(0, 220, 255, 0.6), 0 0 40px 8px rgba(0, 220, 255, 0.3);
+  border-color: #00d4ff;
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
 .window.inactive {
   z-index: 1;
 }
@@ -357,4 +363,97 @@ body {
   padding: 4px 12px;
   font-size: 12px;
   cursor: pointer;
+}
+
+/* ── Question bar ─────────────────────────────────────────── */
+
+.qa-wrap {
+  position: fixed;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: inline-block;
+}
+
+.qa-form {
+  display: flex;
+  gap: 4px;
+}
+
+.qa-input {
+  padding: 4px 8px;
+  font-size: 13px;
+  width: 500px;
+  border: 1px solid #999;
+  border-radius: 4px;
+}
+
+.qa-btn {
+  padding: 4px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.qa-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #999;
+  border-radius: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.qa-empty {
+  padding: 12px 16px;
+  font-size: 13px;
+  color: #888;
+  text-align: center;
+}
+
+.qa-result {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 13px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-bottom: 1px solid #eee;
+}
+
+.qa-result:last-child {
+  border-bottom: none;
+}
+
+.qa-result:hover {
+  background: #f0f0f0;
+}
+
+.qa-answer {
+  color: #222;
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+.qa-source {
+  margin-top: 2px;
+}
+
+.qa-ref {
+  color: #0645ad;
+  font-size: 11px;
+}
+
+.qa-result:hover .qa-ref {
+  text-decoration: underline;
 }

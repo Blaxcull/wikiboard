@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 import Window from './components/window'
 import LinkEditor from './components/linkEditor'
 import SearchBox from './components/searchBox'
+import QuestionBar from './components/questionBar'
 import ArticleView from './components/articleView'
 import { useWindows, type WindowData } from './store/windows'
 import { deleteScroll } from './utils/scrollMemory'
@@ -438,6 +439,7 @@ function App() {
     <>
       <Fps />
       <SearchBox />
+      <QuestionBar />
       <button
         onClick={spawnWithRealTitles}
         style={{ position: 'fixed', top: 10, right: 10, zIndex: 9999 }}

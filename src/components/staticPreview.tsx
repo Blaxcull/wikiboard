@@ -54,6 +54,7 @@ const SHADOW_STYLES = `
     display: block;
     height: 100%;
     overflow: auto;
+    scrollbar-width: none;
     font-size: 18px;
     color: #202122;
   }

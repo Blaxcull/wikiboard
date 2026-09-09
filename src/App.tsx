@@ -13,7 +13,7 @@ import { isDraggingWindow } from './utils/window/drag'
 import { isResizingWindow } from './utils/window/resize'
 
 const ARROW_CTRL = 0.4;
-const ARROW_LEN = 8;
+const ARROW_LEN = 16;
 const ARROW_HALF = ARROW_LEN / Math.SQRT2; // 90° tip angle
 
 type ArrowResult = {
@@ -174,11 +174,11 @@ const ConnectionArrows = memo(function ConnectionArrows({
       if (!elRefs.current.has(w.id)) {
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         path.setAttribute('fill', 'none');
-        path.setAttribute('stroke', 'black');
-        path.setAttribute('stroke-width', '2');
+        path.setAttribute('stroke', '#a0a0a0');
+        path.setAttribute('stroke-width', '3');
 
         const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-        poly.setAttribute('fill', 'black');
+        poly.setAttribute('fill', '#a0a0a0');
 
         lineSvg.appendChild(path);
         arrowSvg.appendChild(poly);

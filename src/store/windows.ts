@@ -18,6 +18,16 @@ export type WindowData = {
   parentId?: string;
   /** Pre-extracted image src for File: pages — skips the fetchFileUrl API call */
   directImageUrl?: string;
+  /** Content type discriminator: "article" (default) or "pdf" */
+  contentType?: "article" | "pdf";
+  /** URL or blob URL for PDF file */
+  pdfUrl?: string;
+  /** Current page number (1-indexed) */
+  pdfCurrentPage?: number;
+  /** Total pages in PDF */
+  pdfTotalPages?: number;
+  /** Whether the PDF viewer is in maximized (full-viewport) mode */
+  pdfMaximized?: boolean;
   zIndex?: number;
   x?: number;
   y?: number;

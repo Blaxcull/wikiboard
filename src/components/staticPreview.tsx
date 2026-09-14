@@ -296,7 +296,7 @@ const StaticPreview = memo(function StaticPreview({ title, html, scrollTop, onLi
     };
   }, [title, html]);
 
-  return <div ref={hostRef} className="static-preview" />;
+  return <div ref={hostRef} className="w-full h-full overflow-auto scrollbar-hide bg-white" />;
 });
 
 export default StaticPreview;

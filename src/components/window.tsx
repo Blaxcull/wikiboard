@@ -84,7 +84,7 @@ const Window = memo(function Window({
         {onClose && (
           <button
             type="button"
-            className="close-btn"
+            className="border-none bg-transparent text-[#888] text-lg leading-none py-0.5 px-1.5 cursor-pointer rounded transition-all duration-150 hover:text-white hover:bg-[#e74c3c]"
             onMouseDown={(e) => e.stopPropagation()}
             onClick={onClose}
           >

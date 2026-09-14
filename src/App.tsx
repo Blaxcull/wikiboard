@@ -3,14 +3,16 @@ import Window from './components/window'
 import LinkEditor from './components/linkEditor'
 import SearchBox from './components/searchBox'
 import ArticleView from './components/articleView'
-import { useWindows, type WindowData } from './store/windows'
+import PdfViewer from './components/pdfViewer'
+import { useWindows, type WindowData, nextCascadeOffset } from './store/windows'
 import { deleteScroll } from './utils/scrollMemory'
 import { evictClosedWindowArticles } from './utils/articleCache'
-import { subscribeCamera } from './utils/camera'
+import { getCamera, subscribeCamera } from './utils/camera'
 import { startCanvasPan } from './utils/canvas/pan'
 import { handleZoom } from './utils/canvas/zoom'
 import { isDraggingWindow } from './utils/window/drag'
 import { isResizingWindow } from './utils/window/resize'
+import { Resize } from './utils/window/resize'
 
 const ARROW_CTRL = 0.4;
 const ARROW_LEN = 16;
@@ -348,7 +350,10 @@ const WindowItem = memo(function WindowItem({ w }: { w: WindowData }) {
   const updateWindow = useWindows((s) => s.updateWindow)
   const removeWindow = useWindows((s) => s.removeWindow)
 
-  const zIndexStyle = useMemo(() => ({ zIndex: w.zIndex }), [w.zIndex])
+  const zIndexStyle = useMemo(
+    () => ({ zIndex: w.pdfMaximized ? 10000 : w.zIndex }),
+    [w.zIndex, w.pdfMaximized],
+  )
 
   const handleActivate = useCallback(() => setActive(w.id), [w.id, setActive])
   const handleClose = useCallback(() => {
@@ -361,6 +366,68 @@ const WindowItem = memo(function WindowItem({ w }: { w: WindowData }) {
       updateWindow(w.id, pos),
     [w.id, updateWindow],
   )
+
+  const pdfRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const el = pdfRef.current
+    if (!el || w.contentType !== "pdf") return
+
+    if (w.pdfMaximized) {
+      const applyMaximizedBounds = () => {
+        const cam = getCamera()
+        const maxLeft = -cam.panX / cam.zoom
+        const maxTop = -cam.panY / cam.zoom
+        const maxWidth = window.innerWidth / cam.zoom
+        const maxHeight = window.innerHeight / cam.zoom
+        el.style.left = `${maxLeft}px`
+        el.style.top = `${maxTop}px`
+        el.style.width = `${maxWidth}px`
+        el.style.height = `${maxHeight}px`
+      }
+
+      applyMaximizedBounds()
+      window.addEventListener("resize", applyMaximizedBounds)
+      return () => window.removeEventListener("resize", applyMaximizedBounds)
+    } else {
+      if (el.dataset.pos) {
+        el.style.left = `${w.x ?? 80}px`
+        el.style.top = `${w.y ?? 80}px`
+        el.style.width = `${w.width ?? 620}px`
+        el.style.height = `${w.height ?? 908}px`
+      }
+    }
+  }, [w.pdfMaximized, w.contentType, w.x, w.y, w.width, w.height])
+
+  if (w.contentType === "pdf") {
+    return (
+      <div
+        ref={(el) => {
+          pdfRef.current = el
+          if (el && !el.dataset.pos) {
+            el.dataset.pos = "1"
+            const offset = (w.x === undefined || w.y === undefined) ? nextCascadeOffset() : 0
+            const left = w.x !== undefined ? w.x : 80 + offset
+            const top = w.y !== undefined ? w.y : 80 + offset
+            el.style.left = `${left}px`
+            el.style.top = `${top}px`
+            el.style.width = `${w.width ?? 620}px`
+            el.style.height = `${w.height ?? 908}px`
+          }
+        }}
+        id={`win-${w.id}`}
+        className={`window pdf-window ${w.pdfMaximized ? 'maximized' : ''} ${w.active ? 'active' : 'inactive'}`}
+        style={zIndexStyle}
+        onMouseDown={(e) => {
+          if (w.pdfMaximized) return
+          handleActivate()
+          Resize(e, (rect) => handlePositionChange(rect))
+        }}
+      >
+        <PdfViewer win={w} />
+      </div>
+    )
+  }
 
   return (
     <Window
@@ -384,6 +451,37 @@ const WindowItem = memo(function WindowItem({ w }: { w: WindowData }) {
 function App() {
   const windows = useWindows((s) => s.windows)
   const spawnWindows = useWindows((s) => s.spawnWindows)
+  const addWindow = useWindows((s) => s.addWindow)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleOpenPdf = useCallback(() => {
+    addWindow({
+      contentType: "pdf",
+      pdfUrl: "/viewer.pdf",
+      title: "PDF.js viewer",
+      pdfCurrentPage: 1,
+      width: 620,
+      height: 908,
+    })
+  }, [addWindow])
+
+  const handlePdfFileChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      if (!file) return
+
+      const url = URL.createObjectURL(file)
+      addWindow({
+        contentType: "pdf",
+        pdfUrl: url,
+        title: file.name.replace(/\.pdf$/i, ""),
+        pdfCurrentPage: 1,
+      })
+
+      if (fileInputRef.current) fileInputRef.current.value = ""
+    },
+    [addWindow],
+  )
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
@@ -401,9 +499,11 @@ function App() {
     });
 
     function onPanMouseDown(e: MouseEvent) {
+      if (useWindows.getState().windows.some((win) => win.pdfMaximized)) return;
       startCanvasPan(e, viewport, grid, world);
     }
     function onWheel(e: WheelEvent) {
+      if (useWindows.getState().windows.some((win) => win.pdfMaximized)) return;
       if (e.ctrlKey) {
         handleZoom(e);
       }
@@ -438,9 +538,22 @@ function App() {
     <>
       <Fps />
       <SearchBox />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf"
+        onChange={handlePdfFileChange}
+        style={{ display: "none" }}
+      />
+      <button
+        onClick={handleOpenPdf}
+        style={{ position: 'fixed', top: 10, right: 10, zIndex: 9999 }}
+      >
+        Open PDF
+      </button>
       <button
         onClick={spawnWithRealTitles}
-        style={{ position: 'fixed', top: 10, right: 10, zIndex: 9999 }}
+        style={{ position: 'fixed', top: 40, right: 10, zIndex: 9999 }}
       >
         Spawn 100 Windows
       </button>
@@ -459,7 +572,7 @@ function App() {
             spawnWindows(50, 0)
           }
         }}
-        style={{ position: 'fixed', top: 40, right: 10, zIndex: 9999 }}
+        style={{ position: 'fixed', top: 70, right: 10, zIndex: 9999 }}
       >
         Spawn 50 Windows
       </button>
@@ -478,7 +591,7 @@ function App() {
             spawnWindows(75, 0)
           }
         }}
-        style={{ position: 'fixed', top: 70, right: 10, zIndex: 9999 }}
+        style={{ position: 'fixed', top: 100, right: 10, zIndex: 9999 }}
       >
         Spawn 75 Windows
       </button>

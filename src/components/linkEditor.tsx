@@ -25,8 +25,8 @@ const LinkEditor = memo(function LinkEditor({ win }: { win: WindowData }) {
 
   return (
     <>
-      <div className="link-area">
-        <ul className="link-list">
+      <div className="min-h-full">
+        <ul className="m-0 pl-5 list-disc">
           {win.links.map((link, i) => (
             <li key={`${link.href}-${i}`}>
               <a href={link.href} target="_blank" rel="noreferrer">
@@ -38,35 +38,37 @@ const LinkEditor = memo(function LinkEditor({ win }: { win: WindowData }) {
       </div>
 
       {dialogOpen && (
-        <div className="dialog-overlay" onMouseDown={closeDialog}>
+        <div className="fixed inset-0 bg-[rgba(0,0,0,0.4)] flex items-center justify-center z-[100]" onMouseDown={closeDialog}>
           <form
-            className="dialog"
+            className="bg-white text-[#111] border-2 border-[#333] rounded-md p-4 w-[280px] flex flex-col gap-2.5"
             onSubmit={addLink}
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <h3>Add Link</h3>
-            <label>
+            <h3 className="m-0 text-sm font-semibold">Add Link</h3>
+            <label className="flex flex-col gap-1 text-xs">
               Label
               <input
+                className="py-1 px-2 text-xs border border-[#999] rounded"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
                 placeholder="My link"
                 autoFocus
               />
             </label>
-            <label>
+            <label className="flex flex-col gap-1 text-xs">
               URL
               <input
+                className="py-1 px-2 text-xs border border-[#999] rounded"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="https://example.com"
               />
             </label>
-            <div className="dialog-actions">
-              <button type="button" onClick={closeDialog}>
+            <div className="flex justify-end gap-2 mt-1">
+              <button className="py-1 px-3 text-xs cursor-pointer" type="button" onClick={closeDialog}>
                 Cancel
               </button>
-              <button type="submit">Add</button>
+              <button className="py-1 px-3 text-xs cursor-pointer" type="submit">Add</button>
             </div>
           </form>
         </div>

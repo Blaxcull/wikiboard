@@ -104,7 +104,7 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
 
   if (fullHtml) {
     return (
-      <div className="article-view">
+      <div className="w-full h-full border-0 block relative bg-white">
         <StaticPreview
           title={title}
           html={fullHtml}
@@ -119,17 +119,17 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
   if (title.startsWith("File:")) {
     const imgUrl = win.directImageUrl ?? fileInfo?.url;
     return (
-      <div className="article-view">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", background: "#f8f9fa" }}>
+      <div className="w-full h-full border-0 block relative bg-white">
+        <div className="flex items-center justify-center h-full bg-[#f8f9fa]">
           {imgUrl ? (
             <img
               src={imgUrl}
               alt={title.replace(/_/g, " ")}
-              style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+              className="max-w-full max-h-full object-contain"
             />
           ) : (
-            <div className="discarded-note">
-              <strong>{title.replace(/_/g, " ")}</strong>
+            <div className="text-center text-[#666] text-[13px] p-4">
+              <strong className="block mb-1.5 text-[15px] text-[#222]">{title.replace(/_/g, " ")}</strong>
               <p>Loading image…</p>
             </div>
           )}
@@ -140,22 +140,22 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
 
   if (title.startsWith("Special:") || title.startsWith("Help:") || title.startsWith("Wikipedia:")) {
     return (
-      <div className="article-view">
-        <div className="discarded-note">
-          <strong>{title.replace(/_/g, " ")}</strong>
+      <div className="w-full h-full border-0 block relative bg-white">
+        <div className="text-center text-[#666] text-[13px] p-4">
+          <strong className="block mb-1.5 text-[15px] text-[#222]">{title.replace(/_/g, " ")}</strong>
           <p>Not an article</p>
-          <p style={{ fontSize: 11, color: "#999" }}>{title.split(":")[0]} pages can't be displayed</p>
+          <p className="text-[11px] text-[#999]">{title.split(":")[0]} pages can't be displayed</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className={`article-view ${loading ? "loading" : ""}`}>
-      {loading && <div className="article-loading">Loading article…</div>}
+    <div className={`w-full h-full border-0 block relative bg-white ${loading ? "" : ""}`}>
+      {loading && <div className="absolute inset-0 flex items-center justify-center text-[13px] text-[#666]">Loading article…</div>}
       {!loading && (
-        <div className="discarded-note">
-          <strong>{title.replace(/_/g, " ")}</strong>
+        <div className="text-center text-[#666] text-[13px] p-4">
+          <strong className="block mb-1.5 text-[15px] text-[#222]">{title.replace(/_/g, " ")}</strong>
           <p>Could not load article</p>
         </div>
       )}

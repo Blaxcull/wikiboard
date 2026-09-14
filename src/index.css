@@ -1,51 +1,26 @@
-* {
-  box-sizing: border-box;
+@import "tailwindcss";
+@source "../src";
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    font-family: system-ui, sans-serif;
+    overflow: hidden;
+  }
+
+  .scrollbar-hide {
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 }
 
-body {
-  margin: 0;
-  font-family: system-ui, sans-serif;
-  overflow: hidden;
-}
-
-/* ── Infinite canvas viewport ─────────────────────────────── */
-
-.canvas-viewport {
-  position: fixed;
-  inset: 0;
-  overflow: hidden;
-  cursor: grab;
-  background: #fff;
-}
-
-.canvas-viewport.panning {
-  cursor: grabbing;
-}
-
-/* Dotted grid — background-position/size synced imperatively with camera */
-.canvas-grid {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image: radial-gradient(circle, #ccc 1px, transparent 1px);
-  background-size: 24px 24px;
-  background-position: 0 0;
-  z-index: 0;
-}
-
-/* World container — transform: translate(panX, panY) scale(zoom) applied imperatively */
-.canvas-world {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 0;
-  height: 0;
-  transform-origin: 0 0;
-}
-
-.connection-arrows {
-  pointer-events: none;
-}
+/* ── Window (referenced by JS .closest('.window')) ─────────── */
 
 .window {
   position: absolute;
@@ -77,16 +52,98 @@ body {
   pointer-events: none;
 }
 
-/* during any window gesture, stop the browser from routing mouse events
-   into cross-origin iframes of overlapping windows (causes stalls) */
-.canvas-world.gesture-active > .window:not(.dragging):not(.resizing) {
-  pointer-events: none;
+.window.active {
+  z-index: 10;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18), 0 3px 8px rgba(0, 0, 0, 0.1);
+  border-color: #b0b0b0;
 }
 
-.canvas-world.gesture-active > .window:not(.dragging):not(.resizing) iframe,
-.canvas-world.gesture-active > .window:not(.dragging):not(.resizing) .window-content {
-  pointer-events: none !important;
+.window.inactive {
+  z-index: 1;
 }
+
+.pdf-window {
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+  padding: 0;
+  margin: 0;
+  contain: layout;
+  will-change: left, top, width, height;
+  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              top 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pdf-window.dragging,
+.pdf-window.resizing {
+  transition: none !important;
+}
+
+.pdf-window.active {
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.pdf-window.maximized {
+  background: #ffffff !important;
+  border-radius: 0 !important;
+  z-index: 10000 !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.pdf-window .window-content {
+  display: none;
+}
+
+/* ── Titlebar ────────────────────────────────────────────── */
+
+.titlebar {
+  height: 32px;
+  background: linear-gradient(180deg, #e8e8e8 0%, #c8c8c8 100%);
+  color: #444;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  cursor: move;
+  user-select: none;
+  border-bottom: 1px solid #c8c8c8;
+  border-radius: 12px 12px 0 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), inset 0 -1px 0 rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+/* ── Window content ──────────────────────────────────────── */
+
+.window-content {
+  height: calc(100% - 49px);
+  overflow: auto;
+  scrollbar-width: none;
+  contain: content;
+  background: #fff;
+  margin: 8px 8px 8px 8px;
+  border-radius: 4px;
+}
+
+.window-content:has(.article-view),
+.window-content:has(.article-frame) {
+  padding: 0;
+}
+
+/* ── Connection points ───────────────────────────────────── */
 
 .connection-point {
   position: absolute;
@@ -110,251 +167,50 @@ body {
 .connection-point.point-bottom { bottom: -5px; left: 50%; transform: translateX(-50%); }
 .connection-point.point-left   { left: -5px;  top: 50%;  transform: translateY(-50%); }
 
-.window.active {
-  z-index: 10;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18), 0 3px 8px rgba(0, 0, 0, 0.1);
-  border-color: #b0b0b0;
-}
+/* ── Canvas / Infinite viewport ──────────────────────────── */
 
-.window.inactive {
-  z-index: 1;
-}
-
-
-.titlebar {
-  height: 32px;
-  background: linear-gradient(180deg, #e8e8e8 0%, #c8c8c8 100%);
-  color: #444;
-  font-size: 13px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 10px;
-  cursor: move;
-  user-select: none;
-  border-bottom: 1px solid #c8c8c8;
-  border-radius: 12px 12px 0 0;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), inset 0 -1px 0 rgba(0, 0, 0, 0.05);
+.canvas-viewport {
+  position: fixed;
+  inset: 0;
   overflow: hidden;
-}
-
-.close-btn {
-  border: none;
-  background: transparent;
-  color: #888;
-  font-size: 18px;
-  line-height: 1;
-  padding: 2px 6px;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.15s ease;
-}
-
-.close-btn:hover {
-  color: #fff;
-  background: #e74c3c;
-}
-
-.window-content {
-  height: calc(100% - 49px);
-  overflow: auto;
-  scrollbar-width: none;
-  contain: content;
+  cursor: grab;
   background: #fff;
-  margin: 8px 8px 8px 8px;
-  border-radius: 4px;
 }
 
-.link-area {
-  min-height: 100%;
+.canvas-viewport.panning {
+  cursor: grabbing;
 }
 
-.search-wrap {
-  position: fixed;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 9999;
-  display: inline-block;
-}
-
-.search-box {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 8px;
-}
-
-.search-box input {
-  padding: 4px 8px;
-  font-size: 13px;
-  width: 240px;
-}
-
-.search-box button {
-  padding: 4px 12px;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.suggest {
+.canvas-grid {
   position: absolute;
-  top: 100%;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle, #ccc 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: 0 0;
+  z-index: 0;
+}
+
+.canvas-world {
+  position: absolute;
+  top: 0;
   left: 0;
-  z-index: 1000;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  background: #fff;
-  border: 1px solid #999;
-  border-radius: 4px;
-  min-width: 240px;
-  max-height: 300px;
-  overflow-y: auto;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  width: 0;
+  height: 0;
+  transform-origin: 0 0;
 }
 
-.suggest li + li {
-  border-top: 1px solid #eee;
+.connection-arrows {
+  pointer-events: none;
 }
 
-.suggest button {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 6px 10px;
-  font-size: 13px;
-  background: none;
-  border: none;
-  cursor: pointer;
+/* during any window gesture, stop the browser from routing mouse events
+   into cross-origin iframes of overlapping windows (causes stalls) */
+.canvas-world.gesture-active > .window:not(.dragging):not(.resizing) {
+  pointer-events: none;
 }
 
-.suggest button:hover {
-  background: #f0f0f0;
-}
-
-.window-content:has(.article-view),
-.window-content:has(.article-frame) {
-  padding: 0;
-}
-
-.article-view,
-.article-frame {
-  width: 100%;
-  height: 100%;
-  border: none;
-  display: block;
-}
-
-/* frozen full-page preview shown while a window's iframe is discarded */
-.static-preview {
-  width: 100%;
-  height: 100%;
-  overflow: auto;
-  scrollbar-width: none;
-  background: #fff;
-}
-
-.article-view {
-  position: relative;
-  background: #fff;
-}
-
-/* placeholder for a window that never finished loading its article */
-.article-view:has(.discarded-note) {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.discarded-note {
-  text-align: center;
-  color: #666;
-  font-size: 13px;
-  padding: 16px;
-}
-
-.discarded-note strong {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 15px;
-  color: #222;
-}
-
-.article-view.loading .article-frame {
-  visibility: hidden;
-}
-
-.article-loading {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  color: #666;
-}
-
-.link-empty {
-  font-size: 12px;
-  color: #999;
-}
-
-.link-list {
-  margin: 0;
-  padding-left: 20px;
-}
-
-.dialog-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-
-.dialog {
-  background: #fff;
-  color: #111;
-  border: 2px solid #333;
-  border-radius: 6px;
-  padding: 16px;
-  width: 280px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.dialog h3 {
-  margin: 0;
-  font-size: 14px;
-}
-
-.dialog label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-}
-
-.dialog input {
-  padding: 4px 8px;
-  font-size: 12px;
-  border: 1px solid #999;
-  border-radius: 4px;
-}
-
-.dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 4px;
-}
-
-.dialog-actions button {
-  padding: 4px 12px;
-  font-size: 12px;
-  cursor: pointer;
+.canvas-world.gesture-active > .window:not(.dragging):not(.resizing) iframe,
+.canvas-world.gesture-active > .window:not(.dragging):not(.resizing) .window-content {
+  pointer-events: none !important;
 }

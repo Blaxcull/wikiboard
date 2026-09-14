@@ -66,24 +66,26 @@ export default function SearchBox() {
   }
 
   return (
-    <div className="search-wrap">
-      <form className="search-box" onSubmit={search}>
+    <div className="fixed top-2.5 left-1/2 -translate-x-1/2 z-[9999] inline-block">
+      <form className="flex gap-1 mb-2" onSubmit={search}>
         <input
+          className="py-1 px-2 text-[13px] w-60"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => suggestions.length > 0 && setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
           placeholder="Search Wikipedia…"
         />
-        <button type="submit">Search</button>
+        <button className="py-1 px-3 text-[13px] cursor-pointer" type="submit">Search</button>
       </form>
 
       {open && (
-        <ul className="suggest">
-          {suggestions.map((s) => (
-            <li key={s.url}>
+        <ul className="absolute top-full left-0 z-[1000] m-0 p-0 list-none bg-white border border-[#999] rounded min-w-60 max-h-[300px] overflow-y-auto" style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+          {suggestions.map((s, i) => (
+            <li key={s.url} className={i > 0 ? 'border-t border-[#eee]' : ''}>
               <button
                 type="button"
+                className="block w-full text-left py-1.5 px-2.5 text-[13px] bg-transparent border-none cursor-pointer hover:bg-[#f0f0f0]"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => openArticle(s.title, s.url)}
               >

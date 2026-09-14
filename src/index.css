@@ -106,6 +106,82 @@
   display: none;
 }
 
+/* ── PDF text layer (selectable text overlay) ─────────────── */
+
+.pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  opacity: 1;
+  line-height: 1;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform: translateX(2px);
+  transform-origin: 0 0;
+  z-index: 1;
+  pointer-events: auto;
+}
+
+.pdf-text-layer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.pdf-text-layer ::selection {
+  background: rgba(0, 100, 200, 0.3);
+}
+
+/* ── PDF selection toolbox ────────────────────────────────── */
+
+.pdf-selection-toolbox {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 3px;
+  background: rgba(30, 30, 30, 0.92);
+  backdrop-filter: blur(8px);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  animation: pdf-toolbox-in 0.12s ease-out;
+  z-index: 100001;
+}
+
+@keyframes pdf-toolbox-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.pdf-selection-toolbox-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: #e0e0e0;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.pdf-selection-toolbox-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.pdf-selection-toolbox-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.2);
+  margin: 0 2px;
+}
+
 /* ── Titlebar ────────────────────────────────────────────── */
 
 .titlebar {

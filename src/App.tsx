@@ -455,10 +455,12 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleOpenPdf = useCallback(() => {
+    const name = window.prompt("PDF path (e.g. /myfile.pdf):", "/viewer.pdf")
+    if (!name) return
     addWindow({
       contentType: "pdf",
-      pdfUrl: "/viewer.pdf",
-      title: "PDF.js viewer",
+      pdfUrl: name,
+      title: name.replace(/^\/|\.pdf$/gi, ""),
       pdfCurrentPage: 1,
       width: 620,
       height: 908,

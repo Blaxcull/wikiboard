@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
+import { getDocument, GlobalWorkerOptions, TextLayer } from "pdfjs-dist";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import type { WindowData } from "../store/windows";
 import { useWindows } from "../store/windows";
+import PdfSelectionToolbox from "./pdfSelectionToolbox";
 
 GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
@@ -34,7 +35,9 @@ export default function PdfViewer({ win }: Props) {
 
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const canvasRefs = useRef<Map<number, HTMLCanvasElement>>(new Map());
+  const textLayerRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const renderTasksRef = useRef<Map<number, RenderTask>>(new Map());
+  const textLayerTasksRef = useRef<Map<number, TextLayer>>(new Map());
   const renderedWidthsRef = useRef<Map<number, number>>(new Map());
   const visiblePagesRef = useRef<Set<number>>(new Set());
   const targetPageRef = useRef<number>(currentPage);
@@ -88,6 +91,7 @@ export default function PdfViewer({ win }: Props) {
     loadPdf();
     const renderTasks = renderTasksRef.current;
     const renderedWidths = renderedWidthsRef.current;
+    const textLayerTasks = textLayerTasksRef.current;
     return () => {
       cancelled = true;
       for (const task of renderTasks.values()) {
@@ -99,6 +103,14 @@ export default function PdfViewer({ win }: Props) {
       }
       renderTasks.clear();
       renderedWidths.clear();
+      for (const tl of textLayerTasks.values()) {
+        try {
+          tl.cancel();
+        } catch {
+          // ignore
+        }
+      }
+      textLayerTasks.clear();
       if (docRef.current) {
         docRef.current.cleanup();
         docRef.current = null;
@@ -123,11 +135,23 @@ export default function PdfViewer({ win }: Props) {
       }
     }
 
+    // Cancel any existing text layer for this page
+    const prevTl = textLayerTasksRef.current.get(pageNum);
+    if (prevTl) {
+      try {
+        prevTl.cancel();
+      } catch {
+        // ignore
+      }
+      textLayerTasksRef.current.delete(pageNum);
+    }
+
     try {
       const page = await doc.getPage(pageNum);
       const vp = page.getViewport({ scale: 1 });
-      const scale = (availWidth / vp.width) * (window.devicePixelRatio || 1) * QUALITY_SCALE;
-      const viewport = page.getViewport({ scale });
+      const cssScale = availWidth / vp.width;
+      const renderScale = cssScale * (window.devicePixelRatio || 1) * QUALITY_SCALE;
+      const viewport = page.getViewport({ scale: renderScale });
 
       const offscreen = document.createElement("canvas");
       offscreen.width = viewport.width;
@@ -146,13 +170,45 @@ export default function PdfViewer({ win }: Props) {
 
       copyCanvas(offscreen, canvas);
       renderedWidthsRef.current.set(pageNum, availWidth);
+
+      // Render text layer on top for text selection (only when maximized)
+      if (isMaximized) {
+        const textLayerEl = textLayerRefs.current.get(pageNum);
+        if (textLayerEl) {
+          textLayerEl.innerHTML = "";
+          const textContent = await page.getTextContent();
+          // Measure actual canvas CSS width (forces layout reflow) for precise alignment
+          const canvasDisplayWidth = canvas.clientWidth || availWidth;
+          const textScale = canvasDisplayWidth / vp.width;
+          textLayerEl.style.setProperty("--scale-factor", String(textScale));
+          const textViewport = page.getViewport({ scale: textScale });
+          const textLayer = new TextLayer({
+            textContentSource: textContent,
+            container: textLayerEl,
+            viewport: textViewport,
+          });
+          textLayerTasksRef.current.set(pageNum, textLayer);
+          await textLayer.render();
+          textLayerTasksRef.current.delete(pageNum);
+        }
+      }
     } catch (err: unknown) {
       if (err && typeof err === "object" && "name" in err && err.name === "RenderingCancelledException") {
         return;
       }
       console.error(`Page ${pageNum} render error:`, err);
     }
-  }, []);
+  }, [isMaximized]);
+
+  // --- Cancel text layer tasks when unmaximizing ---
+  useEffect(() => {
+    if (!isMaximized) {
+      for (const tl of textLayerTasksRef.current.values()) {
+        try { tl.cancel(); } catch { /* ignore */ }
+      }
+      textLayerTasksRef.current.clear();
+    }
+  }, [isMaximized]);
 
   // --- Render current page in zoomed-out mode ---
   useEffect(() => {
@@ -418,6 +474,15 @@ export default function PdfViewer({ win }: Props) {
                   }}
                   className="block w-full h-auto"
                 />
+                {isMaximized && (
+                  <div
+                    ref={(el) => {
+                      if (el) textLayerRefs.current.set(p, el);
+                      else textLayerRefs.current.delete(p);
+                    }}
+                    className="pdf-text-layer"
+                  />
+                )}
               </div>
             );
           })}
@@ -471,6 +536,10 @@ export default function PdfViewer({ win }: Props) {
           )}
         </button>
       </div>
+      <PdfSelectionToolbox
+        scrollContainerRef={scrollContainerRef}
+        isMaximized={isMaximized}
+      />
     </>
   );
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useWindows } from "../store/windows";
+import { getCamera } from "../utils/camera";
 
 type Props = {
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
@@ -95,28 +96,37 @@ export default function PdfSelectionToolbox({ scrollContainerRef, isMaximized }:
 
     const range = sel.getRangeAt(0);
     const clientRects = range.getClientRects();
-    const container = scrollContainerRef.current;
 
-    if (container) {
-      const containerRect = container.getBoundingClientRect();
-      for (const rect of clientRects) {
-        const highlight = document.createElement("div");
-        highlight.className = "pdf-highlight";
-        highlight.style.position = "absolute";
-        highlight.style.left = `${rect.left - containerRect.left + container.scrollLeft}px`;
-        highlight.style.top = `${rect.top - containerRect.top + container.scrollTop}px`;
-        highlight.style.width = `${rect.width}px`;
-        highlight.style.height = `${rect.height}px`;
-        highlight.style.backgroundColor = "rgba(255, 255, 0, 0.4)";
-        highlight.style.pointerEvents = "none";
-        highlight.style.zIndex = "0";
-        container.appendChild(highlight);
+    // Find the page container (positioned ancestor of the text layer)
+    const node = range.commonAncestorContainer;
+    const el = node.nodeType === Node.ELEMENT_NODE ? node as HTMLElement : node.parentElement;
+    const pageContainer = el?.closest("[data-page]") as HTMLElement | null;
+
+    if (pageContainer) {
+      const containerRect = pageContainer.getBoundingClientRect();
+      const { zoom } = getCamera();
+      const containerW = pageContainer.clientWidth;
+      const containerH = pageContainer.clientHeight;
+      if (containerW > 0 && containerH > 0) {
+        for (const rect of clientRects) {
+          const highlight = document.createElement("div");
+          highlight.className = "pdf-highlight";
+          highlight.style.position = "absolute";
+          highlight.style.left = `${((rect.left - containerRect.left) / zoom / containerW) * 100}%`;
+          highlight.style.top = `${((rect.top - containerRect.top) / zoom / containerH) * 100}%`;
+          highlight.style.width = `${(rect.width / zoom / containerW) * 100}%`;
+          highlight.style.height = `${(rect.height / zoom / containerH) * 100}%`;
+          highlight.style.backgroundColor = "rgba(255, 255, 0, 0.4)";
+          highlight.style.pointerEvents = "none";
+          highlight.style.zIndex = "0";
+          pageContainer.appendChild(highlight);
+        }
       }
     }
 
     sel.removeAllRanges();
     setVisible(false);
-  }, [scrollContainerRef]);
+  }, []);
 
   const handleSearchWikipedia = useCallback(() => {
     const text = selectedTextRef.current;

@@ -3,6 +3,8 @@ import { getDocument, GlobalWorkerOptions, TextLayer } from "pdfjs-dist";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import type { WindowData } from "../store/windows";
 import { useWindows } from "../store/windows";
+import { getCamera } from "../utils/camera";
+import { setZoomImmediate } from "../utils/canvas/zoom";
 import PdfSelectionToolbox from "./pdfSelectionToolbox";
 
 GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
@@ -45,6 +47,7 @@ export default function PdfViewer({ win }: Props) {
 
   const isMaximized = !!win.pdfMaximized;
   const prevMaximizedRef = useRef(isMaximized);
+  const prevCameraRef = useRef<{ zoom: number; panX: number; panY: number; winX: number; winY: number } | null>(null);
 
   // --- Load PDF document ---
   useEffect(() => {
@@ -342,8 +345,34 @@ export default function PdfViewer({ win }: Props) {
   const nextPage = useCallback(() => goToPage(targetPageRef.current + 1), [goToPage]);
 
   const toggleMaximize = useCallback(() => {
-    updateWindow(win.id, { pdfMaximized: !isMaximized });
-  }, [win.id, isMaximized, updateWindow]);
+    const el = document.getElementById(`win-${win.id}`) as HTMLElement | null;
+    if (!el) return;
+    const world = el.closest('.canvas-world') as HTMLElement | null;
+
+    if (!isMaximized) {
+      const cam = getCamera();
+      const targetZoom = Math.min((window.innerWidth * 0.5) / 850, 10);
+
+      prevCameraRef.current = { ...cam, winX: win.x ?? 80, winY: win.y ?? 80 };
+
+      const curLeft = parseFloat(el.style.left) || 0;
+      const curTop = parseFloat(el.style.top) || 0;
+      const newPanX = curLeft * (cam.zoom - targetZoom) + cam.panX;
+      const newPanY = curTop * (cam.zoom - targetZoom) + cam.panY;
+
+      if (world) world.classList.add('world-zoom-transition');
+      setZoomImmediate(targetZoom, newPanX, newPanY);
+      updateWindow(win.id, { pdfMaximized: true });
+      setTimeout(() => { if (world) world.classList.remove('world-zoom-transition'); }, 320);
+    } else if (prevCameraRef.current) {
+      const prev = prevCameraRef.current;
+      if (world) world.classList.add('world-zoom-transition');
+      setZoomImmediate(prev.zoom, prev.panX, prev.panY);
+      updateWindow(win.id, { x: prev.winX, y: prev.winY, pdfMaximized: false });
+      prevCameraRef.current = null;
+      setTimeout(() => { if (world) world.classList.remove('world-zoom-transition'); }, 320);
+    }
+  }, [win.id, win.x, win.y, isMaximized, updateWindow]);
 
   // --- Synchronously position and lock scroll when zooming in/out (NO scroll animation) ---
   useLayoutEffect(() => {

@@ -276,6 +276,10 @@
   transform-origin: 0 0;
 }
 
+.canvas-world.world-zoom-transition {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
 .connection-arrows {
   pointer-events: none;
 }

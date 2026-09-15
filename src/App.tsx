@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
+import { memo, useCallback, useLayoutEffect, useEffect, useMemo, useRef } from 'react'
 import Window from './components/window'
 import LinkEditor from './components/linkEditor'
 import SearchBox from './components/searchBox'
@@ -369,7 +369,7 @@ const WindowItem = memo(function WindowItem({ w }: { w: WindowData }) {
 
   const pdfRef = useRef<HTMLDivElement | null>(null)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = pdfRef.current
     if (!el || w.contentType !== "pdf") return
 

@@ -59,6 +59,14 @@ export function handleZoom(e: WheelEvent) {
   }
 }
 
+/** Set zoom and pan immediately (no lerp animation). Updates both the camera state and the animation targets so subsequent wheel-zoom starts from the correct value. */
+export function setZoomImmediate(zoom: number, panX?: number, panY?: number) {
+  targetZoom = zoom;
+  targetPanX = panX ?? getCamera().panX;
+  targetPanY = panY ?? getCamera().panY;
+  setCamera({ zoom, panX: targetPanX, panY: targetPanY });
+}
+
 /** Reset zoom target (e.g. on double-click to reset view). */
 export function resetZoom() {
   targetZoom = 1;

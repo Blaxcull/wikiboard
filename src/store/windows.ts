@@ -28,6 +28,8 @@ export type WindowData = {
   pdfTotalPages?: number;
   /** Whether the PDF viewer is in maximized (full-viewport) mode */
   pdfMaximized?: boolean;
+  /** True while the maximize/minimize animation is running */
+  pdfAnimating?: boolean;
   zIndex?: number;
   x?: number;
   y?: number;

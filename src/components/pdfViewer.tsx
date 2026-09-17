@@ -47,6 +47,7 @@ export default function PdfViewer({ win }: Props) {
   const targetPageRef = useRef<number>(currentPage);
 
   const isMaximized = !!win.pdfMaximized;
+  const isAnimating = !!win.pdfAnimating;
   const prevMaximizedRef = useRef(isMaximized);
   const prevWindowRef = useRef<{ winX: number; winY: number } | null>(null);
 
@@ -350,20 +351,42 @@ export default function PdfViewer({ win }: Props) {
   const prevPage = useCallback(() => goToPage(targetPageRef.current - 1), [goToPage]);
   const nextPage = useCallback(() => goToPage(targetPageRef.current + 1), [goToPage]);
 
-  const toggleMaximize = useCallback(() => {
-    if (!isMaximized) {
-      prevWindowRef.current = { winX: win.x ?? 80, winY: win.y ?? 80 };
-      pdfZoomRef.current = 1;
-      if (pagesContainerRef.current) pagesContainerRef.current.style.zoom = "";
-      updateWindow(win.id, { pdfMaximized: true });
-    } else if (prevWindowRef.current) {
-      const prev = prevWindowRef.current;
-      pdfZoomRef.current = 1;
-      if (pagesContainerRef.current) pagesContainerRef.current.style.zoom = "";
-      updateWindow(win.id, { x: prev.winX, y: prev.winY, pdfMaximized: false });
-      prevWindowRef.current = null;
+
+const toggleMaximize = useCallback(() => {
+  if (!isMaximized) {
+    prevWindowRef.current = {
+      winX: win.x ?? 80,
+      winY: win.y ?? 80,
+    };
+
+    pdfZoomRef.current = 1;
+
+    if (pagesContainerRef.current) {
+      pagesContainerRef.current.style.zoom = "";
     }
-  }, [win.id, win.x, win.y, isMaximized, updateWindow]);
+
+    updateWindow(win.id, {
+      pdfMaximized: true,
+    });
+  } else {
+    const prev = prevWindowRef.current;
+
+    pdfZoomRef.current = 1;
+
+    if (pagesContainerRef.current) {
+      pagesContainerRef.current.style.zoom = "";
+    }
+
+    updateWindow(win.id, {
+      x: prev?.winX ?? 80,
+      y: prev?.winY ?? 80,
+      pdfMaximized: false,
+    });
+
+    prevWindowRef.current = null;
+  }
+}, [isMaximized, win.id, win.x, win.y, updateWindow]);
+
 
   // --- Synchronously position scroll when toggling maximize ---
   useLayoutEffect(() => {
@@ -434,7 +457,7 @@ export default function PdfViewer({ win }: Props) {
         ref={scrollContainerRef}
         onScroll={handleScroll}
         onWheel={(e) => {
-          if (!e.ctrlKey && !e.metaKey) return;
+          if (!e.ctrlKey && !e.metaKey || !isMaximized) return;
           e.preventDefault();
           e.stopPropagation();
 
@@ -458,10 +481,10 @@ export default function PdfViewer({ win }: Props) {
           container.scrollLeft = mouseX * scaleRatio - (e.clientX - rect.left);
           container.scrollTop = mouseY * scaleRatio - (e.clientY - rect.top);
         }}
-        className={`flex-1 min-h-0 relative ${isMaximized ? "overflow-auto" : "overflow-hidden"}`}
+        className={`flex-1  relative  overflow-auto`}
         style={{ backgroundColor: "transparent", scrollbarWidth: "none" }}
       >
-        <div ref={pagesContainerRef} className="flex flex-col gap-6 w-full items-center pt-0 pb-12" style={{ backgroundColor: "transparent" }}>
+        <div ref={pagesContainerRef} className="flex flex-col gap-6 w-full items-center pt-0 " style={{ backgroundColor: "transparent" }}>
           {pagesArray.map((p) => {
             const isVisible = isMaximized || p === currentPage;
 
@@ -485,7 +508,7 @@ export default function PdfViewer({ win }: Props) {
                 }}
                 data-page={p}
                 style={pageStyle}
-                className={`relative p-0 mx-auto bg-white ${isMaximized ? "" : "max-w-[850px] w-full"}`}
+                className={`rounded-xl bg-gray-900 shadow-[0_10px_40px_rgba(0,0,0,0.3)] relative p-0 mx-auto bg-white ${isMaximized ? "" : "max-w-[850px] w-full"}`}
               >
                 <canvas
                   ref={(el) => {
@@ -509,56 +532,144 @@ export default function PdfViewer({ win }: Props) {
         </div>
       </div>
       <div
-        className={`flex justify-center items-center gap-1 py-1 px-1.5 bg-[rgba(30,30,30,0.85)] backdrop-blur-[8px] rounded-3xl mx-auto ${
-          isMaximized
-            ? "absolute bottom-3 left-1/2 -translate-x-1/2 z-10"
-            : "mb-2 mt-4"
-        }`}
-        style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.25)" }}
+        className="pdf-toolbar flex justify-center items-center gap-1 py-1 px-1.5 bg-[rgba(30,30,30,0.85)] backdrop-blur-[8px] rounded-3xl mx-auto"
+        style={{
+          boxShadow: "0 2px 12px rgba(0,0,0,0.25)",
+          opacity: isAnimating ? 0 : 1,
+          pointerEvents: isAnimating ? "none" : "auto",
+          transition: "opacity 0.2s ease",
+          ...(isMaximized
+            ? { position: "absolute", bottom: "12px", left: "50%", transform: "translateX(-50%)", zIndex: 10 }
+            : { marginBottom: "8px", marginTop: "16px", width: "fit-content" }),
+        }}
       >
-        <button className={TOOLBAR_BTN} title="Bookmark">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M5 2h14a1 1 0 0 1 1 1v19.143a.5.5 0 0 1-.766.424L12 18.03l-7.234 4.536A.5.5 0 0 1 4 22.143V3a1 1 0 0 1 1-1z" />
-          </svg>
-        </button>
-        <button
-          className={TOOLBAR_BTN}
-          onClick={prevPage}
-          disabled={currentPage <= 1}
-          title="Previous page"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
-        </button>
-        <span className="text-[#e0e0e0] text-[13px] font-sans py-0 px-2.5 min-w-[50px] text-center select-none">
-          {currentPage} / {totalPages}
-        </span>
-        <button
-          className={TOOLBAR_BTN}
-          onClick={nextPage}
-          disabled={currentPage >= totalPages}
-          title="Next page"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
-        </button>
-        <button className={TOOLBAR_BTN} onClick={toggleMaximize} title={isMaximized ? "Exit fullscreen" : "Fullscreen"}>
           {isMaximized ? (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
-            </svg>
+            <button className={TOOLBAR_BTN} title="Bookmark">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M5 2h14a1 1 0 0 1 1 1v19.143a.5.5 0 0 1-.766.424L12 18.03l-7.234 4.536A.5.5 0 0 1 4 22.143V3a1 1 0 0 1 1-1z" />
+              </svg>
+            </button>
           ) : (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-            </svg>
+            <button
+              className={TOOLBAR_BTN}
+              title="Move"
+              onMouseDown={(e) => {
+                if (isMaximized) return;
+                const winEl = (e.target as HTMLElement).closest(".pdf-window") as HTMLElement | null;
+                if (!winEl) return;
+
+                const startX = e.clientX;
+                const startY = e.clientY;
+                const baseLeft = parseFloat(winEl.style.left) || 0;
+                const baseTop = parseFloat(winEl.style.top) || 0;
+                const cam = getCamera();
+                const screenLeft = baseLeft * cam.zoom + cam.panX;
+                const screenTop = baseTop * cam.zoom + cam.panY;
+                const shiftX = startX - screenLeft;
+                const shiftY = startY - screenTop;
+
+                const nextZ = useWindows.getState().maxZIndex + 1;
+                winEl.style.zIndex = String(nextZ);
+
+                let framePending = false;
+                let mouseX = startX;
+                let mouseY = startY;
+
+                function updatePosition() {
+                  framePending = false;
+                  applyGestureSetup();
+                  const curCam = getCamera();
+                  const worldDx = (mouseX - shiftX - screenLeft) / curCam.zoom;
+                  const worldDy = (mouseY - shiftY - screenTop) / curCam.zoom;
+                  winEl.style.transform = `translate3d(${Math.round(worldDx)}px, ${Math.round(worldDy)}px, 0)`;
+                }
+
+                function onMouseMove(ev: MouseEvent) {
+                  mouseX = ev.clientX;
+                  mouseY = ev.clientY;
+                  if (!framePending) {
+                    framePending = true;
+                    requestAnimationFrame(updatePosition);
+                  }
+                }
+
+                function applyGestureSetup() {
+                  winEl.classList.add("no-transition");
+                  document.body.style.cursor = "move";
+                }
+
+                function onMouseUp() {
+                  const rdx = Math.round((mouseX - shiftX - screenLeft) / getCamera().zoom);
+                  const rdy = Math.round((mouseY - shiftY - screenTop) / getCamera().zoom);
+                  const newLeft = baseLeft + rdx;
+                  const newTop = baseTop + rdy;
+                  winEl.style.left = `${newLeft}px`;
+                  winEl.style.top = `${newTop}px`;
+                  winEl.style.transform = "";
+                  useWindows.setState({ maxZIndex: nextZ });
+                  updateWindow(win.id, { x: newLeft, y: newTop });
+                  requestAnimationFrame(() => {
+                    winEl.classList.remove("no-transition");
+                    document.body.style.cursor = "";
+                  });
+                  document.removeEventListener("mousemove", onMouseMove);
+                  document.removeEventListener("mouseup", onMouseUp);
+                }
+
+                document.addEventListener("mousemove", onMouseMove);
+                document.addEventListener("mouseup", onMouseUp);
+                e.preventDefault();
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="5 9 2 12 5 15" />
+                <polyline points="9 5 12 2 15 5" />
+                <polyline points="15 19 12 22 9 19" />
+                <polyline points="19 9 22 12 19 15" />
+                <line x1="2" y1="12" x2="22" y2="12" />
+                <line x1="12" y1="2" x2="12" y2="22" />
+              </svg>
+            </button>
           )}
-        </button>
-      </div>
+          <button
+            className={TOOLBAR_BTN}
+            onClick={prevPage}
+            disabled={currentPage <= 1}
+            title="Previous page"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+          <span className="text-[#e0e0e0] text-[13px] font-sans py-0 px-2.5 min-w-[50px] text-center select-none">
+            {currentPage} / {totalPages}
+          </span>
+          <button
+            className={TOOLBAR_BTN}
+            onClick={nextPage}
+            disabled={currentPage >= totalPages}
+            title="Next page"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+          <button className={TOOLBAR_BTN} onClick={toggleMaximize} title={isMaximized ? "Exit fullscreen" : "Fullscreen"}>
+            {isMaximized ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+              </svg>
+            )}
+          </button>
+        </div>
       <PdfSelectionToolbox
         scrollContainerRef={scrollContainerRef}
         isMaximized={isMaximized}
+        windowId={win.id}
       />
     </>
   );

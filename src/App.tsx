@@ -345,6 +345,99 @@ function Fps() {
   );
 }
 
+
+//for pdf maximize
+//
+//
+//
+
+const animatePdfMaximize = (
+  el: HTMLElement,
+  target: {
+    left: number
+    top: number
+    width: number
+    height: number
+  },
+  duration = 300,
+  onDone?: () => void
+) => {
+  const first = el.getBoundingClientRect()
+  const firstLeft = parseFloat(el.style.left) || first.left
+  const firstTop = parseFloat(el.style.top) || first.top
+  const firstW = parseFloat(el.style.width) || first.width
+  const firstH = parseFloat(el.style.height) || first.height
+
+  const animation = el.animate(
+    [
+      {
+        left: `${firstLeft}px`,
+        top: `${firstTop}px`,
+        width: `${firstW}px`,
+        height: `${firstH}px`,
+      },
+      {
+        left: `${target.left}px`,
+        top: `${target.top}px`,
+        width: `${target.width}px`,
+        height: `${target.height}px`,
+      },
+    ],
+    {
+      duration,
+      easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+      fill: "forwards",
+    }
+  )
+
+  animation.onfinish = () => {
+    el.style.left = `${target.left}px`
+    el.style.top = `${target.top}px`
+    el.style.width = `${target.width}px`
+    el.style.height = `${target.height}px`
+    onDone?.()
+  }
+}
+
+
+
+function animateWindowBounds(
+  el: HTMLElement,
+  from: { x: number; y: number; width: number; height: number },
+  to: { x: number; y: number; width: number; height: number },
+  duration = 500,
+) {
+  const dx = from.x - to.x;
+  const dy = from.y - to.y;
+  const sx = from.width / to.width;
+  const sy = from.height / to.height;
+
+  // Set final layout first
+  el.style.left = `${to.x}px`;
+  el.style.top = `${to.y}px`;
+  el.style.width = `${to.width}px`;
+  el.style.height = `${to.height}px`;
+
+  // Animate from old rectangle -> new rectangle
+  el.animate(
+    [
+      {
+        transformOrigin: "top left",
+        transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`,
+      },
+      {
+        transformOrigin: "top left",
+        transform: "translate(0, 0) scale(1, 1)",
+      },
+    ],
+    {
+      duration,
+      easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+      fill: "both",
+    },
+  );
+}
+
 const WindowItem = memo(function WindowItem({ w }: { w: WindowData }) {
   const setActive = useWindows((s) => s.setActive)
   const updateWindow = useWindows((s) => s.updateWindow)
@@ -369,63 +462,117 @@ const WindowItem = memo(function WindowItem({ w }: { w: WindowData }) {
 
   const pdfRef = useRef<HTMLDivElement | null>(null)
 
-  useEffect(() => {
-    const el = pdfRef.current
-    if (!el || w.contentType !== "pdf") return
+  const prevPdfMaximizedRef = useRef(!!w.pdfMaximized)
 
-    if (w.pdfMaximized) {
-      const applyMaximizedBounds = () => {
-        const cam = getCamera()
-        const maxLeft = -cam.panX / cam.zoom
-        const maxTop = -cam.panY / cam.zoom
-        const maxWidth = window.innerWidth / cam.zoom
-        const maxHeight = window.innerHeight / cam.zoom
-        el.style.left = `${maxLeft}px`
-        el.style.top = `${maxTop}px`
-        el.style.width = `${maxWidth}px`
-        el.style.height = `${maxHeight}px`
-      }
+useEffect(() => {
+  const el = pdfRef.current
 
-      applyMaximizedBounds()
-      window.addEventListener("resize", applyMaximizedBounds)
-      return () => window.removeEventListener("resize", applyMaximizedBounds)
-    } else {
-      if (el.dataset.pos) {
-        el.style.left = `${w.x ?? 80}px`
-        el.style.top = `${w.y ?? 80}px`
-        el.style.width = `${w.width ?? 620}px`
-        el.style.height = `${w.height ?? 908}px`
-      }
+  if (!el || w.contentType !== "pdf") return
+
+  const wasMaximized = prevPdfMaximizedRef.current
+  const isMaximized = !!w.pdfMaximized
+
+  prevPdfMaximizedRef.current = isMaximized
+
+  const cam = getCamera()
+
+  const normalBounds = {
+    left: w.x ?? 80,
+    top: w.y ?? 80,
+    width: w.width ?? 620,
+    height: w.height ?? 908,
+  }
+
+  const maximizedBounds = {
+    left: -cam.panX / cam.zoom,
+    top: -cam.panY / cam.zoom,
+    width: window.innerWidth / cam.zoom,
+    height: window.innerHeight / cam.zoom,
+  }
+
+  // MAXIMIZE / RESTORE
+  if (wasMaximized !== isMaximized) {
+    useWindows.getState().updateWindow(w.id, { pdfAnimating: true })
+    animatePdfMaximize(
+      el,
+      isMaximized ? maximizedBounds : normalBounds,
+      300,
+      () => useWindows.getState().updateWindow(w.id, { pdfAnimating: false })
+    )
+  } else if (!isMaximized) {
+    // Normal window movement/resizing should NOT animate.
+    el.style.left = `${normalBounds.left}px`
+    el.style.top = `${normalBounds.top}px`
+    el.style.width = `${normalBounds.width}px`
+    el.style.height = `${normalBounds.height}px`
+  }
+
+  // While maximized, keep it covering the viewport.
+  if (isMaximized) {
+    const handleResize = () => {
+      const cam = getCamera()
+
+      el.style.left = `${-cam.panX / cam.zoom}px`
+      el.style.top = `${-cam.panY / cam.zoom}px`
+      el.style.width = `${window.innerWidth / cam.zoom}px`
+      el.style.height = `${window.innerHeight / cam.zoom}px`
     }
-  }, [w.pdfMaximized, w.contentType, w.x, w.y, w.width, w.height])
+
+    window.addEventListener("resize", handleResize)
+
+    return () => {
+      window.removeEventListener("resize", handleResize)
+    }
+  }
+}, [
+  w.pdfMaximized,
+  w.contentType,
+  w.x,
+  w.y,
+  w.width,
+  w.height,
+])
+
 
   if (w.contentType === "pdf") {
     return (
-      <div
-        ref={(el) => {
-          pdfRef.current = el
-          if (el && !el.dataset.pos) {
-            el.dataset.pos = "1"
-            const offset = (w.x === undefined || w.y === undefined) ? nextCascadeOffset() : 0
-            const left = w.x !== undefined ? w.x : 80 + offset
-            const top = w.y !== undefined ? w.y : 80 + offset
-            el.style.left = `${left}px`
-            el.style.top = `${top}px`
-            el.style.width = `${w.width ?? 620}px`
-            el.style.height = `${w.height ?? 908}px`
-          }
-        }}
-        id={`win-${w.id}`}
-        className={`window pdf-window ${w.pdfMaximized ? 'maximized' : ''} ${w.active ? 'active' : 'inactive'}`}
-        style={zIndexStyle}
-        onMouseDown={(e) => {
-          if (w.pdfMaximized) return
-          handleActivate()
-          Resize(e, (rect) => handlePositionChange(rect))
-        }}
-      >
-        <PdfViewer win={w} />
-      </div>
+        <div
+  ref={(el) => {
+    pdfRef.current = el
+
+    if (el && !el.dataset.pos) {
+      el.dataset.pos = "1"
+
+      const offset =
+        w.x === undefined || w.y === undefined
+          ? nextCascadeOffset()
+          : 0
+
+      const left = w.x !== undefined ? w.x : 80 + offset
+      const top = w.y !== undefined ? w.y : 80 + offset
+
+      el.style.left = `${left}px`
+      el.style.top = `${top}px`
+      el.style.width = `${w.width ?? 620}px`
+      el.style.height = `${w.height ?? 908}px`
+    }
+  }}
+  id={`win-${w.id}`}
+  className={`window pdf-window ${
+    w.pdfMaximized ? "maximized" : ""
+  } ${w.active ? "active" : "inactive"} ${w.pdfAnimating ? "no-transition" : ""}`}
+  style={zIndexStyle}
+  onMouseDown={(e) => {
+    if (w.pdfMaximized) return
+
+    handleActivate()
+    Resize(e, (rect) => handlePositionChange(rect))
+  }}
+  >
+  <div className="pdf-window-animation-layer">
+    <PdfViewer win={w} />
+  </div>
+</div>
     )
   }
 

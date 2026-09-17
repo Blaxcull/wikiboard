@@ -6,10 +6,12 @@ import { getCamera } from "../utils/camera";
 type Props = {
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   isMaximized: boolean;
+  windowId: string;
 };
 
-export default function PdfSelectionToolbox({ scrollContainerRef, isMaximized }: Props) {
+export default function PdfSelectionToolbox({ scrollContainerRef, isMaximized, windowId }: Props) {
   const addWindow = useWindows((s) => s.addWindow);
+  const updateWindow = useWindows((s) => s.updateWindow);
   const [visible, setVisible] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const selectedTextRef = useRef("");
@@ -128,17 +130,27 @@ export default function PdfSelectionToolbox({ scrollContainerRef, isMaximized }:
     setVisible(false);
   }, []);
 
-  const handleSearchWikipedia = useCallback(() => {
+  const handleSearchWikipedia = useCallback(async () => {
     const text = selectedTextRef.current;
     if (!text) return;
 
-    addWindow({
-      title: text,
-      url: `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(text)}`,
-    });
+    try {
+      const res = await fetch(
+        `https://en.wikipedia.org/w/api.php?action=opensearch&format=json&origin=*&limit=1&search=${encodeURIComponent(text)}`
+      );
+      if (res.ok) {
+        const [, titles, , urls]: [string, string[], string[], string[]] = await res.json();
+        if (titles.length > 0 && urls.length > 0) {
+          addWindow({ title: titles[0], url: urls[0] });
+        }
+      }
+    } catch {
+      /* fetch failed */
+    }
 
+    updateWindow(windowId, { pdfMaximized: false });
     setVisible(false);
-  }, [addWindow]);
+  }, [addWindow, updateWindow, windowId]);
 
   if (!visible) return null;
 

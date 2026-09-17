@@ -81,7 +81,8 @@
 }
 
 .pdf-window.dragging,
-.pdf-window.resizing {
+.pdf-window.resizing,
+.pdf-window.no-transition {
   transition: none !important;
 }
 
@@ -99,6 +100,15 @@
   border: none !important;
   outline: none !important;
   box-shadow: none !important;
+}
+
+.pdf-window.maximized::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: -1;
 }
 
 .pdf-window .window-content {
@@ -119,7 +129,6 @@
   line-height: 1;
   text-size-adjust: none;
   forced-color-adjust: none;
-  transform: translateX(2px);
   transform-origin: 0 0;
   z-index: 1;
   pointer-events: auto;
@@ -292,4 +301,13 @@
 .canvas-world.gesture-active > .window:not(.dragging):not(.resizing) iframe,
 .canvas-world.gesture-active > .window:not(.dragging):not(.resizing) .window-content {
   pointer-events: none !important;
+}
+.pdf-window-animation-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }

@@ -351,9 +351,6 @@ export default function PdfViewer({ win }: Props) {
   const nextPage = useCallback(() => goToPage(targetPageRef.current + 1), [goToPage]);
 
   const toggleMaximize = useCallback(() => {
-    const el = document.getElementById(`win-${win.id}`);
-    if (el) el.style.transition = "none";
-
     if (!isMaximized) {
       prevWindowRef.current = { winX: win.x ?? 80, winY: win.y ?? 80 };
       pdfZoomRef.current = 1;
@@ -366,10 +363,6 @@ export default function PdfViewer({ win }: Props) {
       updateWindow(win.id, { x: prev.winX, y: prev.winY, pdfMaximized: false });
       prevWindowRef.current = null;
     }
-
-    requestAnimationFrame(() => {
-      if (el) el.style.transition = "";
-    });
   }, [win.id, win.x, win.y, isMaximized, updateWindow]);
 
   // --- Synchronously position scroll when toggling maximize ---
@@ -466,7 +459,7 @@ export default function PdfViewer({ win }: Props) {
           container.scrollTop = mouseY * scaleRatio - (e.clientY - rect.top);
         }}
         className={`flex-1 min-h-0 relative ${isMaximized ? "overflow-auto" : "overflow-hidden"}`}
-        style={{ backgroundColor: "transparent" }}
+        style={{ backgroundColor: "transparent", scrollbarWidth: "none" }}
       >
         <div ref={pagesContainerRef} className="flex flex-col gap-6 w-full items-center pt-0 pb-12" style={{ backgroundColor: "transparent" }}>
           {pagesArray.map((p) => {

@@ -94,12 +94,13 @@
 }
 
 .pdf-window.maximized {
-  background: #ffffff !important;
+  background: transparent !important;
   border-radius: 0 !important;
   z-index: 10000 !important;
   border: none !important;
   outline: none !important;
   box-shadow: none !important;
+  transition: none !important;
 }
 
 .pdf-window .window-content {
@@ -274,10 +275,6 @@
   width: 0;
   height: 0;
   transform-origin: 0 0;
-}
-
-.canvas-world.world-zoom-transition {
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
 .connection-arrows {

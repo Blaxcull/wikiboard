@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { getDocument, GlobalWorkerOptions, TextLayer } from "pdfjs-dist";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import type { WindowData } from "../store/windows";
 import { useWindows } from "../store/windows";
 import { getCamera } from "../utils/camera";
-import { setZoomImmediate } from "../utils/canvas/zoom";
 import PdfSelectionToolbox from "./pdfSelectionToolbox";
 
 GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
 const QUALITY_SCALE = 1.5;
+const MIN_PDF_ZOOM = 0.25;
+const MAX_PDF_ZOOM = 5;
 
 type Props = { win: WindowData };
 
@@ -43,11 +45,13 @@ export default function PdfViewer({ win }: Props) {
   const renderedWidthsRef = useRef<Map<number, number>>(new Map());
   const visiblePagesRef = useRef<Set<number>>(new Set());
   const targetPageRef = useRef<number>(currentPage);
-  const isTransitioningRef = useRef(false);
 
   const isMaximized = !!win.pdfMaximized;
   const prevMaximizedRef = useRef(isMaximized);
-  const prevCameraRef = useRef<{ zoom: number; panX: number; panY: number; winX: number; winY: number } | null>(null);
+  const prevWindowRef = useRef<{ winX: number; winY: number } | null>(null);
+
+  const pdfZoomRef = useRef(1);
+  const pagesContainerRef = useRef<HTMLDivElement>(null);
 
   // --- Load PDF document ---
   useEffect(() => {
@@ -127,7 +131,9 @@ export default function PdfViewer({ win }: Props) {
     const canvas = canvasRefs.current.get(pageNum);
     if (!doc || !canvas || availWidth <= 0 || pageNum < 1 || pageNum > doc.numPages) return;
 
-    if (renderedWidthsRef.current.get(pageNum) === availWidth) return;
+    const renderWidth = isMaximized ? Math.min(availWidth, Math.min(window.innerWidth, window.innerHeight / pageAspectRatio)) : availWidth;
+
+    if (renderedWidthsRef.current.get(pageNum) === renderWidth) return;
 
     const prevTask = renderTasksRef.current.get(pageNum);
     if (prevTask) {
@@ -152,7 +158,7 @@ export default function PdfViewer({ win }: Props) {
     try {
       const page = await doc.getPage(pageNum);
       const vp = page.getViewport({ scale: 1 });
-      const cssScale = availWidth / vp.width;
+      const cssScale = renderWidth / vp.width;
       const renderScale = cssScale * (window.devicePixelRatio || 1) * QUALITY_SCALE;
       const viewport = page.getViewport({ scale: renderScale });
 
@@ -172,7 +178,7 @@ export default function PdfViewer({ win }: Props) {
       renderTasksRef.current.delete(pageNum);
 
       copyCanvas(offscreen, canvas);
-      renderedWidthsRef.current.set(pageNum, availWidth);
+      renderedWidthsRef.current.set(pageNum, renderWidth);
 
       // Render text layer on top for text selection (only when maximized)
       if (isMaximized) {
@@ -181,7 +187,7 @@ export default function PdfViewer({ win }: Props) {
           textLayerEl.innerHTML = "";
           const textContent = await page.getTextContent();
           // Measure actual canvas CSS width (forces layout reflow) for precise alignment
-          const canvasDisplayWidth = canvas.clientWidth || availWidth;
+          const canvasDisplayWidth = canvas.clientWidth || renderWidth;
           const textScale = canvasDisplayWidth / vp.width;
           textLayerEl.style.setProperty("--scale-factor", String(textScale));
           const textViewport = page.getViewport({ scale: textScale });
@@ -293,7 +299,7 @@ export default function PdfViewer({ win }: Props) {
 
   // --- Track current active page on scroll (only when zoomed in) ---
   const handleScroll = useCallback(() => {
-    if (!isMaximized || isTransitioningRef.current) return;
+    if (!isMaximized) return;
     const container = scrollContainerRef.current;
     if (!container || totalPages <= 0) return;
 
@@ -345,88 +351,49 @@ export default function PdfViewer({ win }: Props) {
   const nextPage = useCallback(() => goToPage(targetPageRef.current + 1), [goToPage]);
 
   const toggleMaximize = useCallback(() => {
-    const el = document.getElementById(`win-${win.id}`) as HTMLElement | null;
-    if (!el) return;
-    const world = el.closest('.canvas-world') as HTMLElement | null;
+    const el = document.getElementById(`win-${win.id}`);
+    if (el) el.style.transition = "none";
 
     if (!isMaximized) {
-      const cam = getCamera();
-      const targetZoom = Math.min((window.innerWidth * 0.5) / 850, 10);
-
-      prevCameraRef.current = { ...cam, winX: win.x ?? 80, winY: win.y ?? 80 };
-
-      const curLeft = parseFloat(el.style.left) || 0;
-      const curTop = parseFloat(el.style.top) || 0;
-      const newPanX = curLeft * (cam.zoom - targetZoom) + cam.panX;
-      const newPanY = curTop * (cam.zoom - targetZoom) + cam.panY;
-
-      if (world) world.classList.add('world-zoom-transition');
-      setZoomImmediate(targetZoom, newPanX, newPanY);
+      prevWindowRef.current = { winX: win.x ?? 80, winY: win.y ?? 80 };
+      pdfZoomRef.current = 1;
+      if (pagesContainerRef.current) pagesContainerRef.current.style.zoom = "";
       updateWindow(win.id, { pdfMaximized: true });
-      setTimeout(() => { if (world) world.classList.remove('world-zoom-transition'); }, 320);
-    } else if (prevCameraRef.current) {
-      const prev = prevCameraRef.current;
-      if (world) world.classList.add('world-zoom-transition');
-      setZoomImmediate(prev.zoom, prev.panX, prev.panY);
+    } else if (prevWindowRef.current) {
+      const prev = prevWindowRef.current;
+      pdfZoomRef.current = 1;
+      if (pagesContainerRef.current) pagesContainerRef.current.style.zoom = "";
       updateWindow(win.id, { x: prev.winX, y: prev.winY, pdfMaximized: false });
-      prevCameraRef.current = null;
-      setTimeout(() => { if (world) world.classList.remove('world-zoom-transition'); }, 320);
+      prevWindowRef.current = null;
     }
+
+    requestAnimationFrame(() => {
+      if (el) el.style.transition = "";
+    });
   }, [win.id, win.x, win.y, isMaximized, updateWindow]);
 
-  // --- Synchronously position and lock scroll when zooming in/out (NO scroll animation) ---
+  // --- Synchronously position scroll when toggling maximize ---
   useLayoutEffect(() => {
     if (prevMaximizedRef.current !== isMaximized) {
       prevMaximizedRef.current = isMaximized;
       const container = scrollContainerRef.current;
       if (!container) return;
 
-      isTransitioningRef.current = true;
-      let rafId: number | undefined;
-      let timerId: number | undefined;
-
       if (isMaximized) {
-        const syncScroll = () => {
-          const pageEl = pageRefs.current.get(targetPageRef.current);
-          if (pageEl && pageEl.offsetTop > 0) {
-            container.scrollTop = pageEl.offsetTop;
-          } else if (targetPageRef.current > 1) {
-            const availW = Math.min(850, container.clientWidth || 850);
-            const pageH = availW * pageAspectRatio;
-            const gap = 24;
-            container.scrollTop = (targetPageRef.current - 1) * (pageH + gap);
-          } else {
-            container.scrollTop = 0;
-          }
-        };
-
-        // Instantly position scroll container at currentPage before paint
-        syncScroll();
-
-        // Pin scroll throughout the 300ms window expansion so the active page stays locked at the top
-        const startTime = performance.now();
-        const duration = 320;
-        const pinScroll = () => {
-          syncScroll();
-          if (performance.now() - startTime < duration) {
-            rafId = requestAnimationFrame(pinScroll);
-          } else {
-            isTransitioningRef.current = false;
-          }
-        };
-        rafId = requestAnimationFrame(pinScroll);
+        const pageEl = pageRefs.current.get(targetPageRef.current);
+        if (pageEl && pageEl.offsetTop > 0) {
+          container.scrollTop = pageEl.offsetTop;
+        } else if (targetPageRef.current > 1) {
+          const availW = Math.min(850, container.clientWidth || 850);
+          const pageH = availW * pageAspectRatio;
+          const gap = 24;
+          container.scrollTop = (targetPageRef.current - 1) * (pageH + gap);
+        } else {
+          container.scrollTop = 0;
+        }
       } else {
-        // Zooming out: reset scroll position to top
         container.scrollTop = 0;
-        timerId = window.setTimeout(() => {
-          isTransitioningRef.current = false;
-        }, 320);
       }
-
-      return () => {
-        if (rafId) cancelAnimationFrame(rafId);
-        if (timerId) clearTimeout(timerId);
-      };
     }
   }, [isMaximized, pageAspectRatio]);
 
@@ -473,15 +440,49 @@ export default function PdfViewer({ win }: Props) {
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className={`flex-1 min-h-0 relative bg-white ${
-          isMaximized
-            ? "overflow-y-auto overflow-x-hidden"
-            : "overflow-hidden"
-        }`}
+        onWheel={(e) => {
+          if (!e.ctrlKey && !e.metaKey) return;
+          e.preventDefault();
+          e.stopPropagation();
+
+          const container = scrollContainerRef.current;
+          const inner = pagesContainerRef.current;
+          if (!container || !inner) return;
+
+          const rect = container.getBoundingClientRect();
+          const mouseX = e.clientX - rect.left + container.scrollLeft;
+          const mouseY = e.clientY - rect.top + container.scrollTop;
+
+          const oldZoom = pdfZoomRef.current;
+          const factor = e.deltaY > 0 ? 0.9 : 1.1;
+          const newZoom = Math.min(MAX_PDF_ZOOM, Math.max(MIN_PDF_ZOOM, oldZoom * factor));
+          if (newZoom === oldZoom) return;
+          pdfZoomRef.current = newZoom;
+
+          inner.style.zoom = String(newZoom);
+
+          const scaleRatio = newZoom / oldZoom;
+          container.scrollLeft = mouseX * scaleRatio - (e.clientX - rect.left);
+          container.scrollTop = mouseY * scaleRatio - (e.clientY - rect.top);
+        }}
+        className={`flex-1 min-h-0 relative ${isMaximized ? "overflow-auto" : "overflow-hidden"}`}
+        style={{ backgroundColor: "transparent" }}
       >
-        <div className="flex flex-col gap-6 w-full items-center pt-0 pb-12">
+        <div ref={pagesContainerRef} className="flex flex-col gap-6 w-full items-center pt-0 pb-12" style={{ backgroundColor: "transparent" }}>
           {pagesArray.map((p) => {
             const isVisible = isMaximized || p === currentPage;
+
+            let pageStyle: CSSProperties = {
+              display: isVisible ? "block" : "none",
+              aspectRatio: `${1 / pageAspectRatio}`,
+            };
+            if (isMaximized) {
+              const cam = getCamera();
+              const fitScreenPx = Math.min(window.innerWidth, window.innerHeight / pageAspectRatio);
+              pageStyle.maxWidth = `${fitScreenPx / cam.zoom}px`;
+              pageStyle.width = "100%";
+            }
+
             return (
               <div
                 key={p}
@@ -490,11 +491,8 @@ export default function PdfViewer({ win }: Props) {
                   else pageRefs.current.delete(p);
                 }}
                 data-page={p}
-                style={{
-                  display: isVisible ? "block" : "none",
-                  aspectRatio: `${1 / pageAspectRatio}`,
-                }}
-                className="relative p-0 mx-auto bg-white max-w-[850px] w-full"
+                style={pageStyle}
+                className={`relative p-0 mx-auto bg-white ${isMaximized ? "" : "max-w-[850px] w-full"}`}
               >
                 <canvas
                   ref={(el) => {

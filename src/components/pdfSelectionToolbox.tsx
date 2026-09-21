@@ -141,7 +141,10 @@ export default function PdfSelectionToolbox({ scrollContainerRef, isMaximized, w
       if (res.ok) {
         const [, titles, , urls]: [string, string[], string[], string[]] = await res.json();
         if (titles.length > 0 && urls.length > 0) {
-          addWindow({ title: titles[0], url: urls[0] });
+          addWindow({ title: titles[0], url: urls[0], parentId: windowId });
+        } else {
+          const wikiUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(text.replace(/ /g, "_"))}`;
+          addWindow({ title: text, url: wikiUrl, parentId: windowId });
         }
       }
     } catch {

@@ -58,6 +58,10 @@ export function Resize(
   if (!cursor) return;
   const resizeDir: string = cursor;
 
+  e.preventDefault();
+  e.stopPropagation();
+  window.getSelection()?.removeAllRanges();
+
   const startX = e.clientX;
   const startY = e.clientY;
 
@@ -79,6 +83,8 @@ export function Resize(
     target.closest(".canvas-world")?.classList.add("gesture-active");
     target.style.zIndex = String(nextZ);
   }
+
+  applyGestureSetup();
 
   function onMouseMove(ev: MouseEvent) {
     lastX = ev.clientX;
@@ -126,6 +132,7 @@ export function Resize(
 
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
+    window.getSelection()?.removeAllRanges();
     target.classList.remove("resizing");
     target.closest(".canvas-world")?.classList.remove("gesture-active");
 

@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/immutability */
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 import Window from './components/window'
 import LinkEditor from './components/linkEditor'
@@ -127,11 +128,16 @@ function computeArrow(
   return { sx, sy, c1x: c1.x, c1y: c1.y, c2x: c2.x, c2y: c2.y, ex, ey, tipX, tipY, bcx, bcy, b1x, b1y, b2x, b2y, childSide: bestChildSide };
 }
 
-function readWindowPos(el: HTMLElement): { x: number; y: number; w: number; h: number } {
+function pointInRect(px: number, py: number, r: { x: number; y: number; w: number; h: number }): boolean {
+  return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
+}
+
+function readWindowPos(el: HTMLElement): { x: number; y: number; w: number; h: number; zIndex: number } {
   const x = parseFloat(el.style.left) || 0;
   const y = parseFloat(el.style.top) || 0;
   const w = parseFloat(el.style.width) || 540;
   const h = parseFloat(el.style.height) || 550;
+  const zIndex = parseInt(el.style.zIndex, 10) || 0;
   const t = el.style.transform;
   let tx = 0, ty = 0;
   if (t) {
@@ -140,7 +146,7 @@ function readWindowPos(el: HTMLElement): { x: number; y: number; w: number; h: n
     if (mx) tx = parseFloat(mx[1]) || 0;
     if (my) ty = parseFloat(my[1]) || 0;
   }
-  return { x: x + tx, y: y + ty, w, h };
+  return { x: x + tx, y: y + ty, w, h, zIndex };
 }
 
 const ConnectionArrows = memo(function ConnectionArrows({
@@ -194,28 +200,34 @@ const ConnectionArrows = memo(function ConnectionArrows({
     if (!lineSvgRef.current) return;
     const byId = new Map(windows.map((w) => [w.id, w]));
 
+    const posMap = new Map<string, { x: number; y: number; w: number; h: number; zIndex: number }>();
+    for (const w of windows) {
+      const el = document.getElementById(`win-${w.id}`);
+      if (el) {
+        posMap.set(w.id, readWindowPos(el));
+      } else {
+        posMap.set(w.id, {
+          x: w.x ?? 0,
+          y: w.y ?? 0,
+          w: w.width ?? 540,
+          h: w.height ?? 550,
+          zIndex: w.zIndex ?? 0,
+        });
+      }
+    }
+
     for (const [id, [path, poly]] of elRefs.current) {
       const child = byId.get(id);
       if (!child || !child.parentId) continue;
       const parent = byId.get(child.parentId);
       if (!parent) continue;
 
-      const parentEl = document.getElementById(`win-${parent.id}`);
-      const childEl = document.getElementById(`win-${child.id}`);
+      const parentPos = posMap.get(parent.id);
+      const childPos = posMap.get(child.id);
+      if (!parentPos || !childPos) continue;
 
-      let px = parent.x ?? 0, py = parent.y ?? 0;
-      let pw = parent.width ?? 540, ph = parent.height ?? 550;
-      let cx = child.x ?? 0, cy = child.y ?? 0;
-      let cw = child.width ?? 540, ch = child.height ?? 550;
-
-      if (parentEl) {
-        const p = readWindowPos(parentEl);
-        px = p.x; py = p.y; pw = p.w; ph = p.h;
-      }
-      if (childEl) {
-        const c = readWindowPos(childEl);
-        cx = c.x; cy = c.y; cw = c.w; ch = c.h;
-      }
+      const px = parentPos.x, py = parentPos.y, pw = parentPos.w, ph = parentPos.h;
+      const cx = childPos.x, cy = childPos.y, cw = childPos.w, ch = childPos.h;
 
       const a = computeArrow(px, py, pw, ph, cx, cy, cw, ch);
 
@@ -239,10 +251,19 @@ const ConnectionArrows = memo(function ConnectionArrows({
       let arrowheadHidden = false;
       for (const w of windows) {
         if (w.id === child.id || w.id === parent.id) continue;
-        const wx = w.x ?? 0, wy = w.y ?? 0, ww = w.width ?? 384, wh = w.height ?? 384;
-        if (a.bcx >= wx && a.bcx <= wx + ww && a.bcy >= wy && a.bcy <= wy + wh) {
-          arrowheadHidden = true;
-          break;
+        const wPos = posMap.get(w.id);
+        if (!wPos) continue;
+
+        if (wPos.zIndex > childPos.zIndex) {
+          if (
+            pointInRect(a.tipX, a.tipY, wPos) ||
+            pointInRect(a.bcx, a.bcy, wPos) ||
+            pointInRect(a.b1x, a.b1y, wPos) ||
+            pointInRect(a.b2x, a.b2y, wPos)
+          ) {
+            arrowheadHidden = true;
+            break;
+          }
         }
       }
       path.style.display = '';
@@ -275,15 +296,23 @@ const ConnectionArrows = memo(function ConnectionArrows({
         raf = requestAnimationFrame(loop);
       }
     }
+    function onMove() {
+      if ((isDraggingWindow || isResizingWindow) && !active) {
+        active = true;
+        raf = requestAnimationFrame(loop);
+      }
+    }
     function onUp() {
       active = false;
       cancelAnimationFrame(raf);
     }
     document.addEventListener('mousedown', onDown, true);
+    document.addEventListener('mousemove', onMove, true);
     document.addEventListener('mouseup', onUp);
     return () => {
       cancelAnimationFrame(raf);
       document.removeEventListener('mousedown', onDown, true);
+      document.removeEventListener('mousemove', onMove, true);
       document.removeEventListener('mouseup', onUp);
     };
   }, [updatePaths]);
@@ -401,42 +430,6 @@ const animatePdfMaximize = (
 
 
 
-function animateWindowBounds(
-  el: HTMLElement,
-  from: { x: number; y: number; width: number; height: number },
-  to: { x: number; y: number; width: number; height: number },
-  duration = 500,
-) {
-  const dx = from.x - to.x;
-  const dy = from.y - to.y;
-  const sx = from.width / to.width;
-  const sy = from.height / to.height;
-
-  // Set final layout first
-  el.style.left = `${to.x}px`;
-  el.style.top = `${to.y}px`;
-  el.style.width = `${to.width}px`;
-  el.style.height = `${to.height}px`;
-
-  // Animate from old rectangle -> new rectangle
-  el.animate(
-    [
-      {
-        transformOrigin: "top left",
-        transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`,
-      },
-      {
-        transformOrigin: "top left",
-        transform: "translate(0, 0) scale(1, 1)",
-      },
-    ],
-    {
-      duration,
-      easing: "cubic-bezier(0.22, 1, 0.36, 1)",
-      fill: "both",
-    },
-  );
-}
 
 const WindowItem = memo(function WindowItem({ w }: { w: WindowData }) {
   const setActive = useWindows((s) => s.setActive)
@@ -525,6 +518,7 @@ useEffect(() => {
     }
   }
 }, [
+  w.id,
   w.pdfMaximized,
   w.contentType,
   w.x,
@@ -560,6 +554,8 @@ useEffect(() => {
   id={`win-${w.id}`}
   className={`window pdf-window ${
     w.pdfMaximized ? "maximized" : ""
+  } ${
+    w.pdfMaximized && !w.pdfAnimating ? "maximized-done" : ""
   } ${w.active ? "active" : "inactive"} ${w.pdfAnimating ? "no-transition" : ""}`}
   style={zIndexStyle}
   onMouseDown={(e) => {
@@ -649,7 +645,7 @@ function App() {
 
     function onPanMouseDown(e: MouseEvent) {
       if (useWindows.getState().windows.some((win) => win.pdfMaximized)) return;
-      startCanvasPan(e, viewport, grid, world);
+      startCanvasPan(e, viewport);
     }
     function onWheel(e: WheelEvent) {
       if (useWindows.getState().windows.some((win) => win.pdfMaximized)) return;

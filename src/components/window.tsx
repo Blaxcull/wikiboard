@@ -82,14 +82,16 @@ const Window = memo(function Window({
       >
         <div>{titleBarContent}</div>
         {onClose && (
-          <button
-            type="button"
-            className="border-none bg-transparent text-[#888] text-lg leading-none py-0.5 px-1.5 cursor-pointer rounded transition-all duration-150 hover:text-white hover:bg-[#e74c3c]"
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={onClose}
-          >
-            ×
-          </button>
+            <button
+  type="button"
+  className="flex items-center justify-center w-6 h-6 ml-auto border-none bg-transparent text-[#666] text-lg leading-none cursor-pointer rounded transition-all duration-150 hover:text-white hover:bg-[#e74c3c]"
+  onMouseDown={(e) => e.stopPropagation()}
+  onClick={onClose}
+>
+  <span className="flex items-center justify-center w-full h-full -mt-[1px]">
+    ×
+  </span>
+</button>
         )}
       </div>
 

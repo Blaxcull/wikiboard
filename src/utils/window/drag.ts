@@ -4,6 +4,10 @@ import { getCamera } from "../camera";
 // shared flag so other handlers can skip work while a drag is active
 export let isDraggingWindow = false;
 
+export function setDraggingWindow(val: boolean) {
+  isDraggingWindow = val;
+}
+
 export default function startDrag(
   e: React.MouseEvent<HTMLDivElement>,
   onDragEnd?: (pos: { x: number; y: number }) => void,

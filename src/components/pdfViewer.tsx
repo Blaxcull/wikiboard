@@ -5,6 +5,7 @@ import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import type { WindowData } from "../store/windows";
 import { useWindows } from "../store/windows";
 import { getCamera } from "../utils/camera";
+import { setDraggingWindow } from "../utils/window/drag";
 import PdfSelectionToolbox from "./pdfSelectionToolbox";
 
 GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
@@ -208,7 +209,7 @@ export default function PdfViewer({ win }: Props) {
       }
       console.error(`Page ${pageNum} render error:`, err);
     }
-  }, [isMaximized]);
+  }, [isMaximized, pageAspectRatio]);
 
   // --- Cancel text layer tasks when unmaximizing ---
   useEffect(() => {
@@ -352,40 +353,64 @@ export default function PdfViewer({ win }: Props) {
   const nextPage = useCallback(() => goToPage(targetPageRef.current + 1), [goToPage]);
 
 
-const toggleMaximize = useCallback(() => {
-  if (!isMaximized) {
-    prevWindowRef.current = {
-      winX: win.x ?? 80,
-      winY: win.y ?? 80,
-    };
+  const handleZoomIn = useCallback(() => {
+    const container = scrollContainerRef.current;
+    const inner = pagesContainerRef.current;
+    if (!container || !inner) return;
 
-    pdfZoomRef.current = 1;
+    const oldZoom = pdfZoomRef.current;
+    const newZoom = Math.min(MAX_PDF_ZOOM, oldZoom * 1.2);
+    if (newZoom === oldZoom) return;
+    pdfZoomRef.current = newZoom;
+    inner.style.zoom = String(newZoom);
+  }, []);
 
-    if (pagesContainerRef.current) {
-      pagesContainerRef.current.style.zoom = "";
+  const handleZoomOut = useCallback(() => {
+    const container = scrollContainerRef.current;
+    const inner = pagesContainerRef.current;
+    if (!container || !inner) return;
+
+    const oldZoom = pdfZoomRef.current;
+    const newZoom = Math.max(MIN_PDF_ZOOM, oldZoom / 1.2);
+    if (newZoom === oldZoom) return;
+    pdfZoomRef.current = newZoom;
+    inner.style.zoom = String(newZoom);
+  }, []);
+
+  const toggleMaximize = useCallback(() => {
+    if (!isMaximized) {
+      prevWindowRef.current = {
+        winX: win.x ?? 80,
+        winY: win.y ?? 80,
+      };
+
+      pdfZoomRef.current = 1;
+
+      if (pagesContainerRef.current) {
+        pagesContainerRef.current.style.zoom = "";
+      }
+
+      updateWindow(win.id, {
+        pdfMaximized: true,
+      });
+    } else {
+      const prev = prevWindowRef.current;
+
+      pdfZoomRef.current = 1;
+
+      if (pagesContainerRef.current) {
+        pagesContainerRef.current.style.zoom = "";
+      }
+
+      updateWindow(win.id, {
+        x: prev?.winX ?? win.x ?? 80,
+        y: prev?.winY ?? win.y ?? 80,
+        pdfMaximized: false,
+      });
+
+      prevWindowRef.current = null;
     }
-
-    updateWindow(win.id, {
-      pdfMaximized: true,
-    });
-  } else {
-    const prev = prevWindowRef.current;
-
-    pdfZoomRef.current = 1;
-
-    if (pagesContainerRef.current) {
-      pagesContainerRef.current.style.zoom = "";
-    }
-
-    updateWindow(win.id, {
-      x: prev?.winX ?? 80,
-      y: prev?.winY ?? 80,
-      pdfMaximized: false,
-    });
-
-    prevWindowRef.current = null;
-  }
-}, [isMaximized, win.id, win.x, win.y, updateWindow]);
+  }, [isMaximized, win.id, win.x, win.y, updateWindow]);
 
 
   // --- Synchronously position scroll when toggling maximize ---
@@ -421,17 +446,79 @@ const toggleMaximize = useCallback(() => {
         toggleMaximize();
         return;
       }
-      if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
-        e.preventDefault();
-        prevPage();
-      } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
-        e.preventDefault();
-        nextPage();
+      if (isMaximized) {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          container.scrollTop -= 60;
+        } else if (e.key === "ArrowDown") {
+          e.preventDefault();
+          container.scrollTop += 60;
+        } else if (e.key === "PageUp") {
+          e.preventDefault();
+          container.scrollTop -= container.clientHeight * 0.8;
+        } else if (e.key === "PageDown" || (e.key === " " && !e.shiftKey)) {
+          e.preventDefault();
+          container.scrollTop += container.clientHeight * 0.8;
+        } else if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          prevPage();
+        } else if (e.key === "ArrowRight") {
+          e.preventDefault();
+          nextPage();
+        }
+      } else {
+        if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+          e.preventDefault();
+          prevPage();
+        } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+          e.preventDefault();
+          nextPage();
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [win.active, isMaximized, toggleMaximize, prevPage, nextPage]);
+
+  // --- Non-passive wheel event listener for Ctrl + Scroll zooming when maximized ---
+  useEffect(() => {
+    if (!isMaximized) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const inner = pagesContainerRef.current;
+        if (!inner) return;
+
+        const rect = container.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left + container.scrollLeft;
+        const mouseY = e.clientY - rect.top + container.scrollTop;
+
+        const oldZoom = pdfZoomRef.current;
+        const factor = e.deltaY > 0 ? 0.9 : 1.1;
+        const newZoom = Math.min(MAX_PDF_ZOOM, Math.max(MIN_PDF_ZOOM, oldZoom * factor));
+        if (newZoom === oldZoom) return;
+        pdfZoomRef.current = newZoom;
+
+        inner.style.zoom = String(newZoom);
+
+        const scaleRatio = newZoom / oldZoom;
+        container.scrollLeft = mouseX * scaleRatio - (e.clientX - rect.left);
+        container.scrollTop = mouseY * scaleRatio - (e.clientY - rect.top);
+      } else {
+        e.stopPropagation();
+      }
+    };
+
+    container.addEventListener("wheel", handleWheel, { passive: false });
+    return () => container.removeEventListener("wheel", handleWheel);
+  }, [isMaximized]);
 
   if (error) {
     return (
@@ -450,45 +537,21 @@ const toggleMaximize = useCallback(() => {
   }
 
   const pagesArray = Array.from({ length: totalPages }, (_, i) => i + 1);
+  const showUnmaximizedStyle = !isMaximized && !isAnimating;
 
   return (
     <>
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        onWheel={(e) => {
-          if (!e.ctrlKey && !e.metaKey || !isMaximized) return;
-          e.preventDefault();
-          e.stopPropagation();
-
-          const container = scrollContainerRef.current;
-          const inner = pagesContainerRef.current;
-          if (!container || !inner) return;
-
-          const rect = container.getBoundingClientRect();
-          const mouseX = e.clientX - rect.left + container.scrollLeft;
-          const mouseY = e.clientY - rect.top + container.scrollTop;
-
-          const oldZoom = pdfZoomRef.current;
-          const factor = e.deltaY > 0 ? 0.9 : 1.1;
-          const newZoom = Math.min(MAX_PDF_ZOOM, Math.max(MIN_PDF_ZOOM, oldZoom * factor));
-          if (newZoom === oldZoom) return;
-          pdfZoomRef.current = newZoom;
-
-          inner.style.zoom = String(newZoom);
-
-          const scaleRatio = newZoom / oldZoom;
-          container.scrollLeft = mouseX * scaleRatio - (e.clientX - rect.left);
-          container.scrollTop = mouseY * scaleRatio - (e.clientY - rect.top);
-        }}
-        className={`flex-1  relative  overflow-auto`}
+        className={`flex-1 min-h-0 relative overflow-y-auto ${showUnmaximizedStyle ? "rounded-2xl shadow-[0_10px_35px_rgba(0,0,0,0.35)]" : "rounded-none shadow-none"}`}
         style={{ backgroundColor: "transparent", scrollbarWidth: "none" }}
       >
         <div ref={pagesContainerRef} className="flex flex-col gap-6 w-full items-center pt-0 " style={{ backgroundColor: "transparent" }}>
           {pagesArray.map((p) => {
             const isVisible = isMaximized || p === currentPage;
 
-            let pageStyle: CSSProperties = {
+            const pageStyle: CSSProperties = {
               display: isVisible ? "block" : "none",
               aspectRatio: `${1 / pageAspectRatio}`,
             };
@@ -508,14 +571,14 @@ const toggleMaximize = useCallback(() => {
                 }}
                 data-page={p}
                 style={pageStyle}
-                className={`rounded-xl bg-gray-900 shadow-[0_10px_40px_rgba(0,0,0,0.3)] relative p-0 mx-auto bg-white ${isMaximized ? "" : "max-w-[850px] w-full"}`}
+                className={`bg-gray-900 relative p-0 mx-auto bg-white ${showUnmaximizedStyle ? "rounded-2xl overflow-hidden shadow-[0_10px_40px_rgba(0,0,0,0.3)]" : (isMaximized ? "rounded-none shadow-[-12px_0_25px_-4px_rgba(0,0,0,0.25),12px_0_25px_-4px_rgba(0,0,0,0.25)]" : "rounded-none shadow-none")} ${isMaximized ? "" : "max-w-[850px] w-full"}`}
               >
                 <canvas
                   ref={(el) => {
                     if (el) canvasRefs.current.set(p, el);
                     else canvasRefs.current.delete(p);
                   }}
-                  className="block w-full h-auto"
+                  className={`block w-full h-auto ${showUnmaximizedStyle ? "rounded-2xl" : "rounded-none"}`}
                 />
                 {isMaximized && (
                   <div
@@ -555,8 +618,17 @@ const toggleMaximize = useCallback(() => {
               title="Move"
               onMouseDown={(e) => {
                 if (isMaximized) return;
-                const winEl = (e.target as HTMLElement).closest(".pdf-window") as HTMLElement | null;
-                if (!winEl) return;
+                const targetEl = (e.target as HTMLElement).closest(".pdf-window");
+                if (!targetEl || !(targetEl instanceof HTMLElement)) return;
+                const winEl: HTMLElement = targetEl;
+
+                winEl.getAnimations().forEach((anim) => anim.cancel());
+
+                setDraggingWindow(true);
+                winEl.classList.add("dragging");
+                winEl.classList.add("no-transition");
+                winEl.closest(".canvas-world")?.classList.add("gesture-active");
+                document.body.style.cursor = "move";
 
                 const startX = e.clientX;
                 const startY = e.clientY;
@@ -593,12 +665,19 @@ const toggleMaximize = useCallback(() => {
                   }
                 }
 
+                let setupDone = false;
                 function applyGestureSetup() {
+                  if (setupDone) return;
+                  setupDone = true;
+                  setDraggingWindow(true);
+                  winEl.classList.add("dragging");
                   winEl.classList.add("no-transition");
+                  winEl.closest(".canvas-world")?.classList.add("gesture-active");
                   document.body.style.cursor = "move";
                 }
 
                 function onMouseUp() {
+                  applyGestureSetup();
                   const rdx = Math.round((mouseX - shiftX - screenLeft) / getCamera().zoom);
                   const rdy = Math.round((mouseY - shiftY - screenTop) / getCamera().zoom);
                   const newLeft = baseLeft + rdx;
@@ -608,6 +687,9 @@ const toggleMaximize = useCallback(() => {
                   winEl.style.transform = "";
                   useWindows.setState({ maxZIndex: nextZ });
                   updateWindow(win.id, { x: newLeft, y: newTop });
+                  setDraggingWindow(false);
+                  winEl.classList.remove("dragging");
+                  winEl.closest(".canvas-world")?.classList.remove("gesture-active");
                   requestAnimationFrame(() => {
                     winEl.classList.remove("no-transition");
                     document.body.style.cursor = "";
@@ -654,6 +736,25 @@ const toggleMaximize = useCallback(() => {
               <polyline points="9 18 15 12 9 6" />
             </svg>
           </button>
+          {isMaximized && (
+            <>
+              <button className={TOOLBAR_BTN} onClick={handleZoomOut} title="Zoom out">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  <line x1="8" y1="11" x2="14" y2="11" />
+                </svg>
+              </button>
+              <button className={TOOLBAR_BTN} onClick={handleZoomIn} title="Zoom in">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  <line x1="11" y1="8" x2="11" y2="14" />
+                  <line x1="8" y1="11" x2="14" y2="11" />
+                </svg>
+              </button>
+            </>
+          )}
           <button className={TOOLBAR_BTN} onClick={toggleMaximize} title={isMaximized ? "Exit fullscreen" : "Fullscreen"}>
             {isMaximized ? (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

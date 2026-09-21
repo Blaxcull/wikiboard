@@ -5,8 +5,6 @@ import { isResizingWindow } from "../window/resize";
 export function startCanvasPan(
   e: MouseEvent,
   viewport: HTMLElement,
-  _grid: HTMLElement,
-  _world: HTMLElement,
 ) {
   const target = e.target as HTMLElement;
   if (

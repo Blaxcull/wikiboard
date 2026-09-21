@@ -1,7 +1,7 @@
 type CameraState = { panX: number; panY: number; zoom: number };
 type CameraSubscriber = (cam: CameraState) => void;
 
-let camera: CameraState = { panX: 0, panY: 0, zoom: 1 };
+const camera: CameraState = { panX: 0, panY: 0, zoom: 1 };
 const subscribers = new Set<CameraSubscriber>();
 
 export function getCamera(): CameraState {

@@ -82,7 +82,14 @@ export default function PdfViewer({ win }: Props) {
           const firstPage = await pdfDoc.getPage(1);
           const vp = firstPage.getViewport({ scale: 1 });
           if (vp.width > 0 && vp.height > 0) {
-            setPageAspectRatio(vp.height / vp.width);
+            const ratio = vp.height / vp.width;
+            setPageAspectRatio(ratio);
+
+            const currentW = win.width ?? 620;
+            const expectedH = Math.round(currentW * ratio + 56);
+            if (!win.pdfMaximized && Math.abs((win.height ?? 0) - expectedH) > 2) {
+              updateWindow(win.id, { height: expectedH });
+            }
           }
         } catch {
           // fallback to default
@@ -126,6 +133,16 @@ export default function PdfViewer({ win }: Props) {
       }
     };
   }, [win.pdfUrl]);
+
+  // --- Match window height to actual page width and aspect ratio when unmaximized ---
+  useEffect(() => {
+    if (loading || isMaximized || !pageAspectRatio) return;
+    const currentW = win.width ?? 620;
+    const expectedH = Math.round(currentW * pageAspectRatio + 56);
+    if (Math.abs((win.height ?? 0) - expectedH) > 2) {
+      updateWindow(win.id, { height: expectedH });
+    }
+  }, [win.width, win.height, pageAspectRatio, isMaximized, loading, win.id, updateWindow]);
 
   // --- Render single page ---
   const renderPage = useCallback(async (pageNum: number, availWidth: number) => {

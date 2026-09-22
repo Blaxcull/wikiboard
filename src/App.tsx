@@ -197,7 +197,7 @@ const ConnectionArrows = memo(function ConnectionArrows({
 
   // Imperative update — reads DOM positions directly, no React re-render
   const updatePaths = useCallback(() => {
-    if (!lineSvgRef.current) return;
+    if (!lineSvgRef.current || elRefs.current.size === 0) return;
     const byId = new Map(windows.map((w) => [w.id, w]));
 
     const posMap = new Map<string, { x: number; y: number; w: number; h: number; zIndex: number }>();

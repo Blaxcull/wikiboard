@@ -160,7 +160,17 @@ export function extractFirstImage(html: string): string | null {
   return img?.getAttribute("src") ?? null;
 }
 
-export async function fetchFileUrl(title: string): Promise<{ url: string; width: number; height: number } | null> {
+export function isPdfUrl(url: string): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url, WIKI_ORIGIN);
+    return /\.pdf$/i.test(parsed.pathname);
+  } catch {
+    return /\.pdf($|[?#])/i.test(url);
+  }
+}
+
+export async function fetchFileUrl(title: string): Promise<{ url: string; width: number; height: number; mime: string } | null> {
   const res = await fetch(
     `${WIKI_ORIGIN}/w/api.php?action=query&titles=${encodeURIComponent(title)}&prop=imageinfo&iiprop=url|size|mime&format=json&origin=*`,
   );
@@ -172,12 +182,12 @@ export async function fetchFileUrl(title: string): Promise<{ url: string; width:
   const imageinfo = page?.imageinfo as Array<Record<string, unknown>> | undefined;
   if (!imageinfo?.[0]) return null;
   const info = imageinfo[0];
-  const mime = info.mime as string;
-  if (!mime?.startsWith("image/")) return null;
+  const mime = (info.mime as string) || "";
   return {
     url: info.url as string,
     width: (info.width as number) ?? 300,
     height: (info.height as number) ?? 300,
+    mime,
   };
 }
 

@@ -5,6 +5,7 @@ import {
   extractTitle,
   fetchArticle,
   fetchFileUrl,
+  isPdfUrl,
 } from "../utils/wiki";
 import {
   getCachedArticle,
@@ -31,7 +32,7 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
     return !cached && Boolean(title);
   });
 
-  const [fileInfo, setFileInfo] = useState<{ url: string; width: number; height: number } | null>(null);
+  const [fileInfo, setFileInfo] = useState<{ url: string; width: number; height: number; mime?: string } | null>(null);
 
   if (prevUrl !== win.url) {
     setPrevUrl(win.url);
@@ -55,7 +56,20 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
     if (articleTitle.startsWith("File:")) {
       if (!win.directImageUrl) {
         fetchFileUrl(articleTitle).then((info) => {
-          if (!cancelled) setFileInfo(info);
+          if (!cancelled && info) {
+            if (info.mime === "application/pdf" || isPdfUrl(info.url) || articleTitle.toLowerCase().endsWith(".pdf")) {
+              updateWindow(win.id, {
+                contentType: "pdf",
+                pdfUrl: info.url,
+                title: articleTitle.replace(/^File:/i, "").replace(/_/g, " "),
+                pdfCurrentPage: 1,
+                width: win.width ?? 620,
+                height: win.height ?? 908,
+              });
+            } else {
+              setFileInfo(info);
+            }
+          }
         }).catch(() => {});
       }
       return;
@@ -83,23 +97,37 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [win.url, win.directImageUrl]);
+  }, [win.url, win.directImageUrl, win.id, win.width, win.height, updateWindow]);
 
-  function handleLinkClick(wikiTitle: string, imageUrl?: string) {
-    const url = `https://en.wikipedia.org/wiki/${wikiTitle.replace(/ /g, "_")}`;
+  function handleLinkClick(wikiTitle: string, imageUrl?: string, href?: string) {
+    const rawUrl = href || `https://en.wikipedia.org/wiki/${wikiTitle.replace(/ /g, "_")}`;
+    const isPdf = isPdfUrl(rawUrl) || isPdfUrl(wikiTitle) || wikiTitle.toLowerCase().endsWith(".pdf");
     const current = useWindows.getState().windows.find((w) => w.id === win.id);
     if (!current) return;
-    if (!current.links.some((l) => l.href === url)) {
+    if (!current.links.some((l) => l.href === rawUrl)) {
       updateWindow(win.id, {
-        links: [...current.links, { label: wikiTitle.replace(/_/g, " "), href: url }],
+        links: [...current.links, { label: wikiTitle.replace(/_/g, " "), href: rawUrl }],
       });
     }
-    addWindow({
-      title: wikiTitle.replace(/_/g, " "),
-      url,
-      parentId: win.id,
-      ...(imageUrl ? { directImageUrl: imageUrl } : {}),
-    });
+
+    if (isPdf && (href || !wikiTitle.startsWith("File:"))) {
+      addWindow({
+        contentType: "pdf",
+        pdfUrl: rawUrl,
+        title: wikiTitle.replace(/^File:/i, "").replace(/_/g, " "),
+        parentId: win.id,
+        pdfCurrentPage: 1,
+        width: 620,
+        height: 908,
+      });
+    } else {
+      addWindow({
+        title: wikiTitle.replace(/_/g, " "),
+        url: rawUrl,
+        parentId: win.id,
+        ...(imageUrl ? { directImageUrl: imageUrl } : {}),
+      });
+    }
   }
 
   if (fullHtml) {

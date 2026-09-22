@@ -63,6 +63,8 @@ export default function startDrag(
     target.style.zIndex = String(nextZ);
   }
 
+  applyGestureSetup();
+
   function updatePosition() {
     framePending = false;
     applyGestureSetup();

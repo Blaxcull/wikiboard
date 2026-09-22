@@ -148,11 +148,23 @@ export const useWindows = create<WindowsStore>((set) => ({
     }),
 
   updateWindow: (id, patch) =>
-    set((state) => ({
-      windows: state.windows.map((w) =>
-        w.id === id ? { ...w, ...patch } : w,
-      ),
-    })),
+    set((state) => {
+      const idx = state.windows.findIndex((w) => w.id === id);
+      if (idx === -1) return state;
+      const cur = state.windows[idx];
+      let changed = false;
+      for (const k in patch) {
+        const key = k as keyof Omit<WindowData, "id">;
+        if (cur[key] !== patch[key]) {
+          changed = true;
+          break;
+        }
+      }
+      if (!changed) return state;
+      return {
+        windows: state.windows.map((w, i) => (i === idx ? { ...w, ...patch } : w)),
+      };
+    }),
 
   spawnWindows: (count: number, startIdx: number, titles?: string[]) =>
     set((state) => {

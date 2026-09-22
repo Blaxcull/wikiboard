@@ -34,15 +34,28 @@
   border-radius: 12px;
   background: #e8e8e8;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.08);
-  contain: size layout;
-}
-
-.window.dragging {
+  contain: layout paint;
+  content-visibility: auto;
+  contain-intrinsic-size: 540px 550px;
+  transform: translateZ(0);
   will-change: transform;
 }
 
+.window.active,
+.window.dragging,
 .window.resizing {
-  will-change: transform;
+  content-visibility: visible;
+}
+
+.canvas-world.gesture-active * {
+  pointer-events: none !important;
+}
+
+.canvas-world.gesture-active .window.dragging,
+.canvas-world.gesture-active .window.dragging *,
+.canvas-world.gesture-active .window.resizing,
+.canvas-world.gesture-active .window.resizing * {
+  pointer-events: auto !important;
 }
 
 .window.dragging .window-content,

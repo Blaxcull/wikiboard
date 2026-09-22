@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef } from "react";
-import { escapeHtml, extractTitle, WIKI_STYLESHEET_URL } from "../utils/wiki";
+import { escapeHtml, extractTitle, isPdfUrl, WIKI_STYLESHEET_URL } from "../utils/wiki";
 import { prefetchArticles } from "../utils/articleCache";
 
 // Fetch Wikipedia CSS once, share via adoptedStyleSheets across all shadow DOMs
@@ -37,7 +37,7 @@ type Props = {
   title: string;
   html: string;
   scrollTop: number;
-  onLinkClick?: (title: string, imageUrl?: string) => void;
+  onLinkClick?: (title: string, imageUrl?: string, href?: string) => void;
   onScrollChange?: (scrollTop: number) => void;
 };
 
@@ -233,11 +233,16 @@ const StaticPreview = memo(function StaticPreview({ title, html, scrollTop, onLi
         const imageUrl = wikiTitle.startsWith("File:")
           ? (a.querySelector("img")?.getAttribute("src") ?? undefined)
           : undefined;
-        callbacksRef.current.onLinkClick(wikiTitle, imageUrl);
+        callbacksRef.current.onLinkClick(wikiTitle, imageUrl, href);
       } else if (href && !href.startsWith("#")) {
         e.preventDefault();
         e.stopPropagation();
-        window.open(href, "_blank", "noopener,noreferrer");
+        if (isPdfUrl(href) && callbacksRef.current.onLinkClick) {
+          const pdfTitle = decodeURIComponent(href.split("/").pop()?.split("?")[0]?.split("#")[0] ?? "PDF Document");
+          callbacksRef.current.onLinkClick(pdfTitle, undefined, href);
+        } else {
+          window.open(href, "_blank", "noopener,noreferrer");
+        }
       }
     };
 
@@ -247,7 +252,7 @@ const StaticPreview = memo(function StaticPreview({ title, html, scrollTop, onLi
       if (!a) return;
       const href = a.getAttribute("href") || "";
       const wikiTitle = extractTitle(href);
-      if (wikiTitle) prefetchArticles([wikiTitle]);
+      if (wikiTitle && !isPdfUrl(wikiTitle) && !isPdfUrl(href)) prefetchArticles([wikiTitle]);
     };
 
     root.addEventListener("click", handleClick);

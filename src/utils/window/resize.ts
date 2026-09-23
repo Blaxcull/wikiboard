@@ -4,6 +4,7 @@ import { getCamera } from "../camera";
 
 // shared flag so OnEdge etc. can skip work while a resize is active
 export let isResizingWindow = false;
+export let activeResizingWindowId: string | null = null;
 
 const EDGE_MARGIN = 5;
 
@@ -67,6 +68,7 @@ export function Resize(
   const startY = e.clientY;
 
   isResizingWindow = true;
+  activeResizingWindowId = target.id.replace(/^win-/, "");
   let frameRequested = false;
 
   const nextZ = (useWindows.getState().maxZIndex) + 1;
@@ -177,6 +179,7 @@ export function Resize(
     onActivate?.();
 
     isResizingWindow = false;
+    activeResizingWindowId = null;
     document.removeEventListener("mousemove", onMouseMove);
     document.removeEventListener("mouseup", onMouseUp);
   }

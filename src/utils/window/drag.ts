@@ -3,6 +3,7 @@ import { getCamera } from "../camera";
 
 // shared flag so other handlers can skip work while a drag is active
 export let isDraggingWindow = false;
+export let activeDraggedWindowId: string | null = null;
 
 export function setDraggingWindow(val: boolean) {
   isDraggingWindow = val;
@@ -41,6 +42,7 @@ export default function startDrag(
   ) return;
 
   isDraggingWindow = true;
+  activeDraggedWindowId = target.id.replace(/^win-/, "");
 
   const shiftX = startX - screenLeft;
   const shiftY = startY - screenTop;
@@ -113,6 +115,7 @@ export default function startDrag(
     onActivate?.();
 
     isDraggingWindow = false;
+    activeDraggedWindowId = null;
     target.classList.remove("dragging");
     target.closest(".canvas-world")?.classList.remove("gesture-active");
     document.body.style.cursor = "";

@@ -11,8 +11,8 @@ import { evictClosedWindowArticles } from './utils/articleCache'
 import { getCamera, subscribeCamera } from './utils/camera'
 import { startCanvasPan } from './utils/canvas/pan'
 import { handleZoom } from './utils/canvas/zoom'
-import { isDraggingWindow } from './utils/window/drag'
-import { isResizingWindow } from './utils/window/resize'
+import { isDraggingWindow, activeDraggedWindowId } from './utils/window/drag'
+import { isResizingWindow, activeResizingWindowId } from './utils/window/resize'
 
 const ARROW_CTRL = 0.4;
 const ARROW_LEN = 16;
@@ -194,24 +194,37 @@ const ConnectionArrows = memo(function ConnectionArrows({
     }
   }, [windows]);
 
+  const cachedPosMapRef = useRef<Map<string, { x: number; y: number; w: number; h: number; zIndex: number }>>(new Map());
+
   // Imperative update — reads DOM positions directly, no React re-render
-  const updatePaths = useCallback(() => {
+  const updatePaths = useCallback((onlyActiveId?: string | null) => {
     if (!lineSvgRef.current || elRefs.current.size === 0) return;
     const byId = new Map(windows.map((w) => [w.id, w]));
 
-    const posMap = new Map<string, { x: number; y: number; w: number; h: number; zIndex: number }>();
-    for (const w of windows) {
-      const el = document.getElementById(`win-${w.id}`);
+    const posMap = cachedPosMapRef.current;
+
+    // Incremental update: during live drag, only update the active moving window in posMap
+    if (onlyActiveId) {
+      const el = document.getElementById(`win-${onlyActiveId}`);
       if (el) {
-        posMap.set(w.id, readWindowPos(el));
-      } else {
-        posMap.set(w.id, {
-          x: w.x ?? 0,
-          y: w.y ?? 0,
-          w: w.width ?? 540,
-          h: w.height ?? 550,
-          zIndex: w.zIndex ?? 0,
-        });
+        posMap.set(onlyActiveId, readWindowPos(el));
+      }
+    } else {
+      // Full refresh
+      posMap.clear();
+      for (const w of windows) {
+        const el = document.getElementById(`win-${w.id}`);
+        if (el) {
+          posMap.set(w.id, readWindowPos(el));
+        } else {
+          posMap.set(w.id, {
+            x: w.x ?? 0,
+            y: w.y ?? 0,
+            w: w.width ?? 540,
+            h: w.height ?? 550,
+            zIndex: w.zIndex ?? 0,
+          });
+        }
       }
     }
 
@@ -220,6 +233,11 @@ const ConnectionArrows = memo(function ConnectionArrows({
       if (!child || !child.parentId) continue;
       const parent = byId.get(child.parentId);
       if (!parent) continue;
+
+      // During active gesture, skip lines not connected to the moving window
+      if (onlyActiveId && child.id !== onlyActiveId && parent.id !== onlyActiveId) {
+        continue;
+      }
 
       const parentPos = posMap.get(parent.id);
       const childPos = posMap.get(child.id);
@@ -282,16 +300,19 @@ const ConnectionArrows = memo(function ConnectionArrows({
     function loop() {
       if (!isDraggingWindow && !isResizingWindow) {
         active = false;
-        updatePaths();
+        updatePaths(); // full refresh once gesture finishes
         return;
       }
-      updatePaths();
+      const activeId = activeDraggedWindowId || activeResizingWindowId;
+      updatePaths(activeId);
       raf = requestAnimationFrame(loop);
     }
     function onDown(e: MouseEvent) {
       const win = (e.target as HTMLElement)?.closest?.('.window');
       if (win && !active) {
         active = true;
+        const activeId = activeDraggedWindowId || activeResizingWindowId;
+        updatePaths(activeId);
         raf = requestAnimationFrame(loop);
       }
     }
@@ -304,6 +325,7 @@ const ConnectionArrows = memo(function ConnectionArrows({
     function onUp() {
       active = false;
       cancelAnimationFrame(raf);
+      updatePaths(); // full refresh on mouseup
     }
     document.addEventListener('mousedown', onDown, true);
     document.addEventListener('mousemove', onMove, true);

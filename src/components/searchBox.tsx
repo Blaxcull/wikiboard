@@ -50,18 +50,38 @@ export default function SearchBox() {
     setOpen(false)
   }
 
-  function search(e: React.FormEvent) {
+  async function search(e: React.FormEvent) {
     e.preventDefault()
+    const q = query.trim()
+    if (!q) return
+
     const top = suggestions[0]
     if (top) {
       openArticle(top.title, top.url)
       return
     }
-    const q = query.trim()
-    if (!q) return
+
+    abortRef.current?.abort()
+    try {
+      const res = await fetch(
+        `https://en.wikipedia.org/w/api.php?action=opensearch&format=json&origin=*&limit=1&search=${encodeURIComponent(q)}`,
+      )
+      if (res.ok) {
+        const [, titles, , urls]: [string, string[], string[], string[]] =
+          await res.json()
+        if (titles[0] && urls[0]) {
+          openArticle(titles[0], urls[0])
+          return
+        }
+      }
+    } catch {
+      /* ignore fetch or abort errors */
+    }
+
+    const formattedTitle = q.replace(/ /g, '_')
     openArticle(
       q,
-      `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(q)}`,
+      `https://en.wikipedia.org/wiki/${encodeURIComponent(formattedTitle)}`,
     )
   }
 

@@ -132,8 +132,15 @@ function readWindowPos(el: HTMLElement): { x: number; y: number; w: number; h: n
   const x = parseFloat(el.style.left) || 0;
   const y = parseFloat(el.style.top) || 0;
   const w = el.offsetWidth || parseFloat(el.style.width) || 540;
-  const h = el.offsetHeight || parseFloat(el.style.height) || 550;
+  let h = el.offsetHeight || parseFloat(el.style.height) || 550;
   const zIndex = parseInt(el.style.zIndex, 10) || 0;
+
+  if (el.classList.contains("pdf-window") && !el.classList.contains("maximized")) {
+    if (el.querySelector(".pdf-toolbar")) {
+      h = Math.max(100, h - 68);
+    }
+  }
+
   const t = el.style.transform;
   let tx = 0, ty = 0;
   if (t) {
@@ -566,7 +573,7 @@ useEffect(() => {
       el.style.left = `${left}px`
       el.style.top = `${top}px`
       el.style.width = `${w.width ?? 620}px`
-      el.style.height = `${w.height ?? 908}px`
+      el.style.height = `${w.height ?? 945}px`
     }
   }}
   id={`win-${w.id}`}
@@ -586,6 +593,14 @@ useEffect(() => {
   <div className="pdf-window-animation-layer">
     <PdfViewer win={w} />
   </div>
+  {!w.pdfMaximized && (
+    <>
+      <div className="connection-point point-top" />
+      <div className="connection-point point-right" />
+      <div className="connection-point point-bottom" />
+      <div className="connection-point point-left" />
+    </>
+  )}
 </div>
     )
   }
@@ -613,6 +628,10 @@ useEffect(() => {
           onActivate={handleActivate}
           onPositionChange={handlePositionChange}
         />
+        <div className="connection-point point-top" />
+        <div className="connection-point point-right" />
+        <div className="connection-point point-bottom" />
+        <div className="connection-point point-left" />
       </div>
     )
   }
@@ -651,7 +670,7 @@ function App() {
       title: name.replace(/^\/|\.pdf$/gi, ""),
       pdfCurrentPage: 1,
       width: 620,
-      height: 908,
+      height: 945,
     })
   }, [addWindow])
 

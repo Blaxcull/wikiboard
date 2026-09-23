@@ -123,7 +123,7 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
         parentId: win.id,
         pdfCurrentPage: 1,
         width: 620,
-        height: 908,
+        height: 945,
       });
     } else {
       const isImg = !!imageUrl || wikiTitle.startsWith("File:");

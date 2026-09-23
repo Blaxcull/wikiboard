@@ -4,7 +4,7 @@ import { getDocument, GlobalWorkerOptions, TextLayer } from "pdfjs-dist";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import type { WindowData } from "../store/windows";
 import { useWindows } from "../store/windows";
-import { getCamera } from "../utils/camera";
+import { getCamera, subscribeCamera } from "../utils/camera";
 import { setDraggingWindow } from "../utils/window/drag";
 import PdfSelectionToolbox from "./pdfSelectionToolbox";
 
@@ -56,6 +56,16 @@ export default function PdfViewer({ win }: Props) {
 
   const pdfZoomRef = useRef(1);
   const pagesContainerRef = useRef<HTMLDivElement>(null);
+  const [camZoom, setCamZoom] = useState(() => getCamera().zoom);
+
+  useEffect(() => {
+    if (!isMaximized) return;
+    setCamZoom(getCamera().zoom);
+    const unsub = subscribeCamera((cam) => {
+      setCamZoom(cam.zoom);
+    });
+    return unsub;
+  }, [isMaximized]);
 
   // --- Load PDF document ---
   useEffect(() => {
@@ -87,7 +97,7 @@ export default function PdfViewer({ win }: Props) {
             setPageAspectRatio(ratio);
 
             const currentW = win.width ?? 620;
-            const expectedH = Math.round(currentW * ratio + 56);
+            const expectedH = Math.round(currentW * ratio + 68);
             if (!win.pdfMaximized && Math.abs((win.height ?? 0) - expectedH) > 2) {
               updateWindow(win.id, { height: expectedH });
             }
@@ -139,7 +149,7 @@ export default function PdfViewer({ win }: Props) {
   useEffect(() => {
     if (loading || isMaximized || !pageAspectRatio) return;
     const currentW = win.width ?? 620;
-    const expectedH = Math.round(currentW * pageAspectRatio + 56);
+    const expectedH = Math.round(currentW * pageAspectRatio + 68);
     if (Math.abs((win.height ?? 0) - expectedH) > 2) {
       updateWindow(win.id, { height: expectedH });
     }
@@ -591,7 +601,7 @@ export default function PdfViewer({ win }: Props) {
         className={`flex-1 min-h-0 relative overflow-y-auto ${showUnmaximizedStyle ? "rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.25)]" : "rounded-none shadow-none"}`}
         style={{ backgroundColor: "transparent", scrollbarWidth: "none" }}
       >
-        <div ref={pagesContainerRef} className="flex flex-col gap-6 w-full items-center pt-0 " style={{ backgroundColor: "transparent" }}>
+        <div ref={pagesContainerRef} className="flex flex-col gap-6 w-full items-center pt-0 pb-3" style={{ backgroundColor: "transparent" }}>
           {pagesArray.map((p) => {
             const isVisible = isMaximized || p === currentPage;
 
@@ -646,7 +656,14 @@ export default function PdfViewer({ win }: Props) {
           pointerEvents: isAnimating ? "none" : "auto",
           transition: "opacity 0.2s ease",
           ...(isMaximized
-            ? { position: "absolute", bottom: "12px", left: "50%", transform: "translateX(-50%)", zIndex: 10 }
+            ? {
+                position: "absolute",
+                bottom: `${12 / camZoom}px`,
+                left: "50%",
+                transform: `translateX(-50%) scale(${1 / camZoom})`,
+                transformOrigin: "bottom center",
+                zIndex: 10,
+              }
             : { marginBottom: "8px", marginTop: "16px", width: "fit-content" }),
         }}
       >

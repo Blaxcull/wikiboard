@@ -302,6 +302,10 @@
 .connection-point.point-bottom { bottom: -5px; left: 50%; transform: translateX(-50%); }
 .connection-point.point-left   { left: -5px;  top: 50%;  transform: translateY(-50%); }
 
+.pdf-window .connection-point.point-bottom {
+  bottom: 63px;
+}
+
 /* ── Canvas / Infinite viewport ──────────────────────────── */
 
 .canvas-viewport {

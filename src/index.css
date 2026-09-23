@@ -34,7 +34,7 @@
   border-radius: 12px;
   background: #e8e8e8;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.08);
-  contain: layout paint;
+  contain: layout;
   content-visibility: auto;
   contain-intrinsic-size: 540px 550px;
   transform: translateZ(0);
@@ -106,6 +106,19 @@
 .pdf-window.resizing,
 .pdf-window.no-transition {
   transition: none !important;
+}
+
+.image-window,
+.image-window.active,
+.image-window.inactive {
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  content-visibility: visible !important;
+  min-width: 100px !important;
+  min-height: 100px !important;
 }
 
 .pdf-window,

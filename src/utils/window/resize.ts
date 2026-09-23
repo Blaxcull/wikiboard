@@ -6,7 +6,7 @@ import { getCamera } from "../camera";
 export let isResizingWindow = false;
 export let activeResizingWindowId: string | null = null;
 
-const EDGE_MARGIN = 5;
+const CORNER_MARGIN = 12;
 
 function computeCursorDirection(
   mouseX: number, mouseY: number,
@@ -15,19 +15,10 @@ function computeCursorDirection(
 ): string | null {
   const relX = mouseX - left;
   const relY = mouseY - top;
-  const nearLeft = relX <= EDGE_MARGIN;
-  const nearRight = relX >= width - EDGE_MARGIN;
-  const nearTop = relY <= EDGE_MARGIN;
-  const nearBottom = relY >= height - EDGE_MARGIN;
+  const nearRight = relX >= width - CORNER_MARGIN;
+  const nearBottom = relY >= height - CORNER_MARGIN;
 
-  if (nearTop && nearLeft) return 'nw-resize';
-  if (nearTop && nearRight) return 'ne-resize';
-  if (nearBottom && nearLeft) return 'sw-resize';
   if (nearBottom && nearRight) return 'se-resize';
-  if (nearLeft) return 'w-resize';
-  if (nearRight) return 'e-resize';
-  if (nearTop) return 'n-resize';
-  if (nearBottom) return 's-resize';
   return null;
 }
 
@@ -39,7 +30,7 @@ export function Resize(
   if (isDraggingWindow || isResizingWindow) return;
 
   const target = e.currentTarget;
-  if (target.classList.contains("pdf-window")) return;
+  if (target.classList.contains("pdf-window") && target.classList.contains("maximized")) return;
 
   // Read geometry from style — these are world-space coordinates
   const baseLeft = parseFloat(target.style.left) || 0;

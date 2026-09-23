@@ -4,7 +4,7 @@ import { getCamera } from "../camera";
 
 let lastCursor = "";
 
-const EDGE_MARGIN = 5;
+const CORNER_MARGIN = 12;
 
 function computeCursor(
   mouseX: number, mouseY: number,
@@ -13,19 +13,10 @@ function computeCursor(
 ): string {
   const relX = mouseX - left;
   const relY = mouseY - top;
-  const nearLeft = relX <= EDGE_MARGIN;
-  const nearRight = relX >= width - EDGE_MARGIN;
-  const nearTop = relY <= EDGE_MARGIN;
-  const nearBottom = relY >= height - EDGE_MARGIN;
+  const nearRight = relX >= width - CORNER_MARGIN;
+  const nearBottom = relY >= height - CORNER_MARGIN;
 
-  if (nearTop && nearLeft) return 'nw-resize';
-  if (nearTop && nearRight) return 'ne-resize';
-  if (nearBottom && nearLeft) return 'sw-resize';
   if (nearBottom && nearRight) return 'se-resize';
-  if (nearLeft) return 'w-resize';
-  if (nearRight) return 'e-resize';
-  if (nearTop) return 'n-resize';
-  if (nearBottom) return 's-resize';
   return 'default';
 }
 
@@ -33,7 +24,8 @@ export function OnEdge(e: React.MouseEvent<HTMLDivElement>) {
     if (isDraggingWindow || isResizingWindow) return
 
     const element = e.currentTarget
-    if (element.classList.contains("pdf-window")) return;
+    if (element.classList.contains("pdf-window") && element.classList.contains("maximized")) return;
+
     // Read from style — these are world-space coordinates
     const left = parseFloat(element.style.left) || 0;
     const top = parseFloat(element.style.top) || 0;
@@ -63,7 +55,8 @@ export function attachEdgeDelegate() {
         if (isDraggingWindow || isResizingWindow) return;
 
         const target = (e.target as HTMLElement).closest?.(".window") as HTMLElement | null;
-        if (!target || target.classList.contains("pdf-window")) return;
+        if (!target) return;
+        if (target.classList.contains("pdf-window") && target.classList.contains("maximized")) return;
 
         // Read from style — these are world-space coordinates
         const left = parseFloat(target.style.left) || 0;

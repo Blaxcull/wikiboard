@@ -5,6 +5,7 @@ import LinkEditor from './components/linkEditor'
 import SearchBox from './components/searchBox'
 import ArticleView from './components/articleView'
 import PdfViewer from './components/pdfViewer'
+import ImageViewer from './components/imageViewer'
 import { useWindows, type WindowData, nextCascadeOffset } from './store/windows'
 import { deleteScroll } from './utils/scrollMemory'
 import { evictClosedWindowArticles } from './utils/articleCache'
@@ -12,7 +13,7 @@ import { getCamera, subscribeCamera } from './utils/camera'
 import { startCanvasPan } from './utils/canvas/pan'
 import { handleZoom } from './utils/canvas/zoom'
 import { isDraggingWindow, activeDraggedWindowId } from './utils/window/drag'
-import { isResizingWindow, activeResizingWindowId } from './utils/window/resize'
+import { isResizingWindow, activeResizingWindowId, Resize } from './utils/window/resize'
 
 const ARROW_CTRL = 0.4;
 const ARROW_LEN = 16;
@@ -50,12 +51,8 @@ function controlOffset(side: Side, pt: { x: number; y: number }, dist: number): 
   }
 }
 
-const PAIRS: [Side, Side][] = [
-  ['RIGHT', 'LEFT'], ['LEFT', 'RIGHT'],
-  ['BOTTOM', 'TOP'], ['TOP', 'BOTTOM'],
-  ['TOP', 'LEFT'], ['TOP', 'RIGHT'],
-  ['BOTTOM', 'LEFT'], ['BOTTOM', 'RIGHT'],
-];
+const ALL_SIDES: Side[] = ['RIGHT', 'LEFT', 'TOP', 'BOTTOM'];
+const PAIRS: [Side, Side][] = ALL_SIDES.flatMap((ps) => ALL_SIDES.map((cs) => [ps, cs] as [Side, Side]));
 
 function computeArrow(
   px: number, py: number, pw: number, ph: number,
@@ -134,8 +131,8 @@ function pointInRect(px: number, py: number, r: { x: number; y: number; w: numbe
 function readWindowPos(el: HTMLElement): { x: number; y: number; w: number; h: number; zIndex: number } {
   const x = parseFloat(el.style.left) || 0;
   const y = parseFloat(el.style.top) || 0;
-  const w = parseFloat(el.style.width) || 540;
-  const h = parseFloat(el.style.height) || 550;
+  const w = el.offsetWidth || parseFloat(el.style.width) || 540;
+  const h = el.offsetHeight || parseFloat(el.style.height) || 550;
   const zIndex = parseInt(el.style.zIndex, 10) || 0;
   const t = el.style.transform;
   let tx = 0, ty = 0;
@@ -348,7 +345,7 @@ const ConnectionArrows = memo(function ConnectionArrows({
       <svg
         ref={arrowSvgRef}
         className="connection-arrows"
-        style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, overflow: 'visible', pointerEvents: 'none', zIndex: 9999 }}
+        style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, overflow: 'visible', pointerEvents: 'none', zIndex: 0 }}
       />
     </>
   );
@@ -579,14 +576,44 @@ useEffect(() => {
     w.pdfMaximized && !w.pdfAnimating ? "maximized-done" : ""
   } ${w.active ? "active" : "inactive"} ${w.pdfAnimating ? "no-transition" : ""}`}
   style={zIndexStyle}
-  onMouseDown={() => {
+  onMouseDown={(e) => {
+    if (w.pdfMaximized) return
+
     handleActivate()
+    Resize(e, (rect) => handlePositionChange(rect))
   }}
   >
   <div className="pdf-window-animation-layer">
     <PdfViewer win={w} />
   </div>
 </div>
+    )
+  }
+
+  if (w.directImageUrl || w.title.startsWith("File:")) {
+    return (
+      <div
+        id={`win-${w.id}`}
+        className={`window image-window ${w.active ? "active" : "inactive"}`}
+        style={{
+          ...zIndexStyle,
+          left: `${w.x ?? 80}px`,
+          top: `${w.y ?? 80}px`,
+          width: `${w.width ?? 250}px`,
+          height: `${w.height ?? 190}px`,
+        }}
+        onMouseDown={(e) => {
+          handleActivate();
+          Resize(e, (rect) => handlePositionChange(rect));
+        }}
+      >
+        <ImageViewer
+          win={w}
+          onClose={handleClose}
+          onActivate={handleActivate}
+          onPositionChange={handlePositionChange}
+        />
+      </div>
     )
   }
 

@@ -126,10 +126,12 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
         height: 908,
       });
     } else {
+      const isImg = !!imageUrl || wikiTitle.startsWith("File:");
       addWindow({
         title: wikiTitle.replace(/_/g, " "),
         url: rawUrl,
         parentId: win.id,
+        ...(isImg ? { width: 250, height: 190 } : {}),
         ...(imageUrl ? { directImageUrl: imageUrl } : {}),
       });
     }

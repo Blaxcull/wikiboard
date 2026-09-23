@@ -2,6 +2,7 @@ import { memo, useEffect, useRef } from "react";
 import { escapeHtml, extractTitle, isPdfUrl, isWaybackUrl, isOriginalRefLabel, WIKI_STYLESHEET_URL } from "../utils/wiki";
 import { prefetchArticles } from "../utils/articleCache";
 import { prefetchPdf } from "../utils/pdfCache";
+import { useWindows } from "../store/windows";
 
 // Fetch Wikipedia CSS once, share via adoptedStyleSheets across all shadow DOMs
 let sharedWikiStyleSheet: CSSStyleSheet | null = null;
@@ -35,6 +36,7 @@ function ensureWikiStyleSheet(): Promise<CSSStyleSheet> {
 ensureWikiStyleSheet();
 
 type Props = {
+  winId?: string;
   title: string;
   html: string;
   scrollTop: number;
@@ -92,6 +94,38 @@ const SHADOW_STYLES = `
   .freeze a.new,
   .freeze a.redlink { color: #d33; }
 
+  .freeze a.opened-link {
+    display: inline-block;
+    padding: 1px 9px;
+    margin: -1px 2px;
+    border: 1px solid rgba(156, 163, 175, 0.6);
+    background: linear-gradient(135deg, rgba(107, 114, 128, 0.55), rgba(75, 85, 99, 0.4));
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    border-radius: 9999px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    font-weight: 500;
+    color: #ffffff !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    text-decoration: none !important;
+    animation: opened-link-pop 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  @keyframes opened-link-pop {
+    0% {
+      transform: scale(0.9);
+      opacity: 0.8;
+    }
+    65% {
+      transform: scale(1.06);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
   .freeze .shortdescription,
   .freeze .mw-empty-elt,
   .freeze .noprint { display: none !important; }
@@ -138,7 +172,7 @@ const SHADOW_STYLES = `
   .freeze .hatnote { font-style: italic; color: #54595d; margin: 0.5em 0; font-size: 0.9em; padding-left: 1.6em; }
 `;
 
-const StaticPreview = memo(function StaticPreview({ title, html, scrollTop, onLinkClick, onScrollChange }: Props) {
+const StaticPreview = memo(function StaticPreview({ winId, title, html, scrollTop, onLinkClick, onScrollChange }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const callbacksRef = useRef({ onLinkClick, onScrollChange });
   const scrollTopRef = useRef(scrollTop);
@@ -174,6 +208,29 @@ const StaticPreview = memo(function StaticPreview({ title, html, scrollTop, onLi
         <div class="mw-parser-output">${html}</div>
       </div>
     `;
+
+    // Restore opened-link highlights for currently open child windows spawned by this parent window
+    if (winId) {
+      const openChildHrefs = useWindows
+        .getState()
+        .windows.filter((w) => w.parentId === winId && w.sourceHref)
+        .map((w) => w.sourceHref!);
+
+      if (openChildHrefs.length > 0) {
+        const links = root.querySelectorAll("a[href]");
+        links.forEach((a) => {
+          const h = a.getAttribute("href") || "";
+          const wikiTitle = extractTitle(h);
+          if (
+            openChildHrefs.some(
+              (oh) => oh === h || (wikiTitle && extractTitle(oh) === wikiTitle),
+            )
+          ) {
+            a.classList.add("opened-link");
+          }
+        });
+      }
+    }
 
     // Share Wikipedia CSS via adoptedStyleSheets (1 fetch, reused by all windows)
     const wikiSheet = getWikiStyleSheet();
@@ -246,6 +303,7 @@ const StaticPreview = memo(function StaticPreview({ title, html, scrollTop, onLi
       if (wikiTitle && callbacksRef.current.onLinkClick) {
         e.preventDefault();
         e.stopPropagation();
+        a.classList.add("opened-link");
         const imageUrl = wikiTitle.startsWith("File:")
           ? (a.querySelector("img")?.getAttribute("src") ?? undefined)
           : undefined;
@@ -253,6 +311,7 @@ const StaticPreview = memo(function StaticPreview({ title, html, scrollTop, onLi
       } else if (href && !href.startsWith("#")) {
         e.preventDefault();
         e.stopPropagation();
+        a.classList.add("opened-link");
         if (isPdfUrl(href) && callbacksRef.current.onLinkClick) {
           const pdfTitle = decodeURIComponent(href.split("/").pop()?.split("?")[0]?.split("#")[0] ?? "PDF Document");
           callbacksRef.current.onLinkClick(pdfTitle, undefined, href);
@@ -276,6 +335,34 @@ const StaticPreview = memo(function StaticPreview({ title, html, scrollTop, onLi
         prefetchPdf(href);
       }
     };
+
+    const handleLinkClosed = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail || !winId || detail.parentId !== winId) return;
+
+      const remaining = useWindows
+        .getState()
+        .windows.filter(
+          (w) =>
+            w.id !== detail.closingId &&
+            w.parentId === detail.parentId &&
+            w.sourceHref === detail.href,
+        );
+
+      if (remaining.length === 0) {
+        const targetHref = detail.href;
+        const targetWikiTitle = extractTitle(targetHref);
+        const links = root.querySelectorAll("a.opened-link");
+        links.forEach((a) => {
+          const h = a.getAttribute("href") || "";
+          if (h === targetHref || (targetWikiTitle && extractTitle(h) === targetWikiTitle)) {
+            a.classList.remove("opened-link");
+          }
+        });
+      }
+    };
+
+    window.addEventListener("wikiboard:link-closed", handleLinkClosed);
 
     root.addEventListener("click", handleClick);
     root.addEventListener("mouseover", handleHover);
@@ -310,6 +397,7 @@ const StaticPreview = memo(function StaticPreview({ title, html, scrollTop, onLi
     });
 
     return () => {
+      window.removeEventListener("wikiboard:link-closed", handleLinkClosed);
       cancelAnimationFrame(raf);
       if (resizeObserver) resizeObserver.disconnect();
       images.forEach((img) => img.removeEventListener("load", onImgLoad));
@@ -321,7 +409,7 @@ const StaticPreview = memo(function StaticPreview({ title, html, scrollTop, onLi
       root.removeEventListener("click", handleClick);
       root.removeEventListener("mouseover", handleHover);
     };
-  }, [title, html]);
+  }, [title, html, winId]);
 
   return <div ref={hostRef} className="w-full h-full overflow-auto scrollbar-hide bg-white" />;
 });

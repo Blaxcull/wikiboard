@@ -59,7 +59,9 @@ export default function PdfViewer({ win }: Props) {
   const cameraZoom = useSyncExternalStore(subscribeCamera, () => getCamera().zoom, () => 1);
   const camZoom = isMaximized ? cameraZoom : 1;
   const winRef = useRef(win);
-  winRef.current = win;
+  useEffect(() => {
+    winRef.current = win;
+  }, [win]);
 
   // --- Load PDF document ---
   useEffect(() => {

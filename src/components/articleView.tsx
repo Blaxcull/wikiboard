@@ -121,6 +121,7 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
         pdfUrl: rawUrl,
         title: wikiTitle.replace(/^File:/i, "").replace(/_/g, " "),
         parentId: win.id,
+        sourceHref: href || rawUrl,
         pdfCurrentPage: 1,
         width: 620,
         height: 945,
@@ -131,6 +132,7 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
         title: wikiTitle.replace(/_/g, " "),
         url: rawUrl,
         parentId: win.id,
+        sourceHref: href || rawUrl,
         ...(isImg ? { width: 250, height: 190 } : {}),
         ...(imageUrl ? { directImageUrl: imageUrl } : {}),
       });
@@ -141,6 +143,7 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
     return (
       <div className="w-full h-full border-0 block relative bg-white">
         <StaticPreview
+          winId={win.id}
           title={title}
           html={fullHtml}
           scrollTop={getScroll(win.id)?.y ?? 0}

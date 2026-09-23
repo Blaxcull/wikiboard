@@ -17,6 +17,8 @@ export type WindowData = {
   lastFocusedAt: number;
   /** ID of the parent window that spawned this one via link click */
   parentId?: string;
+  /** href of the link in the parent window that spawned this child window */
+  sourceHref?: string;
   /** Pre-extracted image src for File: pages — skips the fetchFileUrl API call */
   directImageUrl?: string;
   /** Content type discriminator: "article" (default) or "pdf" */
@@ -139,9 +141,21 @@ export const useWindows = create<WindowsStore>((set) => ({
     }),
 
   removeWindow: (id) =>
-    set((state) => ({
-      windows: state.windows.filter((w) => w.id !== id),
-    })),
+    set((state) => {
+      const closingWin = state.windows.find((w) => w.id === id);
+      if (closingWin?.parentId && closingWin?.sourceHref) {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("wikiboard:link-closed", {
+              detail: { parentId: closingWin.parentId, href: closingWin.sourceHref, closingId: id },
+            })
+          );
+        }
+      }
+      return {
+        windows: state.windows.filter((w) => w.id !== id),
+      };
+    }),
 
   setActive: (id) =>
     set((state) => {

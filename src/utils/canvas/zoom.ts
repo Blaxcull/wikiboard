@@ -77,3 +77,84 @@ export function resetZoom() {
     requestAnimationFrame(animate);
   }
 }
+
+/** Smoothly pan camera to target panX, panY (and optional target zoom). */
+export function smoothPanTo(panX: number, panY: number, zoom?: number) {
+  targetPanX = panX;
+  targetPanY = panY;
+  if (zoom !== undefined) {
+    targetZoom = zoom;
+  } else {
+    targetZoom = getCamera().zoom;
+  }
+  if (!rafPending) {
+    rafPending = true;
+    requestAnimationFrame(animate);
+  }
+}
+
+export type WindowRect = { x: number; y: number; width: number; height: number };
+
+/** Automatically pan camera so that the newly created window (and its parent if specified) are visible in the viewport. */
+export function focusWindowAndParent(child: WindowRect, parent?: WindowRect) {
+  if (typeof window === "undefined") return;
+
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const cam = getCamera();
+  const zoom = cam.zoom;
+
+  const topPadding = 70;
+  const sidePadding = 60;
+  const bottomPadding = 60;
+
+  let panX: number;
+  let panY: number;
+
+  if (parent) {
+    const minX = Math.min(parent.x, child.x);
+    const maxX = Math.max(parent.x + parent.width, child.x + child.width);
+    const minY = Math.min(parent.y, child.y);
+    const maxY = Math.max(parent.y + parent.height, child.y + child.height);
+
+    const bWidthScreen = (maxX - minX) * zoom;
+    const bHeightScreen = (maxY - minY) * zoom;
+
+    const availW = vw - 2 * sidePadding;
+    const availH = vh - topPadding - bottomPadding;
+
+    if (bWidthScreen <= availW && bHeightScreen <= availH) {
+      // Both parent and child fit comfortably on screen at current zoom
+      const wCenterX = (minX + maxX) / 2;
+      const wCenterY = (minY + maxY) / 2;
+
+      panX = vw / 2 - wCenterX * zoom;
+      panY = (topPadding + (vh - bottomPadding)) / 2 - wCenterY * zoom;
+    } else {
+      // Screen is narrower than combined width; align child to the right side of the screen
+      const childRightScreen = (child.x + child.width) * zoom;
+      panX = vw - sidePadding - childRightScreen;
+
+      // Ensure child left edge is not cut off if child width itself fits
+      if (child.width * zoom <= availW) {
+        const childLeftScreen = child.x * zoom + panX;
+        if (childLeftScreen < sidePadding) {
+          panX = sidePadding - child.x * zoom;
+        }
+      }
+
+      const childCenterY = child.y + child.height / 2;
+      panY = (topPadding + (vh - bottomPadding)) / 2 - childCenterY * zoom;
+    }
+  } else {
+    // Single window focus (e.g. searching or opening a standalone window)
+    const childCenterX = child.x + child.width / 2;
+    const childCenterY = child.y + child.height / 2;
+
+    panX = vw / 2 - childCenterX * zoom;
+    panY = (topPadding + (vh - bottomPadding)) / 2 - childCenterY * zoom;
+  }
+
+  smoothPanTo(panX, panY);
+}
+

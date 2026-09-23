@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { screenToWorld } from "../utils/camera";
+import { focusWindowAndParent } from "../utils/canvas/zoom";
 
 export type WindowLink = {
   label: string;
@@ -77,19 +78,17 @@ export const useWindows = create<WindowsStore>((set) => ({
       const childH = data?.height ?? DEFAULT_HEIGHT;
       let posX: number;
       let posY: number;
+      let parentWindow: WindowData | undefined;
 
       if (data?.parentId && data?.x == null && data?.y == null) {
-        const parent = state.windows.find((w) => w.id === data.parentId);
-        if (parent) {
-          const pw = parent.width ?? DEFAULT_WIDTH;
-          const ph = parent.height ?? DEFAULT_HEIGHT;
-          const GAP = 20;
-          posX = (parent.x ?? 0) + pw + GAP;
-          posY = parent.y ?? 0;
-          if (posX > center.x + 400) {
-            posX = parent.x ?? 0;
-            posY = (parent.y ?? 0) + ph + GAP;
-          }
+        parentWindow = state.windows.find((w) => w.id === data.parentId);
+        if (parentWindow) {
+          const pw = parentWindow.width ?? DEFAULT_WIDTH;
+          const GAP = 140; // Open a little far away for clear separation
+          const existingChildren = state.windows.filter((w) => w.parentId === data.parentId);
+          const childIdx = existingChildren.length;
+          posX = (parentWindow.x ?? 0) + pw + GAP + childIdx * 40;
+          posY = (parentWindow.y ?? 0) + childIdx * 40;
         } else {
           posX = center.x - DEFAULT_WIDTH / 2 + offset;
           posY = center.y - DEFAULT_HEIGHT / 2 + offset;
@@ -97,6 +96,22 @@ export const useWindows = create<WindowsStore>((set) => ({
       } else {
         posX = data?.x ?? (center.x - DEFAULT_WIDTH / 2 + offset);
         posY = data?.y ?? (center.y - DEFAULT_HEIGHT / 2 + offset);
+      }
+
+      if (!state.windows.some((w) => w.pdfMaximized)) {
+        const childRect = { x: posX, y: posY, width: childW, height: childH };
+        const parentRect = parentWindow
+          ? {
+              x: parentWindow.x ?? 0,
+              y: parentWindow.y ?? 0,
+              width: parentWindow.width ?? DEFAULT_WIDTH,
+              height: parentWindow.height ?? DEFAULT_HEIGHT,
+            }
+          : undefined;
+
+        requestAnimationFrame(() => {
+          focusWindowAndParent(childRect, parentRect);
+        });
       }
 
       return {

@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef } from "react";
-import { escapeHtml, extractTitle, isPdfUrl, WIKI_STYLESHEET_URL } from "../utils/wiki";
+import { escapeHtml, extractTitle, isPdfUrl, isWaybackUrl, isOriginalRefLabel, WIKI_STYLESHEET_URL } from "../utils/wiki";
 import { prefetchArticles } from "../utils/articleCache";
+import { prefetchPdf } from "../utils/pdfCache";
 
 // Fetch Wikipedia CSS once, share via adoptedStyleSheets across all shadow DOMs
 let sharedWikiStyleSheet: CSSStyleSheet | null = null;
@@ -210,6 +211,21 @@ const StaticPreview = memo(function StaticPreview({ title, html, scrollTop, onLi
       const a = target?.closest?.("a[href]");
       if (!a) return;
       const href = a.getAttribute("href") || "";
+      const linkText = (a.textContent || "").trim();
+
+      if (isOriginalRefLabel(linkText)) {
+        e.preventDefault();
+        e.stopPropagation();
+        alert("This 'original' link is a dead Wikipedia citation that no longer exists on the web. Please use the archived copy link instead.");
+        return;
+      }
+
+      if (isWaybackUrl(href)) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.open(href, "_blank", "noopener,noreferrer");
+        return;
+      }
 
       let anchorId: string | null = null;
       if (href.startsWith("#")) {
@@ -251,8 +267,14 @@ const StaticPreview = memo(function StaticPreview({ title, html, scrollTop, onLi
       const a = target?.closest?.("a[href]");
       if (!a) return;
       const href = a.getAttribute("href") || "";
+      const linkText = (a.textContent || "").trim();
+      if (isWaybackUrl(href) || isOriginalRefLabel(linkText)) return;
       const wikiTitle = extractTitle(href);
-      if (wikiTitle && !isPdfUrl(wikiTitle) && !isPdfUrl(href)) prefetchArticles([wikiTitle]);
+      if (wikiTitle && !isPdfUrl(wikiTitle) && !isPdfUrl(href)) {
+        prefetchArticles([wikiTitle]);
+      } else if (href && (isPdfUrl(href) || (wikiTitle && isPdfUrl(wikiTitle)))) {
+        prefetchPdf(href);
+      }
     };
 
     root.addEventListener("click", handleClick);

@@ -74,6 +74,33 @@ export function cleanArticleHtml(html: string): string {
 
   doc.querySelectorAll(STRIP_SELECTORS).forEach((el) => el.remove());
 
+  // Remove "See also" section
+  const seeAlsoHeadings = Array.from(
+    doc.querySelectorAll("h1, h2, h3, h4, [id='See_also'], [id^='See_also']"),
+  ).filter((el) => {
+    const id = el.id || el.querySelector("[id]")?.id || "";
+    const text = el.textContent?.replace(/[\s\u200B-\u200D\uFEFF]+/g, " ").trim().toLowerCase() || "";
+    return id.toLowerCase().startsWith("see_also") || text === "see also" || text.startsWith("see also");
+  });
+
+  seeAlsoHeadings.forEach((node) => {
+    const headingEl = node.closest("h1, h2, h3, h4") || node;
+    const section = headingEl.closest("section");
+    if (section) {
+      section.remove();
+    } else {
+      let current: Element | null = headingEl;
+      const toRemove: Element[] = [];
+      while (current) {
+        const next: Element | null = current.nextElementSibling;
+        toRemove.push(current);
+        if (next && /^H[1-4]/i.test(next.tagName)) break;
+        current = next;
+      }
+      toRemove.forEach((el) => el.remove());
+    }
+  });
+
   // Wrap consecutive <figure> elements in a single container so they float
   // as one block (text wraps around the group, not between individual images).
   function wrapConsecutiveFigures(parent: Element) {
@@ -168,6 +195,22 @@ export function isPdfUrl(url: string): boolean {
   } catch {
     return /\.pdf($|[?#])/i.test(url);
   }
+}
+
+export function isWaybackUrl(url: string): boolean {
+  if (!url) return false;
+  return /web\.archive\.org|archive\.org\/web/i.test(url);
+}
+
+export function isOriginalRefLabel(text: string): boolean {
+  if (!text) return false;
+  const normalized = text.replace(/[\s\u200B-\u200D\uFEFF[\]()]+/g, " ").trim().toLowerCase();
+  return (
+    normalized === "original" ||
+    normalized === "the original" ||
+    normalized === "the original pdf" ||
+    normalized === "original pdf"
+  );
 }
 
 export async function fetchFileUrl(title: string): Promise<{ url: string; width: number; height: number; mime: string } | null> {

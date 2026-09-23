@@ -6,6 +6,7 @@ import {
   fetchArticle,
   fetchFileUrl,
   isPdfUrl,
+  isWaybackUrl,
 } from "../utils/wiki";
 import {
   getCachedArticle,
@@ -101,6 +102,10 @@ const ArticleView = memo(function ArticleView({ win }: Props) {
 
   function handleLinkClick(wikiTitle: string, imageUrl?: string, href?: string) {
     const rawUrl = href || `https://en.wikipedia.org/wiki/${wikiTitle.replace(/ /g, "_")}`;
+    if (isWaybackUrl(rawUrl)) {
+      window.open(rawUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
     const isPdf = isPdfUrl(rawUrl) || isPdfUrl(wikiTitle) || wikiTitle.toLowerCase().endsWith(".pdf");
     const current = useWindows.getState().windows.find((w) => w.id === win.id);
     if (!current) return;

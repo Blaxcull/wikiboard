@@ -28,6 +28,8 @@ function copyCanvas(source: HTMLCanvasElement, target: HTMLCanvasElement) {
 const TOOLBAR_BTN =
   "flex items-center justify-center w-8 h-8 p-0 border-0 rounded-lg bg-[rgba(255,255,255,0.1)] text-[#e0e0e0] cursor-pointer hover:bg-[rgba(255,255,255,0.2)] hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors";
 
+import { fetchPdfBuffer } from "../utils/pdfCache";
+
 export default function PdfViewer({ win }: Props) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const docRef = useRef<PDFDocumentProxy | null>(null);
@@ -65,11 +67,10 @@ export default function PdfViewer({ win }: Props) {
       setError(null);
 
       try {
-        const response = await fetch(win.pdfUrl);
-        if (!response.ok) throw new Error(`Failed to fetch PDF: ${response.status}`);
-        const arrayBuffer = await response.arrayBuffer();
+        const arrayBuffer = await fetchPdfBuffer(win.pdfUrl);
+
         const loadingTask = getDocument({
-          data: new Uint8Array(arrayBuffer),
+          data: new Uint8Array(arrayBuffer.slice(0)),
           standardFontDataUrl: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/standard_fonts/",
         });
         const pdfDoc = await loadingTask.promise;
@@ -268,12 +269,23 @@ export default function PdfViewer({ win }: Props) {
             }
           } else if (pageNum) {
             visiblePagesRef.current.delete(pageNum);
+            // Cancel active render tasks for offscreen pages to conserve CPU and memory
+            const task = renderTasksRef.current.get(pageNum);
+            if (task) {
+              try { task.cancel(); } catch { /* ignore */ }
+              renderTasksRef.current.delete(pageNum);
+            }
+            const textTask = textLayerTasksRef.current.get(pageNum);
+            if (textTask) {
+              try { textTask.cancel(); } catch { /* ignore */ }
+              textLayerTasksRef.current.delete(pageNum);
+            }
           }
         }
       },
       {
         root: container,
-        rootMargin: "800px 0px 800px 0px",
+        rootMargin: "200px 0px 200px 0px",
       },
     );
 
@@ -538,9 +550,24 @@ export default function PdfViewer({ win }: Props) {
   }, [isMaximized]);
 
   if (error) {
+    const handleOpenAndRemove = () => {
+      if (win.pdfUrl && /^https?:\/\//i.test(win.pdfUrl)) {
+        window.open(win.pdfUrl, "_blank", "noopener,noreferrer");
+      }
+      useWindows.getState().removeWindow(win.id);
+    };
+
     return (
-      <div className="flex flex-1 min-h-0 items-center justify-center bg-white text-sm text-gray-500">
-        <span>Error: {error}</span>
+      <div className="flex flex-1 flex-col min-h-0 items-center justify-center bg-white text-sm text-gray-500 p-4 text-center gap-2">
+        <span className="font-semibold text-gray-700">Unable to display PDF</span>
+        <span className="text-xs text-gray-500 max-w-md">{error}</span>
+        <button
+          type="button"
+          onClick={handleOpenAndRemove}
+          className="mt-2 px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors pointer-events-auto cursor-pointer"
+        >
+          Open in new tab
+        </button>
       </div>
     );
   }
@@ -561,7 +588,7 @@ export default function PdfViewer({ win }: Props) {
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className={`flex-1 min-h-0 relative overflow-y-auto ${showUnmaximizedStyle ? "rounded-2xl shadow-[0_10px_35px_rgba(0,0,0,0.35)]" : "rounded-none shadow-none"}`}
+        className={`flex-1 min-h-0 relative overflow-y-auto ${showUnmaximizedStyle ? "rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.25)]" : "rounded-none shadow-none"}`}
         style={{ backgroundColor: "transparent", scrollbarWidth: "none" }}
       >
         <div ref={pagesContainerRef} className="flex flex-col gap-6 w-full items-center pt-0 " style={{ backgroundColor: "transparent" }}>
@@ -588,7 +615,7 @@ export default function PdfViewer({ win }: Props) {
                 }}
                 data-page={p}
                 style={pageStyle}
-                className={`bg-gray-900 relative p-0 mx-auto bg-white ${showUnmaximizedStyle ? "rounded-2xl overflow-hidden shadow-[0_10px_40px_rgba(0,0,0,0.3)]" : (isMaximized ? "rounded-none shadow-[-12px_0_25px_-4px_rgba(0,0,0,0.25),12px_0_25px_-4px_rgba(0,0,0,0.25)]" : "rounded-none shadow-none")} ${isMaximized ? "" : "max-w-[850px] w-full"}`}
+                className={`bg-gray-900 relative p-0 mx-auto bg-white ${showUnmaximizedStyle ? "rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.25)]" : (isMaximized ? "rounded-none shadow-[-12px_0_25px_-4px_rgba(0,0,0,0.25),12px_0_25px_-4px_rgba(0,0,0,0.25)]" : "rounded-none shadow-none")} ${isMaximized ? "" : "max-w-[850px] w-full"}`}
               >
                 <canvas
                   ref={(el) => {

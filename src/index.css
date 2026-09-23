@@ -34,7 +34,7 @@
   border-radius: 12px;
   background: #e8e8e8;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.08);
-  contain: layout paint;
+  contain: layout;
   content-visibility: auto;
   contain-intrinsic-size: 540px 550px;
   transform: translateZ(0);
@@ -107,11 +107,15 @@
   transition: none !important;
 }
 
-.pdf-window.active {
+.pdf-window,
+.pdf-window.active,
+.pdf-window.inactive {
   background: transparent !important;
   border: none !important;
   outline: none !important;
+  border-radius: 0 !important;
   box-shadow: none !important;
+  content-visibility: visible !important;
 }
 
 .pdf-window.maximized {
@@ -272,7 +276,7 @@
   opacity: 0;
   transition: opacity 0.15s ease;
   pointer-events: none;
-  z-index: 1;
+  z-index: 10;
 }
 
 .window:hover > .connection-point {

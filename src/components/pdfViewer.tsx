@@ -256,7 +256,7 @@ export default function PdfViewer({ win }: Props) {
     }
   }, [currentPage, isMaximized, loading, renderPage]);
 
-  // --- Dynamically update --canvas-top-offset and --canvas-bottom-offset CSS variables for accurate dot placement ---
+  // --- Dynamically update CSS variables for accurate dot placement on all 4 sides ---
   useEffect(() => {
     if (isMaximized || loading) return;
 
@@ -270,14 +270,19 @@ export default function PdfViewer({ win }: Props) {
       const winRect = winEl.getBoundingClientRect();
       const canvasRect = canvas.getBoundingClientRect();
       const cam = getCamera();
-      const topOffsetPx = (canvasRect.top - winRect.top) / (cam.zoom || 1);
-      const bottomOffsetPx = (winRect.bottom - canvasRect.bottom) / (cam.zoom || 1);
-      if (topOffsetPx >= 0) {
-        winEl.style.setProperty("--canvas-top-offset", `${Math.round(topOffsetPx)}px`);
-      }
-      if (bottomOffsetPx >= 0) {
-        winEl.style.setProperty("--canvas-bottom-offset", `${Math.round(bottomOffsetPx)}px`);
-      }
+      const zoom = cam.zoom || 1;
+
+      const topOffsetPx = (canvasRect.top - winRect.top) / zoom;
+      const bottomOffsetPx = (winRect.bottom - canvasRect.bottom) / zoom;
+      const leftOffsetPx = (canvasRect.left - winRect.left) / zoom;
+      const rightOffsetPx = (winRect.right - canvasRect.right) / zoom;
+      const canvasHeightPx = (canvasRect.bottom - canvasRect.top) / zoom;
+
+      if (topOffsetPx >= 0) winEl.style.setProperty("--canvas-top-offset", `${Math.round(topOffsetPx)}px`);
+      if (bottomOffsetPx >= 0) winEl.style.setProperty("--canvas-bottom-offset", `${Math.round(bottomOffsetPx)}px`);
+      if (leftOffsetPx >= 0) winEl.style.setProperty("--canvas-left-offset", `${Math.round(leftOffsetPx)}px`);
+      if (rightOffsetPx >= 0) winEl.style.setProperty("--canvas-right-offset", `${Math.round(rightOffsetPx)}px`);
+      winEl.style.setProperty("--canvas-center-y", `${Math.round(topOffsetPx + canvasHeightPx / 2)}px`);
     };
 
     updateOffset();

@@ -143,6 +143,8 @@ function readWindowPos(el: HTMLElement): { x: number; y: number; w: number; h: n
       const cam = getCamera();
       if (cam.zoom > 0) {
         const topOffset = (canvasRect.top - windowRect.top) / cam.zoom;
+        const leftOffset = (canvasRect.left - windowRect.left) / cam.zoom;
+        const canvasWidth = (canvasRect.right - canvasRect.left) / cam.zoom;
         const canvasHeight = (canvasRect.bottom - canvasRect.top) / cam.zoom;
         const t = el.style.transform;
         let tx = 0, ty = 0;
@@ -153,9 +155,9 @@ function readWindowPos(el: HTMLElement): { x: number; y: number; w: number; h: n
           if (my) ty = parseFloat(my[1]) || 0;
         }
         return {
-          x: x + tx,
+          x: x + tx + leftOffset,
           y: y + ty + topOffset,
-          w,
+          w: Math.max(50, canvasWidth),
           h: Math.max(50, canvasHeight),
           zIndex,
         };

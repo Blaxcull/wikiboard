@@ -33,6 +33,7 @@ export function OnEdge(e: React.MouseEvent<HTMLDivElement>) {
     if (isDraggingWindow || isResizingWindow) return
 
     const element = e.currentTarget
+    if (element.classList.contains("pdf-window")) return;
     // Read from style — these are world-space coordinates
     const left = parseFloat(element.style.left) || 0;
     const top = parseFloat(element.style.top) || 0;
@@ -62,7 +63,7 @@ export function attachEdgeDelegate() {
         if (isDraggingWindow || isResizingWindow) return;
 
         const target = (e.target as HTMLElement).closest?.(".window") as HTMLElement | null;
-        if (!target) return;
+        if (!target || target.classList.contains("pdf-window")) return;
 
         // Read from style — these are world-space coordinates
         const left = parseFloat(target.style.left) || 0;

@@ -13,7 +13,6 @@ import { startCanvasPan } from './utils/canvas/pan'
 import { handleZoom } from './utils/canvas/zoom'
 import { isDraggingWindow } from './utils/window/drag'
 import { isResizingWindow } from './utils/window/resize'
-import { Resize } from './utils/window/resize'
 
 const ARROW_CTRL = 0.4;
 const ARROW_LEN = 16;
@@ -558,11 +557,8 @@ useEffect(() => {
     w.pdfMaximized && !w.pdfAnimating ? "maximized-done" : ""
   } ${w.active ? "active" : "inactive"} ${w.pdfAnimating ? "no-transition" : ""}`}
   style={zIndexStyle}
-  onMouseDown={(e) => {
-    if (w.pdfMaximized) return
-
+  onMouseDown={() => {
     handleActivate()
-    Resize(e, (rect) => handlePositionChange(rect))
   }}
   >
   <div className="pdf-window-animation-layer">

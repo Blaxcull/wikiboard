@@ -38,6 +38,7 @@ export function Resize(
   if (isDraggingWindow || isResizingWindow) return;
 
   const target = e.currentTarget;
+  if (target.classList.contains("pdf-window")) return;
 
   // Read geometry from style — these are world-space coordinates
   const baseLeft = parseFloat(target.style.left) || 0;

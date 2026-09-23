@@ -48,15 +48,17 @@ const Window = memo(function Window({
   return (
     <div
       ref={(el) => {
-        if (el && !positioned.current) {
-          positioned.current = true;
-          if (x !== undefined && y !== undefined) {
-            el.style.left = `${x}px`;
-            el.style.top = `${y}px`;
-          } else {
-            const offset = nextCascadeOffset();
-            el.style.top = `${80 + offset}px`;
-            el.style.left = `${80 + offset}px`;
+        if (el) {
+          if (!positioned.current) {
+            positioned.current = true;
+            if (x !== undefined && y !== undefined) {
+              el.style.left = `${x}px`;
+              el.style.top = `${y}px`;
+            } else {
+              const offset = nextCascadeOffset();
+              el.style.top = `${80 + offset}px`;
+              el.style.left = `${80 + offset}px`;
+            }
           }
           if (width !== undefined) el.style.width = `${width}px`;
           if (height !== undefined) el.style.height = `${height}px`;

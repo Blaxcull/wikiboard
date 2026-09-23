@@ -136,7 +136,31 @@ function readWindowPos(el: HTMLElement): { x: number; y: number; w: number; h: n
   const zIndex = parseInt(el.style.zIndex, 10) || 0;
 
   if (el.classList.contains("pdf-window") && !el.classList.contains("maximized")) {
-    if (el.querySelector(".pdf-toolbar")) {
+    const canvas = el.querySelector("canvas");
+    if (canvas) {
+      const windowRect = el.getBoundingClientRect();
+      const canvasRect = canvas.getBoundingClientRect();
+      const cam = getCamera();
+      if (cam.zoom > 0) {
+        const topOffset = (canvasRect.top - windowRect.top) / cam.zoom;
+        const canvasHeight = (canvasRect.bottom - canvasRect.top) / cam.zoom;
+        const t = el.style.transform;
+        let tx = 0, ty = 0;
+        if (t) {
+          const mx = t.match(/translate3d\(([-\d.]+)px/);
+          const my = t.match(/translate3d\([-\d.]+px,\s*([-\d.]+)px/);
+          if (mx) tx = parseFloat(mx[1]) || 0;
+          if (my) ty = parseFloat(my[1]) || 0;
+        }
+        return {
+          x: x + tx,
+          y: y + ty + topOffset,
+          w,
+          h: Math.max(50, canvasHeight),
+          zIndex,
+        };
+      }
+    } else if (el.querySelector(".pdf-toolbar")) {
       h = Math.max(100, h - 68);
     }
   }

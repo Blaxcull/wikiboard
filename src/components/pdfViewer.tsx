@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
 import { getDocument, GlobalWorkerOptions, TextLayer } from "pdfjs-dist";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
@@ -56,16 +56,10 @@ export default function PdfViewer({ win }: Props) {
 
   const pdfZoomRef = useRef(1);
   const pagesContainerRef = useRef<HTMLDivElement>(null);
-  const [camZoom, setCamZoom] = useState(() => getCamera().zoom);
-
-  useEffect(() => {
-    if (!isMaximized) return;
-    setCamZoom(getCamera().zoom);
-    const unsub = subscribeCamera((cam) => {
-      setCamZoom(cam.zoom);
-    });
-    return unsub;
-  }, [isMaximized]);
+  const cameraZoom = useSyncExternalStore(subscribeCamera, () => getCamera().zoom, () => 1);
+  const camZoom = isMaximized ? cameraZoom : 1;
+  const winRef = useRef(win);
+  winRef.current = win;
 
   // --- Load PDF document ---
   useEffect(() => {
@@ -96,10 +90,11 @@ export default function PdfViewer({ win }: Props) {
             const ratio = vp.height / vp.width;
             setPageAspectRatio(ratio);
 
-            const currentW = win.width ?? 620;
-            const expectedH = Math.round(currentW * ratio + 68);
-            if (!win.pdfMaximized && Math.abs((win.height ?? 0) - expectedH) > 2) {
-              updateWindow(win.id, { height: expectedH });
+            const currentWin = winRef.current;
+            const currentW = currentWin.width ?? 620;
+            const expectedH = Math.round(currentW * ratio + 96);
+            if (!currentWin.pdfMaximized && Math.abs((currentWin.height ?? 0) - expectedH) > 2) {
+              useWindows.getState().updateWindow(currentWin.id, { height: expectedH });
             }
           }
         } catch {
@@ -149,7 +144,7 @@ export default function PdfViewer({ win }: Props) {
   useEffect(() => {
     if (loading || isMaximized || !pageAspectRatio) return;
     const currentW = win.width ?? 620;
-    const expectedH = Math.round(currentW * pageAspectRatio + 68);
+    const expectedH = Math.round(currentW * pageAspectRatio + 96);
     if (Math.abs((win.height ?? 0) - expectedH) > 2) {
       updateWindow(win.id, { height: expectedH });
     }
@@ -260,6 +255,42 @@ export default function PdfViewer({ win }: Props) {
       }
     }
   }, [currentPage, isMaximized, loading, renderPage]);
+
+  // --- Dynamically update --canvas-top-offset and --canvas-bottom-offset CSS variables for accurate dot placement ---
+  useEffect(() => {
+    if (isMaximized || loading) return;
+
+    const updateOffset = () => {
+      const container = scrollContainerRef.current;
+      if (!container) return;
+      const canvas = container.querySelector("canvas");
+      const winEl = container.closest(".window") as HTMLElement | null;
+      if (!canvas || !winEl) return;
+
+      const winRect = winEl.getBoundingClientRect();
+      const canvasRect = canvas.getBoundingClientRect();
+      const cam = getCamera();
+      const topOffsetPx = (canvasRect.top - winRect.top) / (cam.zoom || 1);
+      const bottomOffsetPx = (winRect.bottom - canvasRect.bottom) / (cam.zoom || 1);
+      if (topOffsetPx >= 0) {
+        winEl.style.setProperty("--canvas-top-offset", `${Math.round(topOffsetPx)}px`);
+      }
+      if (bottomOffsetPx >= 0) {
+        winEl.style.setProperty("--canvas-bottom-offset", `${Math.round(bottomOffsetPx)}px`);
+      }
+    };
+
+    updateOffset();
+    const container = scrollContainerRef.current;
+    const canvas = container?.querySelector("canvas");
+    const winEl = container?.closest(".window") as HTMLElement | null;
+
+    if (!canvas || !winEl) return;
+    const observer = new ResizeObserver(updateOffset);
+    observer.observe(canvas);
+    observer.observe(winEl);
+    return () => observer.disconnect();
+  }, [isMaximized, loading, pageAspectRatio, currentPage]);
 
   // --- Intersection observer for lazy rendering of visible pages in zoomed-in mode ---
   useEffect(() => {
@@ -598,22 +629,22 @@ export default function PdfViewer({ win }: Props) {
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className={`flex-1 min-h-0 relative overflow-y-auto ${showUnmaximizedStyle ? "rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.25)]" : "rounded-none shadow-none"}`}
+        className={`flex-1 min-h-0 relative ${isMaximized ? "overflow-y-auto" : "overflow-visible"}`}
         style={{ backgroundColor: "transparent", scrollbarWidth: "none" }}
       >
-        <div ref={pagesContainerRef} className="flex flex-col gap-6 w-full items-center pt-0 pb-3" style={{ backgroundColor: "transparent" }}>
+        <div ref={pagesContainerRef} className={`flex flex-col gap-6 w-full items-center ${isMaximized ? "pt-0 pb-3" : "py-6"}`} style={{ backgroundColor: "transparent" }}>
           {pagesArray.map((p) => {
             const isVisible = isMaximized || p === currentPage;
 
             const pageStyle: CSSProperties = {
               display: isVisible ? "block" : "none",
-              aspectRatio: `${1 / pageAspectRatio}`,
             };
             if (isMaximized) {
               const cam = getCamera();
               const fitScreenPx = Math.min(window.innerWidth, window.innerHeight / pageAspectRatio);
               pageStyle.maxWidth = `${fitScreenPx / cam.zoom}px`;
               pageStyle.width = "100%";
+              pageStyle.aspectRatio = `${1 / pageAspectRatio}`;
             }
 
             return (
@@ -625,7 +656,7 @@ export default function PdfViewer({ win }: Props) {
                 }}
                 data-page={p}
                 style={pageStyle}
-                className={`bg-gray-900 relative p-0 mx-auto bg-white ${showUnmaximizedStyle ? "rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.25)]" : (isMaximized ? "rounded-none shadow-[-12px_0_25px_-4px_rgba(0,0,0,0.25),12px_0_25px_-4px_rgba(0,0,0,0.25)]" : "rounded-none shadow-none")} ${isMaximized ? "" : "max-w-[850px] w-full"}`}
+                className={`relative p-0 mx-auto bg-white ${showUnmaximizedStyle ? "rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.25)]" : (isMaximized ? "rounded-none shadow-[-12px_0_25px_-4px_rgba(0,0,0,0.25),12px_0_25px_-4px_rgba(0,0,0,0.25)]" : "rounded-none shadow-none")} ${isMaximized ? "" : "max-w-[850px] w-full h-fit"}`}
               >
                 <canvas
                   ref={(el) => {
@@ -664,7 +695,7 @@ export default function PdfViewer({ win }: Props) {
                 transformOrigin: "bottom center",
                 zIndex: 10,
               }
-            : { marginBottom: "8px", marginTop: "16px", width: "fit-content" }),
+            : { marginBottom: "16px", marginTop: "16px", width: "fit-content" }),
         }}
       >
           {isMaximized ? (

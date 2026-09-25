@@ -575,9 +575,9 @@ useEffect(() => {
   } ${w.active ? "active" : "inactive"} ${w.pdfAnimating ? "no-transition" : ""}`}
   style={zIndexStyle}
   onMouseDown={(e) => {
+    handleActivate()
     if (w.pdfMaximized) return
 
-    handleActivate()
     Resize(e, (rect) => handlePositionChange(rect))
   }}
   >
@@ -699,6 +699,11 @@ function App() {
     });
 
     function onPanMouseDown(e: MouseEvent) {
+      const target = e.target as HTMLElement | null;
+      if (!target?.closest(".window") && !target?.closest(".search-box")) {
+        window.getSelection()?.removeAllRanges();
+        document.getSelection()?.removeAllRanges();
+      }
       if (useWindows.getState().windows.some((win) => win.pdfMaximized)) return;
       startCanvasPan(e, viewport);
     }

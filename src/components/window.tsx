@@ -68,6 +68,7 @@ const Window = memo(function Window({
       className={`window ${className}`}
       style={style}
       onMouseDown={(e) => {
+        onActivate?.();
         Resize(e, (rect) => {
           onPositionChange?.(rect);
         }, onActivate);

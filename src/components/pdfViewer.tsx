@@ -693,6 +693,7 @@ export default function PdfViewer({ win }: Props) {
               title="Move"
               onMouseDown={(e) => {
                 if (isMaximized) return;
+                useWindows.getState().setActive(win.id);
                 const targetEl = (e.target as HTMLElement).closest(".pdf-window");
                 if (!targetEl || !(targetEl instanceof HTMLElement)) return;
                 const winEl: HTMLElement = targetEl;

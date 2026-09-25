@@ -60,6 +60,7 @@ const SHADOW_STYLES = `
     scrollbar-width: none;
     font-size: 18px;
     color: #202122;
+    user-select: inherit;
   }
 
   .wiki-title {
@@ -74,8 +75,9 @@ const SHADOW_STYLES = `
 
   .freeze {
     padding: 0 16px 16px;
-    user-select: text;
+    user-select: inherit;
     overflow: visible;
+    cursor: text;
   }
 
   .freeze .mw-parser-output {
@@ -88,7 +90,7 @@ const SHADOW_STYLES = `
     text-align: justify;
   }
 
-  .freeze a { color: #0645ad; text-decoration: none; }
+  .freeze a { color: #0645ad; text-decoration: none; cursor: pointer; }
   .freeze a:hover { text-decoration: underline; }
   .freeze a:visited { color: #0b0080; }
   .freeze a.new,

@@ -29,7 +29,7 @@ function computeCursor(
   const nearBottom = (relY >= cornerY - CORNER_MARGIN && relY <= cornerY + CORNER_MARGIN) || relY >= height - CORNER_MARGIN;
 
   if (nearBottom && nearRight) return 'se-resize';
-  return 'default';
+  return '';
 }
 
 export function OnEdge(e: React.MouseEvent<HTMLDivElement>) {

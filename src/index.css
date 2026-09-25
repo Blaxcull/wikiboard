@@ -95,8 +95,11 @@
   border-color: #b0b0b0;
 }
 
-.window.inactive {
+.window.inactive,
+.window.inactive * {
   z-index: 1;
+  user-select: none !important;
+  -webkit-user-select: none !important;
 }
 
 .pdf-window {

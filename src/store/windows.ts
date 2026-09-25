@@ -162,7 +162,11 @@ export const useWindows = create<WindowsStore>((set) => ({
       const targetIdx = state.windows.findIndex((w) => w.id === id);
       if (targetIdx === -1) return state;
       const target = state.windows[targetIdx];
-      if (target.active) return state;
+      if (target.active && target.zIndex === state.maxZIndex) return state;
+      if (typeof window !== "undefined") {
+        window.getSelection()?.removeAllRanges();
+        document.getSelection()?.removeAllRanges();
+      }
       const nextZIndex = state.maxZIndex + 1;
       const now = Date.now();
       return {

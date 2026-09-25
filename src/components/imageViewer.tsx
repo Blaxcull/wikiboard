@@ -99,7 +99,7 @@ export default function ImageViewer({ win, onClose, onActivate, onPositionChange
         <img
           src={imgUrl}
           alt={win.title.replace(/^File:/i, "").replace(/_/g, " ")}
-          className="w-full h-full object-cover rounded-2xl shadow-[0_10px_35px_rgba(0,0,0,0.35)] block"
+          className="w-full h-full object-contain rounded-2xl shadow-[0_10px_35px_rgba(0,0,0,0.35)] block"
           draggable={false}
           onLoad={handleImageLoad}
           onError={() => setError(true)}

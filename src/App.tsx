@@ -124,14 +124,10 @@ function computeArrow(
   return { sx, sy, c1x: c1.x, c1y: c1.y, c2x: c2.x, c2y: c2.y, ex, ey, tipX, tipY, bcx, bcy, b1x, b1y, b2x, b2y, childSide: bestChildSide };
 }
 
-function pointInRect(px: number, py: number, r: { x: number; y: number; w: number; h: number }): boolean {
-  return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
-}
-
 function readWindowPos(el: HTMLElement): { x: number; y: number; w: number; h: number; zIndex: number } {
   const x = parseFloat(el.style.left) || 0;
   const y = parseFloat(el.style.top) || 0;
-  const w = el.offsetWidth || parseFloat(el.style.width) || 540;
+  const w = el.offsetWidth || parseFloat(el.style.width) || 750;
   let h = el.offsetHeight || parseFloat(el.style.height) || 550;
   const zIndex = parseInt(el.style.zIndex, 10) || 0;
 
@@ -250,7 +246,7 @@ const ConnectionArrows = memo(function ConnectionArrows({
           posMap.set(w.id, {
             x: w.x ?? 0,
             y: w.y ?? 0,
-            w: w.width ?? 540,
+            w: w.width ?? 750,
             h: w.height ?? 550,
             zIndex: w.zIndex ?? 0,
           });
@@ -264,11 +260,6 @@ const ConnectionArrows = memo(function ConnectionArrows({
       const parent = byId.get(child.parentId);
       if (!parent) continue;
 
-      // During active gesture, skip lines not connected to the moving window
-      if (onlyActiveId && child.id !== onlyActiveId && parent.id !== onlyActiveId) {
-        continue;
-      }
-
       const parentPos = posMap.get(parent.id);
       const childPos = posMap.get(child.id);
       if (!parentPos || !childPos) continue;
@@ -278,43 +269,17 @@ const ConnectionArrows = memo(function ConnectionArrows({
 
       const a = computeArrow(px, py, pw, ph, cx, cy, cw, ch);
 
-      path.setAttribute('d', `M${a.sx},${a.sy} C${a.c1x},${a.c1y} ${a.c2x},${a.c2y} ${a.bcx},${a.bcy}`);
-      poly.setAttribute('points', `${a.tipX},${a.tipY} ${a.b1x},${a.b1y} ${a.b2x},${a.b2y}`);
+      const isImageChild = !!(child.directImageUrl || child.title.startsWith("File:"));
 
-      const entryCoveredByParent = (
-        a.ex >= px && a.ex <= px + pw &&
-        a.ey >= py && a.ey <= py + ph
-      );
-      const exitCoveredByChild = (
-        a.sx >= cx && a.sx <= cx + cw &&
-        a.sy >= cy && a.sy <= cy + ch
-      );
-      if (entryCoveredByParent || exitCoveredByChild) {
-        path.style.display = 'none';
+      if (isImageChild) {
+        path.setAttribute('d', `M${a.sx},${a.sy} C${a.c1x},${a.c1y} ${a.c2x},${a.c2y} ${a.ex},${a.ey}`);
         poly.style.display = 'none';
-        continue;
-      }
-
-      let arrowheadHidden = false;
-      for (const w of windows) {
-        if (w.id === child.id || w.id === parent.id) continue;
-        const wPos = posMap.get(w.id);
-        if (!wPos) continue;
-
-        if (wPos.zIndex > childPos.zIndex) {
-          if (
-            pointInRect(a.tipX, a.tipY, wPos) ||
-            pointInRect(a.bcx, a.bcy, wPos) ||
-            pointInRect(a.b1x, a.b1y, wPos) ||
-            pointInRect(a.b2x, a.b2y, wPos)
-          ) {
-            arrowheadHidden = true;
-            break;
-          }
-        }
+      } else {
+        path.setAttribute('d', `M${a.sx},${a.sy} C${a.c1x},${a.c1y} ${a.c2x},${a.c2y} ${a.bcx},${a.bcy}`);
+        poly.setAttribute('points', `${a.tipX},${a.tipY} ${a.b1x},${a.b1y} ${a.b2x},${a.b2y}`);
+        poly.style.display = '';
       }
       path.style.display = '';
-      poly.style.display = arrowheadHidden ? 'none' : '';
     }
   }, [windows]);
 

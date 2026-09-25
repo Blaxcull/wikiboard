@@ -26,7 +26,7 @@ function copyCanvas(source: HTMLCanvasElement, target: HTMLCanvasElement) {
 }
 
 const TOOLBAR_BTN =
-  "flex items-center justify-center w-8 h-8 p-0 border-0 rounded-lg bg-[rgba(255,255,255,0.1)] text-[#e0e0e0] cursor-pointer hover:bg-[rgba(255,255,255,0.2)] hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors";
+  "flex items-center justify-center w-8 h-8 p-0 border-0 rounded-lg bg-black/5 text-[#333] cursor-pointer hover:bg-black/10 hover:text-black active:bg-black/15 disabled:opacity-30 disabled:cursor-not-allowed transition-colors";
 
 import { fetchPdfBuffer } from "../utils/pdfCache";
 
@@ -430,30 +430,6 @@ export default function PdfViewer({ win }: Props) {
   const nextPage = useCallback(() => goToPage(targetPageRef.current + 1), [goToPage]);
 
 
-  const handleZoomIn = useCallback(() => {
-    const container = scrollContainerRef.current;
-    const inner = pagesContainerRef.current;
-    if (!container || !inner) return;
-
-    const oldZoom = pdfZoomRef.current;
-    const newZoom = Math.min(MAX_PDF_ZOOM, oldZoom * 1.2);
-    if (newZoom === oldZoom) return;
-    pdfZoomRef.current = newZoom;
-    inner.style.zoom = String(newZoom);
-  }, []);
-
-  const handleZoomOut = useCallback(() => {
-    const container = scrollContainerRef.current;
-    const inner = pagesContainerRef.current;
-    if (!container || !inner) return;
-
-    const oldZoom = pdfZoomRef.current;
-    const newZoom = Math.max(MIN_PDF_ZOOM, oldZoom / 1.2);
-    if (newZoom === oldZoom) return;
-    pdfZoomRef.current = newZoom;
-    inner.style.zoom = String(newZoom);
-  }, []);
-
   const toggleMaximize = useCallback(() => {
     if (!isMaximized) {
       prevWindowRef.current = {
@@ -612,7 +588,7 @@ export default function PdfViewer({ win }: Props) {
         <button
           type="button"
           onClick={handleOpenAndRemove}
-          className="mt-2 px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors pointer-events-auto cursor-pointer"
+          className="mt-2 px-3 py-1.5 text-xs bg-black text-white rounded hover:bg-gray-800 transition-colors pointer-events-auto cursor-pointer"
         >
           Open in new tab
         </button>
@@ -637,7 +613,7 @@ export default function PdfViewer({ win }: Props) {
         ref={scrollContainerRef}
         onScroll={handleScroll}
         className={`flex-1 min-h-0 relative ${isMaximized ? "overflow-y-auto" : "overflow-visible"}`}
-        style={{ backgroundColor: "transparent", scrollbarWidth: "none" }}
+        style={{ backgroundColor: "transparent", scrollbarWidth: "none", cursor: isMaximized ? "default" : undefined }}
       >
         <div ref={pagesContainerRef} className={`flex flex-col gap-6 w-full items-center ${isMaximized ? "pt-0 pb-3" : "py-6"}`} style={{ backgroundColor: "transparent" }}>
           {pagesArray.map((p) => {
@@ -687,9 +663,9 @@ export default function PdfViewer({ win }: Props) {
         </div>
       </div>
       <div
-        className="pdf-toolbar flex justify-center items-center gap-1 py-1 px-1.5 bg-[rgba(30,30,30,0.85)] backdrop-blur-[8px] rounded-3xl mx-auto"
+        className="pdf-toolbar flex justify-center items-center gap-1 py-1 px-1.5 bg-white/90 backdrop-blur-[12px] border border-black/10 rounded-3xl mx-auto"
         style={{
-          boxShadow: "0 2px 12px rgba(0,0,0,0.25)",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.08)",
           opacity: isAnimating ? 0 : 1,
           pointerEvents: isAnimating ? "none" : "auto",
           transition: "opacity 0.2s ease",
@@ -822,7 +798,7 @@ export default function PdfViewer({ win }: Props) {
               <polyline points="15 18 9 12 15 6" />
             </svg>
           </button>
-          <span className="text-[#e0e0e0] text-[13px] font-sans py-0 px-2.5 min-w-[50px] text-center select-none">
+          <span className="text-[#333] text-[13px] font-sans font-medium py-0 px-2.5 min-w-[50px] text-center select-none">
             {currentPage} / {totalPages}
           </span>
           <button
@@ -835,25 +811,6 @@ export default function PdfViewer({ win }: Props) {
               <polyline points="9 18 15 12 9 6" />
             </svg>
           </button>
-          {isMaximized && (
-            <>
-              <button className={TOOLBAR_BTN} onClick={handleZoomOut} title="Zoom out">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="11" cy="11" r="8" />
-                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                  <line x1="8" y1="11" x2="14" y2="11" />
-                </svg>
-              </button>
-              <button className={TOOLBAR_BTN} onClick={handleZoomIn} title="Zoom in">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="11" cy="11" r="8" />
-                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                  <line x1="11" y1="8" x2="11" y2="14" />
-                  <line x1="8" y1="11" x2="14" y2="11" />
-                </svg>
-              </button>
-            </>
-          )}
           <button className={TOOLBAR_BTN} onClick={toggleMaximize} title={isMaximized ? "Exit fullscreen" : "Fullscreen"}>
             {isMaximized ? (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

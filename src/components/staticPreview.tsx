@@ -111,6 +111,20 @@ const SHADOW_STYLES = `
     animation: opened-link-pop 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   }
 
+  .freeze a.opened-link:has(img),
+  .freeze a.opened-link:has(.image),
+  .freeze a.opened-link img {
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-radius: 0 !important;
+    animation: none !important;
+  }
+
   @keyframes opened-link-pop {
     0% {
       transform: scale(0.9);
@@ -226,7 +240,9 @@ const StaticPreview = memo(function StaticPreview({ winId, title, html, scrollTo
               (oh) => oh === h || (wikiTitle && extractTitle(oh) === wikiTitle),
             )
           ) {
-            a.classList.add("opened-link");
+            if (!a.querySelector("img")) {
+              a.classList.add("opened-link");
+            }
           }
         });
       }
@@ -303,7 +319,9 @@ const StaticPreview = memo(function StaticPreview({ winId, title, html, scrollTo
       if (wikiTitle && callbacksRef.current.onLinkClick) {
         e.preventDefault();
         e.stopPropagation();
-        a.classList.add("opened-link");
+        if (!a.querySelector("img")) {
+          a.classList.add("opened-link");
+        }
         const imageUrl = wikiTitle.startsWith("File:")
           ? (a.querySelector("img")?.getAttribute("src") ?? undefined)
           : undefined;
@@ -311,7 +329,9 @@ const StaticPreview = memo(function StaticPreview({ winId, title, html, scrollTo
       } else if (href && !href.startsWith("#")) {
         e.preventDefault();
         e.stopPropagation();
-        a.classList.add("opened-link");
+        if (!a.querySelector("img")) {
+          a.classList.add("opened-link");
+        }
         if (isPdfUrl(href) && callbacksRef.current.onLinkClick) {
           const pdfTitle = decodeURIComponent(href.split("/").pop()?.split("?")[0]?.split("#")[0] ?? "PDF Document");
           callbacksRef.current.onLinkClick(pdfTitle, undefined, href);

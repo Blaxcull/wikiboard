@@ -26,7 +26,7 @@
   position: absolute;
   top: 80px;
   left: 80px;
-  width: 540px;
+  width: 750px;
   height: 550px;
   min-width: 100px;
   min-height: 100px;
@@ -35,8 +35,7 @@
   background: #e8e8e8;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.08);
   contain: layout;
-  content-visibility: auto;
-  contain-intrinsic-size: 540px 550px;
+  content-visibility: visible;
   transform: translateZ(0);
   animation: window-pop-in 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -155,6 +154,7 @@
   border: none !important;
   outline: none !important;
   box-shadow: none !important;
+  cursor: default !important;
 }
 
 .pdf-window.maximized::before {
@@ -217,10 +217,11 @@
   align-items: center;
   gap: 1px;
   padding: 3px;
-  background: rgba(30, 30, 30, 0.92);
+  background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 0, 0, 0.12);
   border-radius: 8px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
   animation: pdf-toolbox-in 0.12s ease-out;
   z-index: 100001;
 }
@@ -228,6 +229,11 @@
 @keyframes pdf-toolbox-in {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spotlight-in {
+  from { opacity: 0; transform: scale(0.96) translateY(-8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 .pdf-selection-toolbox-btn {
@@ -240,20 +246,20 @@
   border: none;
   border-radius: 5px;
   background: transparent;
-  color: #e0e0e0;
+  color: #333;
   cursor: pointer;
   transition: background 0.1s, color 0.1s;
 }
 
 .pdf-selection-toolbox-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
-  color: #fff;
+  background: rgba(0, 0, 0, 0.08);
+  color: #000;
 }
 
 .pdf-selection-toolbox-divider {
   width: 1px;
   height: 20px;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.12);
   margin: 0 2px;
 }
 

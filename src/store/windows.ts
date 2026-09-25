@@ -50,7 +50,7 @@ type WindowsStore = {
   spawnWindows: (count: number, startIdx: number, titles?: string[]) => void;
 };
 
-export const DEFAULT_WIDTH = 540;
+export const DEFAULT_WIDTH = 750;
 export const DEFAULT_HEIGHT = 550;
 
 let windowCount = 0;

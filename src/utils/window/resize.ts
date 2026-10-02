@@ -17,17 +17,12 @@ function computeCursorDirection(
   const relX = mouseX - left;
   const relY = mouseY - top;
 
-  let cornerX = width;
   let cornerY = height;
-
   if (target?.classList.contains("pdf-window")) {
-    const bottomOffset = parseFloat(target.style.getPropertyValue("--canvas-bottom-offset")) || 0;
-    const rightOffset = parseFloat(target.style.getPropertyValue("--canvas-right-offset")) || 0;
-    if (bottomOffset > 0) cornerY = height - bottomOffset;
-    if (rightOffset > 0) cornerX = width - rightOffset;
+    cornerY = height - 64;
   }
 
-  const nearRight = (relX >= cornerX - CORNER_MARGIN && relX <= cornerX + CORNER_MARGIN) || relX >= width - CORNER_MARGIN;
+  const nearRight = relX >= width - CORNER_MARGIN;
   const nearBottom = (relY >= cornerY - CORNER_MARGIN && relY <= cornerY + CORNER_MARGIN) || relY >= height - CORNER_MARGIN;
 
   if (nearBottom && nearRight) return 'se-resize';
@@ -89,7 +84,7 @@ export function Resize(
 
   isResizingWindow = true;
   activeResizingWindowId = target.id.replace(/^win-/, "");
-  let frameRequested = false;
+  let rafId = 0;
 
   const nextZ = (useWindows.getState().maxZIndex) + 1;
 
@@ -112,11 +107,11 @@ export function Resize(
   function onMouseMove(ev: MouseEvent) {
     lastX = ev.clientX;
     lastY = ev.clientY;
-    if (isDraggingWindow || frameRequested) return;
-    frameRequested = true;
+    if (isDraggingWindow || rafId) return;
 
-    requestAnimationFrame(() => {
-      frameRequested = false;
+    rafId = requestAnimationFrame(() => {
+      rafId = 0;
+      if (!isResizingWindow) return;
       applyGestureSetup();
 
       const curCam = getCamera();
@@ -169,7 +164,15 @@ export function Resize(
     });
   }
 
-  function onMouseUp() {
+  function onMouseUp(ev?: MouseEvent) {
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+    }
+    if (ev) {
+      lastX = ev.clientX;
+      lastY = ev.clientY;
+    }
     applyGestureSetup();
 
     document.body.style.cursor = "";

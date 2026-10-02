@@ -1,5 +1,7 @@
 import { useWindows } from "../../store/windows";
 import { getCamera } from "../camera";
+import { setZoomImmediate } from "../canvas/zoom";
+import { isResizingWindow } from "./resize";
 
 // shared flag so other handlers can skip work while a drag is active
 export let isDraggingWindow = false;
@@ -14,46 +16,35 @@ export default function startDrag(
   onDragEnd?: (pos: { x: number; y: number }) => void,
   onActivate?: () => void,
 ) {
-  const raw = e.currentTarget.parentElement;
-  if (!raw) return;
-  const target: HTMLElement = raw;
+  if (isResizingWindow) return;
+
+  const target = (e.currentTarget.closest(".window") as HTMLElement) || e.currentTarget.parentElement;
+  if (!target) return;
 
   const startX = e.clientX;
   const startY = e.clientY;
 
-  // Read geometry from style — these are world-space coordinates
-  const baseLeft = parseFloat(target.style.left) || 0;
-  const baseTop = parseFloat(target.style.top) || 0;
-  const width = parseFloat(target.style.width) || 750;
-  const height = parseFloat(target.style.height) || 550;
-
-  // Edge margin check in screen space
+  // Freeze any active smooth camera pan/zoom animations immediately so camera stays static during drag
   const cam = getCamera();
-  const EDGE_MARGIN = 5;
-  const screenLeft = baseLeft * cam.zoom + cam.panX;
-  const screenTop = baseTop * cam.zoom + cam.panY;
-  const screenW = width * cam.zoom;
-  const screenH = height * cam.zoom;
-  const relX = startX - screenLeft;
-  const relY = startY - screenTop;
-  if (
-    relX <= EDGE_MARGIN || relX >= screenW - EDGE_MARGIN ||
-    relY <= EDGE_MARGIN || relY >= screenH - EDGE_MARGIN
-  ) return;
+  setZoomImmediate(cam.zoom, cam.panX, cam.panY);
+
+  // Read geometry from style/layout — these are world-space coordinates
+  const baseLeft = parseFloat(target.style.left) || target.offsetLeft || 0;
+  const baseTop = parseFloat(target.style.top) || target.offsetTop || 0;
 
   isDraggingWindow = true;
   activeDraggedWindowId = target.id.replace(/^win-/, "");
 
-  const shiftX = startX - screenLeft;
-  const shiftY = startY - screenTop;
+  const startWorldMouseX = (startX - cam.panX) / cam.zoom;
+  const startWorldMouseY = (startY - cam.panY) / cam.zoom;
+  const worldShiftX = startWorldMouseX - baseLeft;
+  const worldShiftY = startWorldMouseY - baseTop;
 
   const nextZ = useWindows.getState().maxZIndex + 1;
 
-  let framePending = false;
+  let rafId = 0;
   let mouseX = startX;
   let mouseY = startY;
-  let lastWorldDx = 0;
-  let lastWorldDy = 0;
   let setupDone = false;
 
   function applyGestureSetup() {
@@ -68,23 +59,18 @@ export default function startDrag(
   applyGestureSetup();
 
   function updatePosition() {
-    framePending = false;
+    rafId = 0;
+    if (!isDraggingWindow) return;
     applyGestureSetup();
 
     const curCam = getCamera();
-    const screenDx = mouseX - shiftX - screenLeft;
-    const screenDy = mouseY - shiftY - screenTop;
-    // Transform is inside the scaled world container, so use world-space units
-    const worldDx = screenDx / curCam.zoom;
-    const worldDy = screenDy / curCam.zoom;
+    const curWorldMouseX = (mouseX - curCam.panX) / curCam.zoom;
+    const curWorldMouseY = (mouseY - curCam.panY) / curCam.zoom;
+    const newWorldLeft = curWorldMouseX - worldShiftX;
+    const newWorldTop = curWorldMouseY - worldShiftY;
 
-    // Round to nearest pixel to avoid sub-pixel shift when switching from
-    // transform to left/top on mouseup
-    const rdx = Math.round(worldDx);
-    const rdy = Math.round(worldDy);
-
-    lastWorldDx = rdx;
-    lastWorldDy = rdy;
+    const rdx = Math.round(newWorldLeft - baseLeft);
+    const rdy = Math.round(newWorldTop - baseTop);
 
     target.style.transform = `translate3d(${rdx}px, ${rdy}px, 0)`;
   }
@@ -93,17 +79,28 @@ export default function startDrag(
     mouseX = ev.clientX;
     mouseY = ev.clientY;
 
-    if (!framePending) {
-      framePending = true;
-      requestAnimationFrame(updatePosition);
+    if (!rafId) {
+      rafId = requestAnimationFrame(updatePosition);
     }
   }
 
-  function onMouseUp() {
+  function onMouseUp(ev?: MouseEvent) {
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+    }
+
+    if (ev) {
+      mouseX = ev.clientX;
+      mouseY = ev.clientY;
+    }
     applyGestureSetup();
 
-    const finalLeft = baseLeft + lastWorldDx;
-    const finalTop = baseTop + lastWorldDy;
+    const curCam = getCamera();
+    const curWorldMouseX = (mouseX - curCam.panX) / curCam.zoom;
+    const curWorldMouseY = (mouseY - curCam.panY) / curCam.zoom;
+    const finalLeft = Math.round(curWorldMouseX - worldShiftX);
+    const finalTop = Math.round(curWorldMouseY - worldShiftY);
 
     target.style.transform = "";
     target.style.left = `${finalLeft}px`;

@@ -15,17 +15,12 @@ function computeCursor(
   const relX = mouseX - left;
   const relY = mouseY - top;
 
-  let cornerX = width;
   let cornerY = height;
-
   if (target?.classList.contains("pdf-window")) {
-    const bottomOffset = parseFloat(target.style.getPropertyValue("--canvas-bottom-offset")) || 0;
-    const rightOffset = parseFloat(target.style.getPropertyValue("--canvas-right-offset")) || 0;
-    if (bottomOffset > 0) cornerY = height - bottomOffset;
-    if (rightOffset > 0) cornerX = width - rightOffset;
+    cornerY = height - 64;
   }
 
-  const nearRight = (relX >= cornerX - CORNER_MARGIN && relX <= cornerX + CORNER_MARGIN) || relX >= width - CORNER_MARGIN;
+  const nearRight = relX >= width - CORNER_MARGIN;
   const nearBottom = (relY >= cornerY - CORNER_MARGIN && relY <= cornerY + CORNER_MARGIN) || relY >= height - CORNER_MARGIN;
 
   if (nearBottom && nearRight) return 'se-resize';
@@ -49,7 +44,7 @@ export function OnEdge(e: React.MouseEvent<HTMLDivElement>) {
     const worldMouseX = (e.clientX - cam.panX) / cam.zoom;
     const worldMouseY = (e.clientY - cam.panY) / cam.zoom;
 
-    const cursor = computeCursor(worldMouseX, worldMouseY, left, top, width, height, element)
+    const cursor = computeCursor(worldMouseX, worldMouseY, left, top, width, height, element);
 
     if (cursor !== lastCursor) {
         element.style.cursor = cursor

@@ -131,17 +131,8 @@ export function focusWindowAndParent(child: WindowRect, parent?: WindowRect) {
       panX = vw / 2 - wCenterX * zoom;
       panY = (topPadding + (vh - bottomPadding)) / 2 - wCenterY * zoom;
     } else {
-      // Screen is narrower than combined width; align child to the right side of the screen
-      const childRightScreen = (child.x + child.width) * zoom;
-      panX = vw - sidePadding - childRightScreen;
-
-      // Ensure child left edge is not cut off if child width itself fits
-      if (child.width * zoom <= availW) {
-        const childLeftScreen = child.x * zoom + panX;
-        if (childLeftScreen < sidePadding) {
-          panX = sidePadding - child.x * zoom;
-        }
-      }
+      // Screen is narrower than combined width; align parent to the left side of the screen
+      panX = sidePadding - parent.x * zoom;
 
       const childCenterY = child.y + child.height / 2;
       panY = (topPadding + (vh - bottomPadding)) / 2 - childCenterY * zoom;

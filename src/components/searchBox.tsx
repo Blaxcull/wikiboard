@@ -25,7 +25,7 @@ export default function SearchBox() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+      if (e.altKey && (e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar')) {
         e.preventDefault()
         mouseMovedRef.current = false
         lastMousePosRef.current = null

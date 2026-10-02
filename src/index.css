@@ -102,6 +102,18 @@
   -webkit-user-select: none !important;
 }
 
+.window.sticky-window {
+  background: #eee7a6 !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  border-radius: 4px !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12), 0 3px 10px rgba(0, 0, 0, 0.06) !important;
+}
+
+.window.wire-target-hover {
+  box-shadow: 0 0 0 3px #a0a0a0, 0 8px 24px rgba(0, 0, 0, 0.18) !important;
+  border-color: #707070 !important;
+}
+
 .pdf-window {
   background: transparent !important;
   border: none !important;
@@ -113,11 +125,7 @@
   overflow: visible;
   padding: 0;
   margin: 0;
-  will-change: left, top, width, height;
-  transition: left 0.6s cubic-bezier(0.25, 0.1, 0.25, 1),
-              top 0.6s cubic-bezier(0.25, 0.1, 0.25, 1),
-              width 0.6s cubic-bezier(0.25, 0.1, 0.25, 1),
-              height 0.6s cubic-bezier(0.25, 0.1, 0.25, 1);
+  will-change: transform;
 }
 
 .pdf-window.dragging,
@@ -307,45 +315,35 @@
 
 .connection-point {
   position: absolute;
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
+  padding: 0;
   border-radius: 50%;
   background: #a0a0a0;
   border: 1px solid #000;
   opacity: 0;
-  transition: opacity 0.15s ease;
-  pointer-events: none;
-  z-index: 10;
+  transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  pointer-events: auto;
+  cursor: pointer;
+  z-index: 20;
 }
 
-.window:hover > .connection-point {
+.window:hover .connection-point {
   opacity: 1;
 }
 
-.connection-point.point-top    { top: -5px;  left: 50%;  transform: translateX(-50%); }
-.connection-point.point-right  { right: -5px; top: 50%;  transform: translateY(-50%); }
-.connection-point.point-bottom { bottom: -5px; left: 50%; transform: translateX(-50%); }
-.connection-point.point-left   { left: -5px;  top: 50%;  transform: translateY(-50%); }
-
-.pdf-window .connection-point.point-top {
-  top: calc(var(--canvas-top-offset, 0px) - 5px);
+.connection-point:hover {
+  background: #3b82f6 !important;
+  border-color: #1d4ed8 !important;
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.6);
 }
 
-.pdf-window .connection-point.point-bottom {
-  bottom: calc(var(--canvas-bottom-offset, 64px) - 5px);
-}
+.connection-point.point-top    { top: -6px;  left: 50%;  transform: translateX(-50%); }
+.connection-point.point-right  { right: -6px; top: 50%;  transform: translateY(-50%); }
+.connection-point.point-bottom { bottom: -6px; left: 50%; transform: translateX(-50%); }
+.connection-point.point-left   { left: -6px;  top: 50%;  transform: translateY(-50%); }
 
-.pdf-window .connection-point.point-left {
-  left: calc(var(--canvas-left-offset, 0px) - 5px);
-  top: var(--canvas-center-y, 50%);
-  transform: translateY(-50%);
-}
 
-.pdf-window .connection-point.point-right {
-  right: calc(var(--canvas-right-offset, 0px) - 5px);
-  top: var(--canvas-center-y, 50%);
-  transform: translateY(-50%);
-}
 
 /* ── Canvas / Infinite viewport ──────────────────────────── */
 

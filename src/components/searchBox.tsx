@@ -13,11 +13,22 @@ export default function SearchBox() {
   const [loading, setLoading] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const mouseMovedRef = useRef(false)
+  const lastMousePosRef = useRef<{ x: number; y: number } | null>(null)
+
+  useEffect(() => {
+    if (visible) {
+      mouseMovedRef.current = false
+      lastMousePosRef.current = null
+    }
+  }, [visible])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
         e.preventDefault()
+        mouseMovedRef.current = false
+        lastMousePosRef.current = null
         setVisible(true)
         setTimeout(() => {
           inputRef.current?.focus()
@@ -123,12 +134,34 @@ export default function SearchBox() {
     }
   }
 
+  const handleContainerMouseMoveCapture = (e: React.MouseEvent) => {
+    if (mouseMovedRef.current) return
+    if (lastMousePosRef.current === null) {
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY }
+      return
+    }
+    if (
+      e.clientX !== lastMousePosRef.current.x ||
+      e.clientY !== lastMousePosRef.current.y
+    ) {
+      mouseMovedRef.current = true
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY }
+    }
+  }
+
+  const handleItemHover = (i: number) => {
+    if (mouseMovedRef.current) {
+      setSelectedIndex(i)
+    }
+  }
+
   if (!visible) return null
 
   return (
     <div
       className="fixed inset-0 z-[99999] flex items-start justify-center pt-[10vh] bg-black/30 backdrop-blur-[8px] transition-all duration-200"
       onClick={() => setVisible(false)}
+      onMouseMoveCapture={handleContainerMouseMoveCapture}
     >
       <div
         className="w-[660px] max-w-[92vw] bg-white/90 backdrop-blur-2xl border border-black/10 shadow-[0_24px_60px_rgba(0,0,0,0.18)] rounded-2xl overflow-hidden flex flex-col animate-[spotlight-in_0.15s_cubic-bezier(0.16,1,0.3,1)]"
@@ -174,7 +207,8 @@ export default function SearchBox() {
                         ? 'bg-black/10 text-gray-900 font-normal shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]'
                         : 'text-gray-700 hover:bg-black/5'
                     }`}
-                    onMouseEnter={() => setSelectedIndex(i)}
+                    onMouseEnter={() => handleItemHover(i)}
+                    onMouseMove={() => handleItemHover(i)}
                     onClick={() => openArticle(s.title, s.url)}
                   >
                     <span className="flex items-center gap-3.5 truncate">

@@ -17,12 +17,18 @@ export type WindowData = {
   lastFocusedAt: number;
   /** ID of the parent window that spawned this one via link click */
   parentId?: string;
+  /** IDs of all parent windows connected to this window */
+  parentIds?: string[];
   /** href of the link in the parent window that spawned this child window */
   sourceHref?: string;
   /** Pre-extracted image src for File: pages — skips the fetchFileUrl API call */
   directImageUrl?: string;
-  /** Content type discriminator: "article" (default) or "pdf" */
-  contentType?: "article" | "pdf";
+  /** Content type discriminator: "article" (default), "pdf", or "sticky" */
+  contentType?: "article" | "pdf" | "sticky";
+  /** Text stored in a sticky note window */
+  stickyText?: string;
+  /** Preferred attachment side when spawned from a parent window connection point */
+  side?: "TOP" | "RIGHT" | "BOTTOM" | "LEFT";
   /** URL or blob URL for PDF file */
   pdfUrl?: string;
   /** Current page number (1-indexed) */
@@ -85,12 +91,48 @@ export const useWindows = create<WindowsStore>((set) => ({
       if (data?.parentId && data?.x == null && data?.y == null) {
         parentWindow = state.windows.find((w) => w.id === data.parentId);
         if (parentWindow) {
-          const pw = parentWindow.width ?? DEFAULT_WIDTH;
-          const GAP = 140; // Open a little far away for clear separation
-          const existingChildren = state.windows.filter((w) => w.parentId === data.parentId);
-          const childIdx = existingChildren.length;
-          posX = (parentWindow.x ?? 0) + pw + GAP + childIdx * 40;
-          posY = (parentWindow.y ?? 0) + childIdx * 40;
+          const parentEl = typeof document !== "undefined" ? document.getElementById(`win-${parentWindow.id}`) : null;
+          let px = parentWindow.x ?? 0;
+          let py = parentWindow.y ?? 0;
+          let pw = parentWindow.width ?? DEFAULT_WIDTH;
+          let ph = parentWindow.height ?? DEFAULT_HEIGHT;
+          if (parentEl) {
+            const styleLeft = parseFloat(parentEl.style.left) || parentEl.offsetLeft || px;
+            const styleTop = parseFloat(parentEl.style.top) || parentEl.offsetTop || py;
+            const t = parentEl.style.transform;
+            let tx = 0, ty = 0;
+            if (t) {
+              const mx = t.match(/translate3d\(([-\d.]+)px/);
+              const my = t.match(/translate3d\([-\d.]+px,\s*([-\d.]+)px/);
+              if (mx) tx = parseFloat(mx[1]) || 0;
+              if (my) ty = parseFloat(my[1]) || 0;
+            }
+            px = styleLeft + tx;
+            py = styleTop + ty;
+            pw = parentEl.offsetWidth || pw;
+            ph = parentEl.offsetHeight || ph;
+          }
+          const GAP = 160;
+          const side = data.side ?? "RIGHT";
+          const existingChildrenOnSide = state.windows.filter(
+            (w) => w.parentId === data.parentId && (w.side ?? "RIGHT") === side,
+          );
+          const childIdx = existingChildrenOnSide.length;
+
+          if (side === "LEFT") {
+            posX = px - childW - GAP;
+            posY = py + (ph - childH) / 2 + childIdx * 30;
+          } else if (side === "TOP") {
+            posX = px + (pw - childW) / 2 + childIdx * 30;
+            posY = py - childH - GAP;
+          } else if (side === "BOTTOM") {
+            posX = px + (pw - childW) / 2 + childIdx * 30;
+            posY = py + ph + GAP;
+          } else {
+            // RIGHT
+            posX = px + pw + GAP;
+            posY = py + (ph - childH) / 2 + childIdx * 30;
+          }
         } else {
           posX = center.x - DEFAULT_WIDTH / 2 + offset;
           posY = center.y - DEFAULT_HEIGHT / 2 + offset;
@@ -134,6 +176,7 @@ export const useWindows = create<WindowsStore>((set) => ({
             y: posY,
             width: childW,
             height: childH,
+            parentIds: data?.parentIds ?? (data?.parentId ? [data.parentId] : []),
             ...data,
           },
         ],
@@ -153,7 +196,13 @@ export const useWindows = create<WindowsStore>((set) => ({
         }
       }
       return {
-        windows: state.windows.filter((w) => w.id !== id),
+        windows: state.windows
+          .filter((w) => w.id !== id)
+          .map((w) => ({
+            ...w,
+            parentIds: w.parentIds?.filter((pid) => pid !== id),
+            parentId: w.parentId === id ? undefined : w.parentId,
+          })),
       };
     }),
 

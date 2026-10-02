@@ -6,6 +6,7 @@ import SearchBox from './components/searchBox'
 import ArticleView from './components/articleView'
 import PdfViewer from './components/pdfViewer'
 import ImageViewer from './components/imageViewer'
+import StickyNote from './components/stickyNote'
 import { useWindows, type WindowData, nextCascadeOffset } from './store/windows'
 import { deleteScroll } from './utils/scrollMemory'
 import { evictClosedWindowArticles } from './utils/articleCache'
@@ -14,6 +15,7 @@ import { startCanvasPan } from './utils/canvas/pan'
 import { handleZoom } from './utils/canvas/zoom'
 import { isDraggingWindow, activeDraggedWindowId } from './utils/window/drag'
 import { isResizingWindow, activeResizingWindowId, Resize } from './utils/window/resize'
+import { startWireDrag, subscribeWire } from './utils/window/wireDrag'
 
 const ARROW_CTRL = 0.4;
 const ARROW_LEN = 16;
@@ -57,41 +59,47 @@ const PAIRS: [Side, Side][] = ALL_SIDES.flatMap((ps) => ALL_SIDES.map((cs) => [p
 function computeArrow(
   px: number, py: number, pw: number, ph: number,
   cx: number, cy: number, cw: number, ch: number,
+  preferredSide?: Side,
 ): ArrowResult {
   const ncx = cx + cw / 2;
   const ncy = cy + ch / 2;
   const dx = ncx - (px + pw / 2);
   const dy = ncy - (py + ph / 2);
 
-  let bestCost = Infinity;
-  let bestExit = { x: 0, y: 0 };
-  let bestEntry = { x: 0, y: 0 };
   let bestParentSide: Side = 'RIGHT';
   let bestChildSide: Side = 'LEFT';
 
-  for (const [ps, cs] of PAIRS) {
-    const exit = sidePoint(ps, px, py, pw, ph);
-    const entry = sidePoint(cs, cx, cy, cw, ch);
-    const dist = Math.hypot(entry.x - exit.x, entry.y - exit.y);
-    const dot = (entry.x - exit.x) * dx + (entry.y - exit.y) * dy;
-    const cost = dist + (dot < 0 ? 2000 : 0);
-    if (cost < bestCost) {
-      bestCost = cost;
-      bestExit = exit;
-      bestEntry = entry;
-      bestParentSide = ps;
-      bestChildSide = cs;
+  if (preferredSide) {
+    bestParentSide = preferredSide;
+    switch (preferredSide) {
+      case 'RIGHT':  bestChildSide = 'LEFT'; break;
+      case 'LEFT':   bestChildSide = 'RIGHT'; break;
+      case 'TOP':    bestChildSide = 'BOTTOM'; break;
+      case 'BOTTOM': bestChildSide = 'TOP'; break;
+    }
+  } else {
+    let bestCost = Infinity;
+    for (const [ps, cs] of PAIRS) {
+      const exit = sidePoint(ps, px, py, pw, ph);
+      const entry = sidePoint(cs, cx, cy, cw, ch);
+      const dist = Math.hypot(entry.x - exit.x, entry.y - exit.y);
+      const dot = (entry.x - exit.x) * dx + (entry.y - exit.y) * dy;
+      const cost = dist + (dot < 0 ? 2000 : 0);
+      if (cost < bestCost) {
+        bestCost = cost;
+        bestParentSide = ps;
+        bestChildSide = cs;
+      }
     }
   }
 
-  const sx = bestExit.x;
-  const sy = bestExit.y;
-  const ex = bestEntry.x;
-  const ey = bestEntry.y;
+  const exit = sidePoint(bestParentSide, px, py, pw, ph);
+  const entry = sidePoint(bestChildSide, cx, cy, cw, ch);
 
-  const ctrlDist = Math.hypot(ex - sx, ey - sy) * ARROW_CTRL;
-  const c1 = controlOffset(bestParentSide, bestExit, ctrlDist);
-  const c2 = controlOffset(bestChildSide, bestEntry, ctrlDist);
+  const sx = exit.x;
+  const sy = exit.y;
+  const ex = entry.x;
+  const ey = entry.y;
 
   // Arrowhead pointing inward from the child's entry side
   const tipX = ex;
@@ -121,7 +129,25 @@ function computeArrow(
       break;
   }
 
-  return { sx, sy, c1x: c1.x, c1y: c1.y, c2x: c2.x, c2y: c2.y, ex, ey, tipX, tipY, bcx, bcy, b1x, b1y, b2x, b2y, childSide: bestChildSide };
+  const isStraight = Math.abs(sx - ex) < 3 || Math.abs(sy - ey) < 3;
+  let c1x: number, c1y: number, c2x: number, c2y: number;
+
+  if (isStraight) {
+    c1x = sx;
+    c1y = sy;
+    c2x = bcx;
+    c2y = bcy;
+  } else {
+    const ctrlDist = Math.hypot(ex - sx, ey - sy) * ARROW_CTRL;
+    const c1 = controlOffset(bestParentSide, exit, ctrlDist);
+    const c2 = controlOffset(bestChildSide, { x: bcx, y: bcy }, ctrlDist);
+    c1x = c1.x;
+    c1y = c1.y;
+    c2x = c2.x;
+    c2y = c2.y;
+  }
+
+  return { sx, sy, c1x, c1y, c2x, c2y, ex, ey, tipX, tipY, bcx, bcy, b1x, b1y, b2x, b2y, childSide: bestChildSide };
 }
 
 function readWindowPos(el: HTMLElement): { x: number; y: number; w: number; h: number; zIndex: number } {
@@ -189,22 +215,37 @@ const ConnectionArrows = memo(function ConnectionArrows({
     const arrowSvg = arrowSvgRef.current;
     if (!lineSvg || !arrowSvg) return;
 
-    const parentIds = new Set(windows.map((w) => w.id));
-    const children = windows.filter((w) => w.parentId && parentIds.has(w.parentId));
-    const existing = new Set(elRefs.current.keys());
-    const needed = new Set(children.map((w) => w.id));
+    const winIds = new Set(windows.map((w) => w.id));
+    const links: { key: string; parentId: string; childId: string }[] = [];
 
-    for (const id of existing) {
-      if (!needed.has(id)) {
-        const els = elRefs.current.get(id);
-        els?.[0].remove();
-        els?.[1].remove();
-        elRefs.current.delete(id);
+    for (const child of windows) {
+      const pSet = new Set<string>();
+      if (child.parentIds) {
+        for (const pid of child.parentIds) pSet.add(pid);
+      }
+      if (child.parentId) pSet.add(child.parentId);
+
+      for (const pid of pSet) {
+        if (winIds.has(pid)) {
+          links.push({ key: `${pid}->${child.id}`, parentId: pid, childId: child.id });
+        }
       }
     }
 
-    for (const w of children) {
-      if (!elRefs.current.has(w.id)) {
+    const neededKeys = new Set(links.map((l) => l.key));
+    const existingKeys = new Set(elRefs.current.keys());
+
+    for (const key of existingKeys) {
+      if (!neededKeys.has(key)) {
+        const els = elRefs.current.get(key);
+        els?.[0].remove();
+        els?.[1].remove();
+        elRefs.current.delete(key);
+      }
+    }
+
+    for (const link of links) {
+      if (!elRefs.current.has(link.key)) {
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         path.setAttribute('fill', 'none');
         path.setAttribute('stroke', '#a0a0a0');
@@ -215,7 +256,7 @@ const ConnectionArrows = memo(function ConnectionArrows({
 
         lineSvg.appendChild(path);
         arrowSvg.appendChild(poly);
-        elRefs.current.set(w.id, [path, poly]);
+        elRefs.current.set(link.key, [path, poly]);
       }
     }
   }, [windows]);
@@ -254,11 +295,11 @@ const ConnectionArrows = memo(function ConnectionArrows({
       }
     }
 
-    for (const [id, [path, poly]] of elRefs.current) {
-      const child = byId.get(id);
-      if (!child || !child.parentId) continue;
-      const parent = byId.get(child.parentId);
-      if (!parent) continue;
+    for (const [key, [path, poly]] of elRefs.current) {
+      const parts = key.split("->");
+      const parent = byId.get(parts[0]);
+      const child = byId.get(parts[1]);
+      if (!parent || !child) continue;
 
       const parentPos = posMap.get(parent.id);
       const childPos = posMap.get(child.id);
@@ -269,16 +310,9 @@ const ConnectionArrows = memo(function ConnectionArrows({
 
       const a = computeArrow(px, py, pw, ph, cx, cy, cw, ch);
 
-      const isImageChild = !!(child.directImageUrl || child.title.startsWith("File:"));
-
-      if (isImageChild) {
-        path.setAttribute('d', `M${a.sx},${a.sy} C${a.c1x},${a.c1y} ${a.c2x},${a.c2y} ${a.ex},${a.ey}`);
-        poly.style.display = 'none';
-      } else {
-        path.setAttribute('d', `M${a.sx},${a.sy} C${a.c1x},${a.c1y} ${a.c2x},${a.c2y} ${a.bcx},${a.bcy}`);
-        poly.setAttribute('points', `${a.tipX},${a.tipY} ${a.b1x},${a.b1y} ${a.b2x},${a.b2y}`);
-        poly.style.display = '';
-      }
+      path.setAttribute('d', `M${a.sx},${a.sy} C${a.c1x},${a.c1y} ${a.c2x},${a.c2y} ${a.bcx},${a.bcy}`);
+      poly.setAttribute('points', `${a.tipX},${a.tipY} ${a.b1x},${a.b1y} ${a.b2x},${a.b2y}`);
+      poly.style.display = '';
       path.style.display = '';
     }
   }, [windows]);
@@ -349,6 +383,103 @@ const ConnectionArrows = memo(function ConnectionArrows({
   );
 });
 
+const LiveWireOverlay = memo(function LiveWireOverlay() {
+  const pathRef = useRef<SVGPathElement>(null);
+  const polyRef = useRef<SVGPolygonElement>(null);
+
+  useEffect(() => {
+    return subscribeWire((wire) => {
+      const path = pathRef.current;
+      const poly = polyRef.current;
+      if (!path || !poly) return;
+
+      if (!wire) {
+        path.style.display = "none";
+        poly.style.display = "none";
+        return;
+      }
+
+      const { sx, sy, mx, my, sourceSide } = wire;
+      const dist = Math.hypot(mx - sx, my - sy);
+
+      const ARROW_LEN = 15;
+      const ARROW_HALF = 8;
+
+      let tipX = mx;
+      let tipY = my;
+      let angle = 0;
+
+      if (dist < 12) {
+        let dirX = 1, dirY = 0;
+        switch (sourceSide) {
+          case 'RIGHT':  dirX = 1; dirY = 0; angle = 0; break;
+          case 'LEFT':   dirX = -1; dirY = 0; angle = Math.PI; break;
+          case 'TOP':    dirX = 0; dirY = -1; angle = -Math.PI / 2; break;
+          case 'BOTTOM': dirX = 0; dirY = 1; angle = Math.PI / 2; break;
+        }
+        tipX = sx + 20 * dirX;
+        tipY = sy + 20 * dirY;
+      } else {
+        const ctrlDistInitial = Math.min(dist * 0.45, 140);
+        const c1Initial = controlOffset(sourceSide, { x: sx, y: sy }, ctrlDistInitial);
+        angle = Math.atan2(my - c1Initial.y, mx - c1Initial.x);
+      }
+
+      const bcx = tipX - ARROW_LEN * Math.cos(angle);
+      const bcy = tipY - ARROW_LEN * Math.sin(angle);
+      const b1x = bcx + ARROW_HALF * Math.sin(angle);
+      const b1y = bcy - ARROW_HALF * Math.cos(angle);
+      const b2x = bcx - ARROW_HALF * Math.sin(angle);
+      const b2y = bcy + ARROW_HALF * Math.cos(angle);
+
+      const isStraightHoriz = (sourceSide === 'RIGHT' || sourceSide === 'LEFT') && Math.abs(sy - my) < 6;
+      const isStraightVert = (sourceSide === 'TOP' || sourceSide === 'BOTTOM') && Math.abs(sx - mx) < 6;
+
+      if (dist < 12 || isStraightHoriz || isStraightVert) {
+        path.setAttribute("d", `M${sx},${sy} L${bcx},${bcy}`);
+      } else {
+        const ctrlDist = Math.min(dist * 0.45, 150);
+        const c1 = controlOffset(sourceSide, { x: sx, y: sy }, ctrlDist);
+        const c2x = bcx - ctrlDist * 0.5 * Math.cos(angle);
+        const c2y = bcy - ctrlDist * 0.5 * Math.sin(angle);
+
+        path.setAttribute("d", `M${sx},${sy} C${c1.x},${c1.y} ${c2x},${c2y} ${bcx},${bcy}`);
+      }
+
+      path.style.display = "";
+      poly.setAttribute("points", `${tipX},${tipY} ${b1x},${b1y} ${b2x},${b2y}`);
+      poly.style.display = "";
+    });
+  }, []);
+
+  return (
+    <>
+      <svg
+        className="connection-arrows"
+        style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, overflow: 'visible', pointerEvents: 'none', zIndex: 1000 }}
+      >
+        <path
+          ref={pathRef}
+          fill="none"
+          stroke="#a0a0a0"
+          strokeWidth="3"
+          style={{ display: "none" }}
+        />
+      </svg>
+      <svg
+        className="connection-arrows"
+        style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, overflow: 'visible', pointerEvents: 'none', zIndex: 1000 }}
+      >
+        <polygon
+          ref={polyRef}
+          fill="#a0a0a0"
+          style={{ display: "none" }}
+        />
+      </svg>
+    </>
+  );
+});
+
 function Fps() {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -404,28 +535,40 @@ const animatePdfMaximize = (
     width: number
     height: number
   },
-  duration = 300,
+  duration = 360,
   onDone?: () => void
 ) => {
-  const first = el.getBoundingClientRect()
-  const firstLeft = parseFloat(el.style.left) || first.left
-  const firstTop = parseFloat(el.style.top) || first.top
-  const firstW = parseFloat(el.style.width) || first.width
-  const firstH = parseFloat(el.style.height) || first.height
+  const firstLeft = parseFloat(el.style.left) || 0
+  const firstTop = parseFloat(el.style.top) || 0
+  const firstW = parseFloat(el.style.width) || target.width
+  const firstH = parseFloat(el.style.height) || target.height
 
+  // Proportional center-to-center uniform zoom (no aspect stretching)
+  const firstCenterX = firstLeft + firstW / 2
+  const firstCenterY = firstTop + firstH / 2
+  const targetCenterX = target.left + target.width / 2
+  const targetCenterY = target.top + target.height / 2
+
+  const translateX = firstCenterX - targetCenterX
+  const translateY = firstCenterY - targetCenterY
+  const scale = target.width > 0 ? firstW / target.width : 1
+
+  // Apply target layout position to DOM once
+  el.style.left = `${target.left}px`
+  el.style.top = `${target.top}px`
+  el.style.width = `${target.width}px`
+  el.style.height = `${target.height}px`
+
+  // Animate smooth uniform GPU scale + translate from center
   const animation = el.animate(
     [
       {
-        left: `${firstLeft}px`,
-        top: `${firstTop}px`,
-        width: `${firstW}px`,
-        height: `${firstH}px`,
+        transform: `translate3d(${translateX}px, ${translateY}px, 0) scale(${scale})`,
+        transformOrigin: "center center",
       },
       {
-        left: `${target.left}px`,
-        top: `${target.top}px`,
-        width: `${target.width}px`,
-        height: `${target.height}px`,
+        transform: "translate3d(0px, 0px, 0) scale(1)",
+        transformOrigin: "center center",
       },
     ],
     {
@@ -436,10 +579,7 @@ const animatePdfMaximize = (
   )
 
   animation.onfinish = () => {
-    el.style.left = `${target.left}px`
-    el.style.top = `${target.top}px`
-    el.style.width = `${target.width}px`
-    el.style.height = `${target.height}px`
+    el.style.transform = ""
     onDone?.()
   }
 }
@@ -451,6 +591,7 @@ const WindowItem = memo(function WindowItem({ w }: { w: WindowData }) {
   const setActive = useWindows((s) => s.setActive)
   const updateWindow = useWindows((s) => s.updateWindow)
   const removeWindow = useWindows((s) => s.removeWindow)
+  const addWindow = useWindows((s) => s.addWindow)
 
   const zIndexStyle = useMemo(
     () => ({ zIndex: w.pdfMaximized ? 10000 : w.zIndex }),
@@ -468,6 +609,20 @@ const WindowItem = memo(function WindowItem({ w }: { w: WindowData }) {
       updateWindow(w.id, pos),
     [w.id, updateWindow],
   )
+
+  const handleAddSticky = useCallback(
+    (side: "TOP" | "RIGHT" | "BOTTOM" | "LEFT") => {
+      addWindow({
+        contentType: "sticky",
+        title: `Note (${w.title.replace(/^File:/i, "").replace(/_/g, " ")})`,
+        parentId: w.id,
+        width: 260,
+        height: 200,
+        side,
+      });
+    },
+    [w.id, w.title, addWindow],
+  );
 
   const pdfRef = useRef<HTMLDivElement | null>(null)
 
@@ -544,6 +699,57 @@ useEffect(() => {
 ])
 
 
+  if (w.contentType === "sticky") {
+    return (
+      <div
+        id={`win-${w.id}`}
+        className={`window sticky-window ${w.active ? "active" : "inactive"}`}
+        style={{
+          ...zIndexStyle,
+          left: `${w.x ?? 80}px`,
+          top: `${w.y ?? 80}px`,
+          width: `${w.width ?? 260}px`,
+          height: `${w.height ?? 200}px`,
+        }}
+        onMouseDown={(e) => {
+          handleActivate();
+          Resize(e, (rect) => handlePositionChange(rect));
+        }}
+      >
+        <StickyNote
+          win={w}
+          onClose={handleClose}
+          onActivate={handleActivate}
+          onPositionChange={handlePositionChange}
+        />
+        <button
+          type="button"
+          className="connection-point point-top"
+          title="Add sticky note"
+          onMouseDown={(e) => startWireDrag(e, w.id, "TOP", handleAddSticky)}
+        />
+        <button
+          type="button"
+          className="connection-point point-right"
+          title="Add sticky note"
+          onMouseDown={(e) => startWireDrag(e, w.id, "RIGHT", handleAddSticky)}
+        />
+        <button
+          type="button"
+          className="connection-point point-bottom"
+          title="Add sticky note"
+          onMouseDown={(e) => startWireDrag(e, w.id, "BOTTOM", handleAddSticky)}
+        />
+        <button
+          type="button"
+          className="connection-point point-left"
+          title="Add sticky note"
+          onMouseDown={(e) => startWireDrag(e, w.id, "LEFT", handleAddSticky)}
+        />
+      </div>
+    );
+  }
+
   if (w.contentType === "pdf") {
     return (
         <div
@@ -580,16 +786,36 @@ useEffect(() => {
 
     Resize(e, (rect) => handlePositionChange(rect))
   }}
-  >
+>
   <div className="pdf-window-animation-layer">
-    <PdfViewer win={w} />
+    <PdfViewer win={w} onAddSticky={handleAddSticky} />
   </div>
   {!w.pdfMaximized && (
     <>
-      <div className="connection-point point-top" />
-      <div className="connection-point point-right" />
-      <div className="connection-point point-bottom" />
-      <div className="connection-point point-left" />
+      <button
+        type="button"
+        className="connection-point point-top"
+        title="Add sticky note"
+        onMouseDown={(e) => startWireDrag(e, w.id, "TOP", handleAddSticky)}
+      />
+      <button
+        type="button"
+        className="connection-point point-right"
+        title="Add sticky note"
+        onMouseDown={(e) => startWireDrag(e, w.id, "RIGHT", handleAddSticky)}
+      />
+      <button
+        type="button"
+        className="connection-point point-bottom"
+        title="Add sticky note"
+        onMouseDown={(e) => startWireDrag(e, w.id, "BOTTOM", handleAddSticky)}
+      />
+      <button
+        type="button"
+        className="connection-point point-left"
+        title="Add sticky note"
+        onMouseDown={(e) => startWireDrag(e, w.id, "LEFT", handleAddSticky)}
+      />
     </>
   )}
 </div>
@@ -619,10 +845,30 @@ useEffect(() => {
           onActivate={handleActivate}
           onPositionChange={handlePositionChange}
         />
-        <div className="connection-point point-top" />
-        <div className="connection-point point-right" />
-        <div className="connection-point point-bottom" />
-        <div className="connection-point point-left" />
+        <button
+          type="button"
+          className="connection-point point-top"
+          title="Add sticky note"
+          onMouseDown={(e) => startWireDrag(e, w.id, "TOP", handleAddSticky)}
+        />
+        <button
+          type="button"
+          className="connection-point point-right"
+          title="Add sticky note"
+          onMouseDown={(e) => startWireDrag(e, w.id, "RIGHT", handleAddSticky)}
+        />
+        <button
+          type="button"
+          className="connection-point point-bottom"
+          title="Add sticky note"
+          onMouseDown={(e) => startWireDrag(e, w.id, "BOTTOM", handleAddSticky)}
+        />
+        <button
+          type="button"
+          className="connection-point point-left"
+          title="Add sticky note"
+          onMouseDown={(e) => startWireDrag(e, w.id, "LEFT", handleAddSticky)}
+        />
       </div>
     )
   }
@@ -640,6 +886,7 @@ useEffect(() => {
       onActivate={handleActivate}
       onClose={handleClose}
       onPositionChange={handlePositionChange}
+      onAddSticky={handleAddSticky}
     >
       {w.url ? <ArticleView win={w} /> : <LinkEditor win={w} />}
     </Window>
@@ -805,6 +1052,7 @@ function App() {
         <div ref={gridRef} className="canvas-grid" />
         <div ref={worldRef} className="canvas-world">
           <ConnectionArrows windows={windows} />
+          <LiveWireOverlay />
           {windows.map((w) => (
             <WindowItem key={w.id} w={w} />
           ))}

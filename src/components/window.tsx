@@ -2,6 +2,7 @@ import { useRef, memo } from "react";
 import startDrag from "@/utils/window/drag";
 import { Resize } from "@/utils/window/resize";
 import { nextCascadeOffset } from "@/store/windows";
+import { startWireDrag } from "@/utils/window/wireDrag";
 
 type WindowProps = {
   /** Inner content to display */
@@ -26,6 +27,8 @@ type WindowProps = {
   onActivate?: () => void;
   /** Called when the window position or size changes */
   onPositionChange?: (pos: { x?: number; y?: number; width?: number; height?: number }) => void;
+  /** Called when any of the 4 connection point dots is clicked */
+  onAddSticky?: (side: "TOP" | "RIGHT" | "BOTTOM" | "LEFT") => void;
 };
 
 const Window = memo(function Window({
@@ -42,6 +45,7 @@ const Window = memo(function Window({
   onClose,
   onActivate,
   onPositionChange,
+  onAddSticky,
 }: React.PropsWithChildren<WindowProps>) {
   const positioned = useRef(false);
 
@@ -100,10 +104,42 @@ const Window = memo(function Window({
 
       {children && <div className="window-content">{children}</div>}
 
-      <div className="connection-point point-top" />
-      <div className="connection-point point-right" />
-      <div className="connection-point point-bottom" />
-      <div className="connection-point point-left" />
+      <button
+        type="button"
+        className="connection-point point-top"
+        title="Add sticky note"
+        onMouseDown={(e) => {
+          const winId = id?.replace(/^win-/, "") || "";
+          startWireDrag(e, winId, "TOP", onAddSticky);
+        }}
+      />
+      <button
+        type="button"
+        className="connection-point point-right"
+        title="Add sticky note"
+        onMouseDown={(e) => {
+          const winId = id?.replace(/^win-/, "") || "";
+          startWireDrag(e, winId, "RIGHT", onAddSticky);
+        }}
+      />
+      <button
+        type="button"
+        className="connection-point point-bottom"
+        title="Add sticky note"
+        onMouseDown={(e) => {
+          const winId = id?.replace(/^win-/, "") || "";
+          startWireDrag(e, winId, "BOTTOM", onAddSticky);
+        }}
+      />
+      <button
+        type="button"
+        className="connection-point point-left"
+        title="Add sticky note"
+        onMouseDown={(e) => {
+          const winId = id?.replace(/^win-/, "") || "";
+          startWireDrag(e, winId, "LEFT", onAddSticky);
+        }}
+      />
     </div>
   );
 });

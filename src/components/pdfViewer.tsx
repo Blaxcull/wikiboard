@@ -14,7 +14,10 @@ const QUALITY_SCALE = 1.5;
 const MIN_PDF_ZOOM = 0.25;
 const MAX_PDF_ZOOM = 5;
 
-type Props = { win: WindowData };
+type Props = {
+  win: WindowData;
+  onAddSticky?: (side: "TOP" | "RIGHT" | "BOTTOM" | "LEFT") => void;
+};
 
 function copyCanvas(source: HTMLCanvasElement, target: HTMLCanvasElement) {
   target.width = source.width;
@@ -26,11 +29,11 @@ function copyCanvas(source: HTMLCanvasElement, target: HTMLCanvasElement) {
 }
 
 const TOOLBAR_BTN =
-  "flex items-center justify-center w-8 h-8 p-0 border-0 rounded-lg bg-black/5 text-[#333] cursor-pointer hover:bg-black/10 hover:text-black active:bg-black/15 disabled:opacity-30 disabled:cursor-not-allowed transition-colors";
+  "flex items-center justify-center w-8 h-8 p-0 border-0 rounded-lg bg-transparent text-[#333] cursor-pointer hover:bg-black/10 hover:text-black active:bg-black/15 disabled:opacity-30 disabled:cursor-not-allowed transition-colors";
 
 import { fetchPdfBuffer } from "../utils/pdfCache";
 
-export default function PdfViewer({ win }: Props) {
+export default function PdfViewer({ win, onAddSticky }: Props) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const docRef = useRef<PDFDocumentProxy | null>(null);
   const [currentPage, setCurrentPage] = useState(win.pdfCurrentPage ?? 1);
@@ -246,58 +249,55 @@ export default function PdfViewer({ win }: Props) {
     }
   }, [isMaximized]);
 
-  // --- Render current page in zoomed-out mode ---
+  // --- Render current page and pre-render adjacent/all pages in zoomed-out mode ---
   useEffect(() => {
-    if (!loading && docRef.current && !isMaximized) {
-      const pageEl = pageRefs.current.get(currentPage);
-      const container = scrollContainerRef.current;
-      const w = pageEl?.clientWidth || (container ? container.clientWidth : 620);
-      if (w > 0) {
-        renderPage(currentPage, w);
-      }
-    }
-  }, [currentPage, isMaximized, loading, renderPage]);
+    if (loading || !docRef.current || isMaximized) return;
+    let isCancelled = false;
 
-  // --- Dynamically update CSS variables for accurate dot placement on all 4 sides ---
-  useEffect(() => {
-    if (isMaximized || loading) return;
-
-    const updateOffset = () => {
-      const container = scrollContainerRef.current;
-      if (!container) return;
-      const canvas = container.querySelector("canvas");
-      const winEl = container.closest(".window") as HTMLElement | null;
-      if (!canvas || !winEl) return;
-
-      const winRect = winEl.getBoundingClientRect();
-      const canvasRect = canvas.getBoundingClientRect();
-      const cam = getCamera();
-      const zoom = cam.zoom || 1;
-
-      const topOffsetPx = (canvasRect.top - winRect.top) / zoom;
-      const bottomOffsetPx = (winRect.bottom - canvasRect.bottom) / zoom;
-      const leftOffsetPx = (canvasRect.left - winRect.left) / zoom;
-      const rightOffsetPx = (winRect.right - canvasRect.right) / zoom;
-      const canvasHeightPx = (canvasRect.bottom - canvasRect.top) / zoom;
-
-      if (topOffsetPx >= 0) winEl.style.setProperty("--canvas-top-offset", `${Math.round(topOffsetPx)}px`);
-      if (bottomOffsetPx >= 0) winEl.style.setProperty("--canvas-bottom-offset", `${Math.round(bottomOffsetPx)}px`);
-      if (leftOffsetPx >= 0) winEl.style.setProperty("--canvas-left-offset", `${Math.round(leftOffsetPx)}px`);
-      if (rightOffsetPx >= 0) winEl.style.setProperty("--canvas-right-offset", `${Math.round(rightOffsetPx)}px`);
-      winEl.style.setProperty("--canvas-center-y", `${Math.round(topOffsetPx + canvasHeightPx / 2)}px`);
-    };
-
-    updateOffset();
     const container = scrollContainerRef.current;
-    const canvas = container?.querySelector("canvas");
-    const winEl = container?.closest(".window") as HTMLElement | null;
+    const pageEl = pageRefs.current.get(currentPage);
+    const w = pageEl?.clientWidth || (container ? container.clientWidth : 620);
 
-    if (!canvas || !winEl) return;
-    const observer = new ResizeObserver(updateOffset);
-    observer.observe(canvas);
-    observer.observe(winEl);
-    return () => observer.disconnect();
-  }, [isMaximized, loading, pageAspectRatio, currentPage]);
+    if (w > 0) {
+      // 1. Render current page immediately
+      renderPage(currentPage, w);
+
+      // 2. Pre-render next, previous, and remaining pages sequentially in memory
+      const queuePreRender = async () => {
+        const priority: number[] = [];
+        // Priority order: next page, previous page, next+1, prev+1
+        const candidates = [
+          currentPage + 1,
+          currentPage - 1,
+          currentPage + 2,
+          currentPage - 2,
+        ];
+        for (const c of candidates) {
+          if (c >= 1 && c <= totalPages && !priority.includes(c)) {
+            priority.push(c);
+          }
+        }
+        for (let p = 1; p <= totalPages; p++) {
+          if (p !== currentPage && !priority.includes(p)) {
+            priority.push(p);
+          }
+        }
+
+        for (const p of priority) {
+          if (isCancelled || isMaximized) break;
+          await renderPage(p, w);
+        }
+      };
+
+      queuePreRender();
+    }
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentPage, isMaximized, loading, totalPages, renderPage]);
+
+
 
   // --- Intersection observer for lazy rendering of visible pages in zoomed-in mode ---
   useEffect(() => {
@@ -657,15 +657,58 @@ export default function PdfViewer({ win }: Props) {
                     className="pdf-text-layer"
                   />
                 )}
+                {!isMaximized && p === currentPage && (
+                  <>
+                    <button
+                      type="button"
+                      className="connection-point point-top"
+                      title="Add sticky note"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddSticky?.("TOP");
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="connection-point point-right"
+                      title="Add sticky note"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddSticky?.("RIGHT");
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="connection-point point-bottom"
+                      title="Add sticky note"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddSticky?.("BOTTOM");
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="connection-point point-left"
+                      title="Add sticky note"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddSticky?.("LEFT");
+                      }}
+                    />
+                  </>
+                )}
               </div>
             );
           })}
         </div>
       </div>
       <div
-        className="pdf-toolbar flex justify-center items-center gap-1 py-1 px-1.5 bg-white/90 backdrop-blur-[12px] border border-black/10 rounded-3xl mx-auto"
+        className="pdf-toolbar flex justify-center items-center gap-1 py-1 px-2 bg-white/90 backdrop-blur-[12px] border border-black/15 shadow-[0_8px_30px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.06)] rounded-full mx-auto"
         style={{
-          boxShadow: "0 4px 16px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.08)",
           opacity: isAnimating ? 0 : 1,
           pointerEvents: isAnimating ? "none" : "auto",
           transition: "opacity 0.2s ease",
@@ -681,149 +724,163 @@ export default function PdfViewer({ win }: Props) {
             : { marginBottom: "16px", marginTop: "16px", width: "fit-content" }),
         }}
       >
-          {isMaximized ? (
-            <button className={TOOLBAR_BTN} title="Bookmark">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M5 2h14a1 1 0 0 1 1 1v19.143a.5.5 0 0 1-.766.424L12 18.03l-7.234 4.536A.5.5 0 0 1 4 22.143V3a1 1 0 0 1 1-1z" />
-              </svg>
-            </button>
-          ) : (
-            <button
-              className={TOOLBAR_BTN}
-              title="Move"
-              onMouseDown={(e) => {
-                if (isMaximized) return;
-                useWindows.getState().setActive(win.id);
-                const targetEl = (e.target as HTMLElement).closest(".pdf-window");
-                if (!targetEl || !(targetEl instanceof HTMLElement)) return;
-                const winEl: HTMLElement = targetEl;
+        {/* Action button (Move / Bookmark) */}
+        {isMaximized ? (
+          <button className={TOOLBAR_BTN} title="Bookmark">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M5 2h14a1 1 0 0 1 1 1v19.143a.5.5 0 0 1-.766.424L12 18.03l-7.234 4.536A.5.5 0 0 1 4 22.143V3a1 1 0 0 1 1-1z" />
+            </svg>
+          </button>
+        ) : (
+          <button
+            className={TOOLBAR_BTN}
+            title="Move"
+            onMouseDown={(e) => {
+              if (isMaximized) return;
+              useWindows.getState().setActive(win.id);
+              const targetEl = (e.target as HTMLElement).closest(".pdf-window");
+              if (!targetEl || !(targetEl instanceof HTMLElement)) return;
+              const winEl: HTMLElement = targetEl;
 
-                winEl.getAnimations().forEach((anim) => anim.cancel());
+              winEl.getAnimations().forEach((anim) => anim.cancel());
 
+              setDraggingWindow(true);
+              winEl.classList.add("dragging");
+              winEl.classList.add("no-transition");
+              winEl.closest(".canvas-world")?.classList.add("gesture-active");
+              document.body.style.cursor = "move";
+
+              const startX = e.clientX;
+              const startY = e.clientY;
+              const baseLeft = parseFloat(winEl.style.left) || winEl.offsetLeft || 0;
+              const baseTop = parseFloat(winEl.style.top) || winEl.offsetTop || 0;
+              const cam = getCamera();
+              const startWorldMouseX = (startX - cam.panX) / cam.zoom;
+              const startWorldMouseY = (startY - cam.panY) / cam.zoom;
+              const worldShiftX = startWorldMouseX - baseLeft;
+              const worldShiftY = startWorldMouseY - baseTop;
+
+              const nextZ = useWindows.getState().maxZIndex + 1;
+              winEl.style.zIndex = String(nextZ);
+
+              let framePending = false;
+              let mouseX = startX;
+              let mouseY = startY;
+
+              function updatePosition() {
+                framePending = false;
+                applyGestureSetup();
+                const curCam = getCamera();
+                const curWorldMouseX = (mouseX - curCam.panX) / curCam.zoom;
+                const curWorldMouseY = (mouseY - curCam.panY) / curCam.zoom;
+                const newWorldLeft = curWorldMouseX - worldShiftX;
+                const newWorldTop = curWorldMouseY - worldShiftY;
+                const rdx = Math.round(newWorldLeft - baseLeft);
+                const rdy = Math.round(newWorldTop - baseTop);
+                winEl.style.transform = `translate3d(${rdx}px, ${rdy}px, 0)`;
+              }
+
+              function onMouseMove(ev: MouseEvent) {
+                mouseX = ev.clientX;
+                mouseY = ev.clientY;
+                if (!framePending) {
+                  framePending = true;
+                  requestAnimationFrame(updatePosition);
+                }
+              }
+
+              let setupDone = false;
+              function applyGestureSetup() {
+                if (setupDone) return;
+                setupDone = true;
                 setDraggingWindow(true);
                 winEl.classList.add("dragging");
                 winEl.classList.add("no-transition");
                 winEl.closest(".canvas-world")?.classList.add("gesture-active");
                 document.body.style.cursor = "move";
+              }
 
-                const startX = e.clientX;
-                const startY = e.clientY;
-                const baseLeft = parseFloat(winEl.style.left) || 0;
-                const baseTop = parseFloat(winEl.style.top) || 0;
-                const cam = getCamera();
-                const screenLeft = baseLeft * cam.zoom + cam.panX;
-                const screenTop = baseTop * cam.zoom + cam.panY;
-                const shiftX = startX - screenLeft;
-                const shiftY = startY - screenTop;
+              function onMouseUp() {
+                applyGestureSetup();
+                const curCam = getCamera();
+                const curWorldMouseX = (mouseX - curCam.panX) / curCam.zoom;
+                const curWorldMouseY = (mouseY - curCam.panY) / curCam.zoom;
+                const newLeft = Math.round(curWorldMouseX - worldShiftX);
+                const newTop = Math.round(curWorldMouseY - worldShiftY);
+                winEl.style.left = `${newLeft}px`;
+                winEl.style.top = `${newTop}px`;
+                winEl.style.transform = "";
+                useWindows.setState({ maxZIndex: nextZ });
+                updateWindow(win.id, { x: newLeft, y: newTop });
+                setDraggingWindow(false);
+                winEl.classList.remove("dragging");
+                winEl.closest(".canvas-world")?.classList.remove("gesture-active");
+                requestAnimationFrame(() => {
+                  winEl.classList.remove("no-transition");
+                  document.body.style.cursor = "";
+                });
+                document.removeEventListener("mousemove", onMouseMove);
+                document.removeEventListener("mouseup", onMouseUp);
+              }
 
-                const nextZ = useWindows.getState().maxZIndex + 1;
-                winEl.style.zIndex = String(nextZ);
+              document.addEventListener("mousemove", onMouseMove);
+              document.addEventListener("mouseup", onMouseUp);
+              e.preventDefault();
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="5 9 2 12 5 15" />
+              <polyline points="9 5 12 2 15 5" />
+              <polyline points="15 19 12 22 9 19" />
+              <polyline points="19 9 22 12 19 15" />
+              <line x1="2" y1="12" x2="22" y2="12" />
+              <line x1="12" y1="2" x2="12" y2="22" />
+            </svg>
+          </button>
+        )}
 
-                let framePending = false;
-                let mouseX = startX;
-                let mouseY = startY;
+        <div className="h-4 w-[1px] bg-black/10 mx-0.5" />
 
-                function updatePosition() {
-                  framePending = false;
-                  applyGestureSetup();
-                  const curCam = getCamera();
-                  const worldDx = (mouseX - shiftX - screenLeft) / curCam.zoom;
-                  const worldDy = (mouseY - shiftY - screenTop) / curCam.zoom;
-                  winEl.style.transform = `translate3d(${Math.round(worldDx)}px, ${Math.round(worldDy)}px, 0)`;
-                }
+        {/* Navigation controls */}
+        <button
+          className={TOOLBAR_BTN}
+          onClick={prevPage}
+          disabled={currentPage <= 1}
+          title="Previous page"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+        </button>
+        <span className="text-[#333] text-[13px] font-sans font-medium py-0 px-2 min-w-[45px] text-center select-none">
+          {currentPage} / {totalPages}
+        </span>
+        <button
+          className={TOOLBAR_BTN}
+          onClick={nextPage}
+          disabled={currentPage >= totalPages}
+          title="Next page"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
 
-                function onMouseMove(ev: MouseEvent) {
-                  mouseX = ev.clientX;
-                  mouseY = ev.clientY;
-                  if (!framePending) {
-                    framePending = true;
-                    requestAnimationFrame(updatePosition);
-                  }
-                }
+        <div className="h-4 w-[1px] bg-black/10 mx-0.5" />
 
-                let setupDone = false;
-                function applyGestureSetup() {
-                  if (setupDone) return;
-                  setupDone = true;
-                  setDraggingWindow(true);
-                  winEl.classList.add("dragging");
-                  winEl.classList.add("no-transition");
-                  winEl.closest(".canvas-world")?.classList.add("gesture-active");
-                  document.body.style.cursor = "move";
-                }
-
-                function onMouseUp() {
-                  applyGestureSetup();
-                  const rdx = Math.round((mouseX - shiftX - screenLeft) / getCamera().zoom);
-                  const rdy = Math.round((mouseY - shiftY - screenTop) / getCamera().zoom);
-                  const newLeft = baseLeft + rdx;
-                  const newTop = baseTop + rdy;
-                  winEl.style.left = `${newLeft}px`;
-                  winEl.style.top = `${newTop}px`;
-                  winEl.style.transform = "";
-                  useWindows.setState({ maxZIndex: nextZ });
-                  updateWindow(win.id, { x: newLeft, y: newTop });
-                  setDraggingWindow(false);
-                  winEl.classList.remove("dragging");
-                  winEl.closest(".canvas-world")?.classList.remove("gesture-active");
-                  requestAnimationFrame(() => {
-                    winEl.classList.remove("no-transition");
-                    document.body.style.cursor = "";
-                  });
-                  document.removeEventListener("mousemove", onMouseMove);
-                  document.removeEventListener("mouseup", onMouseUp);
-                }
-
-                document.addEventListener("mousemove", onMouseMove);
-                document.addEventListener("mouseup", onMouseUp);
-                e.preventDefault();
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="5 9 2 12 5 15" />
-                <polyline points="9 5 12 2 15 5" />
-                <polyline points="15 19 12 22 9 19" />
-                <polyline points="19 9 22 12 19 15" />
-                <line x1="2" y1="12" x2="22" y2="12" />
-                <line x1="12" y1="2" x2="12" y2="22" />
-              </svg>
-            </button>
+        {/* View Mode button */}
+        <button className={TOOLBAR_BTN} onClick={toggleMaximize} title={isMaximized ? "Exit fullscreen" : "Fullscreen"}>
+          {isMaximized ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
+            </svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+            </svg>
           )}
-          <button
-            className={TOOLBAR_BTN}
-            onClick={prevPage}
-            disabled={currentPage <= 1}
-            title="Previous page"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-          </button>
-          <span className="text-[#333] text-[13px] font-sans font-medium py-0 px-2.5 min-w-[50px] text-center select-none">
-            {currentPage} / {totalPages}
-          </span>
-          <button
-            className={TOOLBAR_BTN}
-            onClick={nextPage}
-            disabled={currentPage >= totalPages}
-            title="Next page"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </button>
-          <button className={TOOLBAR_BTN} onClick={toggleMaximize} title={isMaximized ? "Exit fullscreen" : "Fullscreen"}>
-            {isMaximized ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
-              </svg>
-            ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-              </svg>
-            )}
-          </button>
-        </div>
+        </button>
+      </div>
       <PdfSelectionToolbox
         scrollContainerRef={scrollContainerRef}
         isMaximized={isMaximized}

@@ -3,7 +3,8 @@ import { createPortal } from "react-dom";
 import { useWindows } from "../store/windows";
 import { deleteScroll } from "../utils/scrollMemory";
 import { evictClosedWindowArticles } from "../utils/articleCache";
-import { stackWindowWithAnimation } from "../utils/stackAnimation";
+import { stackWindowWithAnimation, stackSingleNoteWithAnimation } from "../utils/stackAnimation";
+
 
 export type ContextMenuPosition = {
   x: number;
@@ -29,7 +30,7 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
       const menuH = menuEl.offsetHeight;
       const menuW = menuEl.offsetWidth;
 
-      const top = rect.top - menuH - 18;
+      let top = rect.top - menuH - 18;
       let left = rect.left + (rect.width - menuW) / 2;
 
       if (left + menuW > window.innerWidth - 12) left = window.innerWidth - menuW - 12;
@@ -64,12 +65,19 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
   const windows = useWindows((s) => s.windows);
   const targetWin = windows.find((w) => w.id === pos?.windowId);
   const isAlwaysOnTop = !!targetWin?.alwaysOnTop;
+  const isSticky = targetWin?.contentType === "sticky";
 
   const childNotes = windows.filter(
     (w) => (w.parentId === pos?.windowId || w.parentIds?.includes(pos?.windowId ?? "")) && w.contentType === "sticky"
   );
   const hasUnstackedNotes = childNotes.some((w) => !w.stacked);
-  const stackLabel = childNotes.length > 0 && !hasUnstackedNotes ? "Unstack notes" : "Stack notes";
+
+  let stackLabel = "Stack notes";
+  if (isSticky) {
+    stackLabel = targetWin?.stacked ? "Unstack note" : "Stack note";
+  } else {
+    stackLabel = childNotes.length > 0 && !hasUnstackedNotes ? "Unstack notes" : "Stack notes";
+  }
 
   if (!pos) return null;
 
@@ -143,7 +151,11 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
             } else if (item.id === "always-on-top") {
               useWindows.getState().toggleAlwaysOnTop(pos.windowId);
             } else if (item.id === "stack") {
-              stackWindowWithAnimation(pos.windowId);
+              if (isSticky) {
+                stackSingleNoteWithAnimation(pos.windowId);
+              } else {
+                stackWindowWithAnimation(pos.windowId);
+              }
             }
             onClose();
           }}

@@ -23,7 +23,6 @@ import {
   markNoteUnstacking,
   unmarkNoteUnstacking,
   subscribeAnimation,
-  stackWindowWithAnimation,
   getStubTargetOffset,
   getStubDimensions,
 } from './utils/stackAnimation'
@@ -393,7 +392,7 @@ const StackedNoteStubs = memo(function StackedNoteStubs({
                   }}
                   onClick={(e) => {
                     e.stopPropagation();
-                    stackWindowWithAnimation(parentWin.id);
+                    useWindows.getState().unstackNote(note.id);
                   }}
                   title={`Click to unstack note`}
                 />
@@ -1166,6 +1165,7 @@ useEffect(() => {
             onClose={handleClose}
             onActivate={handleActivate}
             onPositionChange={handlePositionChange}
+            onContextMenu={(e) => onContextMenu?.(e, w.id)}
           />
           <button
             type="button"

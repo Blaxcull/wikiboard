@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { WindowData } from "../store/windows";
 import { useWindows } from "../store/windows";
 import startDrag, { isDraggingWindow } from "../utils/window/drag";
@@ -10,6 +11,7 @@ type Props = {
   onClose: () => void;
   onActivate: () => void;
   onPositionChange: (pos: { x?: number; y?: number; width?: number; height?: number }) => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
 };
 
 const STICKY_COLORS: { id: string; name: string; bg: string; isDark?: boolean }[] = [
@@ -20,10 +22,10 @@ const STICKY_COLORS: { id: string; name: string; bg: string; isDark?: boolean }[
   { id: "blue", name: "Blue", bg: "#bae6fd" },
 ];
 
-function MiniStickyIcon({ bg, isDark }: { bg: string; isDark?: boolean }) {
+function MiniStickyIcon({ bg, isDark, size = 28 }: { bg: string; isDark?: boolean; size?: number }) {
   return (
-    <div className="relative w-6 h-6 shrink-0 flex items-center justify-center">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+    <div className="relative shrink-0 flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
         {/* Main Sticky Note Body with cut bottom-left corner */}
         <path
           d="M 3.5 2 H 20.5 C 21.328 2 22 2.672 22 3.5 V 20.5 C 22 21.328 21.328 22 20.5 22 H 7.5 L 2 16.5 V 3.5 C 2 2.672 2.672 2 3.5 2 Z"
@@ -66,16 +68,47 @@ function StickyColorPicker({
   const pickerRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [stylePos, setStylePos] = useState({ left: 0, top: 0 });
+
+  useLayoutEffect(() => {
+    if (!isOpen || !pickerRef.current) return;
+    const pickerEl = pickerRef.current;
+    const winEl = document.getElementById(`win-${winId}`);
+    if (winEl && pickerEl) {
+      const rect = winEl.getBoundingClientRect();
+      const pickerH = pickerEl.offsetHeight;
+      const pickerW = pickerEl.offsetWidth;
+
+      const top = Math.min(window.innerHeight - pickerH - 12, rect.bottom + 14);
+      let left = rect.left + rect.width / 2;
+
+      if (left + pickerW / 2 > window.innerWidth - 12) left = window.innerWidth - 12 - pickerW / 2;
+      if (left - pickerW / 2 < 12) left = 12 + pickerW / 2;
+
+      setStylePos({ left, top });
+    }
+  }, [isOpen, winId, isHovered]);
 
   useEffect(() => {
     if (!isOpen) return;
-    function handleClickOutside(e: MouseEvent) {
+    const handleDismiss = (e: Event) => {
       if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
         onClose();
       }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    };
+    const timer = setTimeout(() => {
+      window.addEventListener("mousedown", handleDismiss, true);
+      window.addEventListener("pointerdown", handleDismiss, true);
+      window.addEventListener("click", handleDismiss, true);
+      window.addEventListener("wheel", handleDismiss, true);
+    }, 0);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("mousedown", handleDismiss, true);
+      window.removeEventListener("pointerdown", handleDismiss, true);
+      window.removeEventListener("click", handleDismiss, true);
+      window.removeEventListener("wheel", handleDismiss, true);
+    };
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
@@ -97,30 +130,31 @@ function StickyColorPicker({
 
   const currentOpt = STICKY_COLORS.find((c) => c.id === currentColor) || STICKY_COLORS[0];
 
-  return (
+  return createPortal(
     <div
       ref={pickerRef}
-      className="absolute -bottom-14 left-1/2 -translate-x-1/2 z-40 flex items-center justify-center pointer-events-auto select-none py-2 px-4"
+      className="fixed z-[100000] flex items-center justify-center pointer-events-auto select-none p-1"
+      style={{ left: stylePos.left, top: stylePos.top, transform: "translateX(-50%)" }}
       onMouseDown={(e) => e.stopPropagation()}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
       <div
-        className={`bg-white/95 border border-black/70 shadow-lg backdrop-blur-md flex items-center justify-center transition-all duration-300 ease-out ${
+        className={`bg-white border-2 border-[#d0d0d0] shadow-[0_8px_24px_rgba(0,0,0,0.14)] flex items-center justify-center transition-all duration-200 ease-out ${
           isHovered
-            ? "w-[204px] h-10 px-3.5 py-1.5 gap-2.5 rounded-[18px] overflow-hidden"
-            : "w-10 h-10 p-1.5 rounded-xl cursor-pointer"
+            ? "w-[240px] h-[50px] px-4 py-2 gap-3 rounded-[16px] overflow-hidden"
+            : "w-[48px] h-[48px] p-2 rounded-[14px] cursor-pointer"
         }`}
         onClick={() => {
           if (!isHovered) setIsHovered(true);
         }}
       >
         {!isHovered ? (
-          <div className="w-7 h-7 flex items-center justify-center cursor-pointer transition-transform hover:scale-105">
-            <MiniStickyIcon bg={currentOpt.bg} isDark={currentOpt.isDark} />
+          <div className="w-8 h-8 flex items-center justify-center cursor-pointer transition-transform hover:scale-105">
+            <MiniStickyIcon bg={currentOpt.bg} isDark={currentOpt.isDark} size={28} />
           </div>
         ) : (
-          <div className="flex items-center gap-2.5 shrink-0 animate-in fade-in duration-200">
+          <div className="flex items-center gap-3 shrink-0 animate-in fade-in duration-200">
             {STICKY_COLORS.map((opt) => {
               const isSelected = (currentColor || "yellow") === opt.id;
               return (
@@ -130,28 +164,28 @@ function StickyColorPicker({
                   onClick={(e) => {
                     e.stopPropagation();
                     updateWindow(winId, { noteColor: opt.id });
-                    // Keep palette open on color selection
                   }}
                   onMouseDown={(e) => e.stopPropagation()}
-                  className={`relative p-0.5 rounded cursor-pointer transition-all duration-150 shrink-0 bg-transparent border-none ${
+                  className={`relative p-0.5 rounded-[8px] cursor-pointer transition-all duration-150 shrink-0 bg-transparent border-none ${
                     isSelected
                       ? "scale-110 opacity-100"
                       : "opacity-75 hover:opacity-100 hover:scale-105 active:scale-95"
                   }`}
                   title={opt.name}
                 >
-                  <MiniStickyIcon bg={opt.bg} isDark={opt.isDark} />
+                  <MiniStickyIcon bg={opt.bg} isDark={opt.isDark} size={28} />
                 </button>
               );
             })}
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
-export default function StickyNote({ win, onClose, onActivate, onPositionChange }: Props) {
+export default function StickyNote({ win, onClose, onActivate, onPositionChange, onContextMenu }: Props) {
   const updateWindow = useWindows((s) => s.updateWindow);
   const textRef = useRef<HTMLDivElement>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -207,7 +241,10 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange 
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("wikiboard:close-menus", { detail: { exceptWindowId: win.id } }));
     }
-    setShowColorPicker((prev) => !prev);
+    setShowColorPicker(true);
+    if (onContextMenu) {
+      onContextMenu(e);
+    }
   };
 
   if (isExcerpt) {

@@ -65,6 +65,7 @@ type WindowsStore = {
   breakConnections: (id: string) => void;
   toggleAlwaysOnTop: (id: string) => void;
   toggleStackWindow: (id: string) => void;
+  toggleStackSingleNote: (id: string) => void;
   unstackNote: (id: string) => void;
 };
 
@@ -635,5 +636,97 @@ export const useWindows = create<WindowsStore>((set) => ({
           w.id === id ? { ...w, stacked: false, x: cleanPos.x, y: cleanPos.y } : w
         ),
       };
+    }),
+
+  toggleStackSingleNote: (id: string) =>
+    set((state) => {
+      const target = state.windows.find((w) => w.id === id);
+      if (!target) return state;
+
+      if (target.stacked) {
+        const rootWin = findRootWindow(id, state.windows);
+        const parentId = target.parentId ?? target.parentIds?.[0];
+        const parentWin = parentId ? state.windows.find((w) => w.id === parentId) : undefined;
+        const refWin = rootWin ?? parentWin;
+
+        const px = refWin?.x ?? target.x ?? 80;
+        const py = refWin?.y ?? target.y ?? 80;
+        const pw = refWin?.width ?? DEFAULT_WIDTH;
+        const ph = refWin?.height ?? DEFAULT_HEIGHT;
+
+        const side = target.side ?? "RIGHT";
+        const GAP = 160;
+        const childW = target.width ?? 260;
+        const childH = target.height ?? (target.isExcerptNote ? 64 : 200);
+
+        let nx = px + pw + GAP;
+        let ny = py;
+
+        if (side === "LEFT") {
+          nx = px - childW - GAP;
+        } else if (side === "TOP") {
+          ny = py - childH - GAP;
+        } else if (side === "BOTTOM") {
+          ny = py + ph + GAP;
+        }
+
+        const targetX = target.relX != null ? px + target.relX : nx;
+        const targetY = target.relY != null ? py + target.relY : ny;
+
+        const cleanPos = findNonOverlappingPosition(
+          targetX,
+          targetY,
+          childW,
+          childH,
+          state.windows,
+          target.id
+        );
+
+        return {
+          windows: state.windows.map((w) =>
+            w.id === id ? { ...w, stacked: false, x: cleanPos.x, y: cleanPos.y } : w
+          ),
+        };
+      } else {
+        const parentId = target.parentId ?? target.parentIds?.[0];
+        const parentWin = parentId ? state.windows.find((w) => w.id === parentId) : undefined;
+
+        if (!parentWin) {
+          return {
+            windows: state.windows.map((w) => (w.id === id ? { ...w, stacked: true } : w)),
+          };
+        }
+
+        const parentX = parentWin.x ?? 80;
+        const parentY = parentWin.y ?? 80;
+        const parentW = parentWin.width ?? DEFAULT_WIDTH;
+        const parentH = parentWin.height ?? DEFAULT_HEIGHT;
+
+        const relX = (target.x ?? 80) - parentX;
+        const relY = (target.y ?? 80) - parentY;
+        const noteCenterX = (target.x ?? 80) + (target.width ?? 260) / 2;
+        const noteCenterY = (target.y ?? 80) + (target.height ?? (target.isExcerptNote ? 64 : 200)) / 2;
+        const parentCenterX = parentX + parentW / 2;
+        const parentCenterY = parentY + parentH / 2;
+
+        const hw = Math.max(parentW / 2, 1);
+        const hh = Math.max(parentH / 2, 1);
+
+        const normX = (noteCenterX - parentCenterX) / hw;
+        const normY = (noteCenterY - parentCenterY) / hh;
+
+        let side: "TOP" | "RIGHT" | "BOTTOM" | "LEFT" = "RIGHT";
+        if (Math.abs(normX) >= Math.abs(normY)) {
+          side = normX >= 0 ? "RIGHT" : "LEFT";
+        } else {
+          side = normY >= 0 ? "BOTTOM" : "TOP";
+        }
+
+        return {
+          windows: state.windows.map((w) =>
+            w.id === id ? { ...w, stacked: true, side, relX, relY } : w
+          ),
+        };
+      }
     }),
 }));

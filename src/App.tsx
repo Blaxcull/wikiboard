@@ -336,7 +336,6 @@ const StackedNoteStubs = memo(function StackedNoteStubs({
       windows.filter(
         (w) =>
           (w.parentId === parentWin.id || w.parentIds?.includes(parentWin.id)) &&
-          w.contentType === "sticky" &&
           w.stacked
       ),
     [windows, parentWin.id]
@@ -378,12 +377,14 @@ const StackedNoteStubs = memo(function StackedNoteStubs({
             {visibleNotes.map((note, i) => {
               const { stubW, stubH } = getStubDimensions(note);
               const posStyle = getCardOffsetStyle(side, i, visibleNotes.length, stubW, stubH);
-              const colorBg = getNoteColor(note);
+              const isImage = !!(note.directImageUrl || note.title?.startsWith("File:"));
+              const colorBg = isImage ? "#e2e8f0" : getNoteColor(note);
+              const imgUrl = note.directImageUrl;
 
               return (
                 <div
                   key={note.id}
-                  className="absolute pointer-events-auto cursor-pointer transition-transform duration-150 hover:scale-[1.02] rounded-[4px] border border-black/20 shadow-md"
+                  className="absolute pointer-events-auto cursor-pointer transition-transform duration-150 hover:scale-[1.02] rounded-[6px] border border-black/20 shadow-md overflow-hidden"
                   style={{
                     width: `${stubW}px`,
                     height: `${stubH}px`,
@@ -394,8 +395,16 @@ const StackedNoteStubs = memo(function StackedNoteStubs({
                     e.stopPropagation();
                     useWindows.getState().unstackNote(note.id);
                   }}
-                  title={`Click to unstack note`}
-                />
+                  title={`Click to unstack ${isImage ? "image" : "note"}`}
+                >
+                  {isImage && imgUrl && (
+                    <img
+                      src={imgUrl}
+                      alt={note.title}
+                      className="w-full h-full object-cover opacity-90"
+                    />
+                  )}
+                </div>
               );
             })}
           </div>

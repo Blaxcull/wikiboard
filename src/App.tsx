@@ -218,9 +218,18 @@ function readWindowPos(el: HTMLElement): { x: number; y: number; w: number; h: n
 
 
 
-function getNoteColor(isExcerpt?: boolean): string {
-  if (isExcerpt) return "#f0e5d8";
-  return "#eee7a6";
+export function getNoteColor(win: Partial<WindowData>): string {
+  if (win.noteColor) {
+    const colorMap: Record<string, string> = {
+      yellow: win.isExcerptNote ? "#f0e5d8" : "#eee7a6",
+      lime: "#e2f89f",
+      green: "#bbf7d0",
+      tan: "#fed7aa",
+      dark: "#292524",
+    };
+    return colorMap[win.noteColor] || win.noteColor;
+  }
+  return win.isExcerptNote ? "#f0e5d8" : "#eee7a6";
 }
 
 function getCardOffsetStyle(
@@ -354,7 +363,7 @@ const StackedNoteStubs = memo(function StackedNoteStubs({
               const noteW = note.width ?? 260;
               const noteH = note.height ?? (note.isExcerptNote ? 64 : 200);
               const posStyle = getCardOffsetStyle(side, i, visibleNotes.length, noteW, noteH);
-              const colorBg = getNoteColor(note.isExcerptNote);
+              const colorBg = getNoteColor(note);
 
               return (
                 <div
@@ -1331,16 +1340,7 @@ useEffect(() => {
       className={w.active ? 'active' : 'inactive'}
       style={zIndexStyle}
       stubs={<StackedNoteStubs parentWin={w} />}
-      titleBarContent={
-        <span className="flex items-center gap-1.5">
-          <span>{w.title}</span>
-          {w.alwaysOnTop && (
-            <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold text-[#2563eb] bg-[#dbeafe] rounded-full border border-[#bfdbfe]" title="Always on top">
-              PINNED
-            </span>
-          )}
-        </span>
-      }
+      titleBarContent={<span>{w.title}</span>}
       x={w.x}
       y={w.y}
       width={w.width}

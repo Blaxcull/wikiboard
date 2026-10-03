@@ -12,38 +12,18 @@ export function computeCursorDirection(
   width: number, height: number,
   target?: HTMLElement,
 ): string | null {
-  if (target) {
-    const rect = target.getBoundingClientRect();
-    const cam = getCamera();
-    const screenX = mouseX * cam.zoom + cam.panX;
-    const screenY = mouseY * cam.zoom + cam.panY;
-    const distFromRight = rect.right - screenX;
-    const distFromBottom = rect.bottom - screenY;
-
-    if (target.classList.contains("pdf-window")) {
-      const pdfBottomDist = (rect.bottom - 64) - screenY;
-      if (distFromRight >= -10 && distFromRight <= 32 && pdfBottomDist >= -10 && pdfBottomDist <= 32) {
-        return 'se-resize';
-      }
-    }
-
-    if (distFromRight >= -10 && distFromRight <= 32 && distFromBottom >= -10 && distFromBottom <= 32) {
-      return 'se-resize';
-    }
-  }
-
   const relX = mouseX - left;
   const relY = mouseY - top;
 
-  const CORNER = 32;
+  const CORNER = 36;
 
   let cornerY = height;
   if (target?.classList.contains("pdf-window")) {
     cornerY = height - 64;
   }
 
-  const nearRight = relX >= width - CORNER && relX <= width + 10;
-  const nearBottom = (relY >= cornerY - CORNER && relY <= cornerY + 10) || (relY >= height - CORNER && relY <= height + 10);
+  const nearRight = relX >= width - CORNER && relX <= width + 12;
+  const nearBottom = (relY >= cornerY - CORNER && relY <= cornerY + 12) || (relY >= height - CORNER && relY <= height + 12);
 
   if (nearRight && nearBottom) {
     return 'se-resize';
@@ -53,7 +33,7 @@ export function computeCursorDirection(
 }
 
 export function Resize(
-  e: React.MouseEvent<HTMLDivElement>,
+  e: React.MouseEvent<HTMLElement>,
   onResizeEnd?: (rect: { x: number; y: number; width: number; height: number }) => void,
   onActivate?: () => void,
 ) {
@@ -69,12 +49,15 @@ export function Resize(
   const startWidth = parseFloat(target.style.width) || target.offsetWidth || 750;
   const startHeight = parseFloat(target.style.height) || target.offsetHeight || 550;
 
+  const rect = target.getBoundingClientRect();
+  const isCorner = e.clientX >= rect.right - 40 && e.clientY >= rect.bottom - 40;
+
   // Convert screen mouse to world coords for edge detection
   const cam = getCamera();
   const worldMouseX = (e.clientX - cam.panX) / cam.zoom;
   const worldMouseY = (e.clientY - cam.panY) / cam.zoom;
 
-  const cursor = computeCursorDirection(
+  const cursor = isCorner ? "se-resize" : computeCursorDirection(
     worldMouseX, worldMouseY,
     baseLeft, baseTop,
     startWidth, startHeight,
@@ -110,7 +93,10 @@ export function Resize(
   activeResizingWindowId = target.id.replace(/^win-/, "");
   let rafId = 0;
 
-  const nextZ = (useWindows.getState().maxZIndex) + 1;
+  const allWindows = useWindows.getState().windows;
+  const resizedWin = allWindows.find((w) => w.id === activeResizingWindowId);
+  const isPinned = resizedWin?.alwaysOnTop;
+  const nextZ = (isPinned ? 50000 : 0) + useWindows.getState().maxZIndex + 1;
 
   let lastX = startX;
   let lastY = startY;

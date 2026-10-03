@@ -54,10 +54,9 @@
 }
 
 .window.sticky-window:not(.excerpt-note-window) {
-  background: #eee7a6 !important;
   border: 1px solid rgba(0, 0, 0, 0.08) !important;
   border-radius: 4px !important;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12), 0 3px 10px rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.18), 0 4px 10px -2px rgba(0, 0, 0, 0.08) !important;
 }
 
 .window.excerpt-note-window {
@@ -131,10 +130,9 @@
 }
 
 .window.sticky-window:not(.excerpt-note-window) {
-  background: #eee7a6 !important;
   border: 1px solid rgba(0, 0, 0, 0.08) !important;
   border-radius: 4px !important;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12), 0 3px 10px rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.18), 0 4px 10px -2px rgba(0, 0, 0, 0.08) !important;
 }
 
 .window-wrapper.wire-target-hover,

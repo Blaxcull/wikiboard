@@ -27,6 +27,8 @@ export type WindowData = {
   contentType?: "article" | "pdf" | "sticky";
   /** Text stored in a sticky note window */
   stickyText?: string;
+  /** Custom background color for sticky note */
+  noteColor?: string;
   /** True for non-editable, extra-rounded highlight excerpt note boxes */
   isExcerptNote?: boolean;
   /** Preferred attachment side when spawned from a parent window connection point */

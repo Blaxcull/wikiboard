@@ -76,7 +76,11 @@ const Window = memo(function Window({
       }}
       id={id}
       className="window-wrapper absolute"
-      style={style}
+      style={{
+        ...style,
+        ...(x !== undefined ? { left: `${x}px` } : {}),
+        ...(y !== undefined ? { top: `${y}px` } : {}),
+      }}
     >
       {stubs}
       <div

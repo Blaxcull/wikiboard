@@ -302,6 +302,14 @@ const ConnectionArrows = memo(function ConnectionArrows({
       const child = byId.get(parts[1]);
       if (!parent || !child) continue;
 
+      if (child.stacked || parent.stacked) {
+        if (child.stacked && (child.parentId === parent.id || child.parentIds?.includes(parent.id))) {
+          path.style.display = 'none';
+          poly.style.display = 'none';
+          continue;
+        }
+      }
+
       const parentPos = posMap.get(parent.id);
       const childPos = posMap.get(child.id);
       if (!parentPos || !childPos) continue;
@@ -612,6 +620,92 @@ const animatePdfMaximize = (
 
 
 
+const StackedNotesDrawer = memo(function StackedNotesDrawer({
+  parentWin,
+}: {
+  parentWin: WindowData;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const windows = useWindows((s) => s.windows);
+  const removeWindow = useWindows((s) => s.removeWindow);
+  const unstackNote = useWindows((s) => s.unstackNote);
+
+  const childNotes = useMemo(
+    () =>
+      windows.filter(
+        (w) =>
+          (w.parentId === parentWin.id || w.parentIds?.includes(parentWin.id)) &&
+          w.contentType === "sticky" &&
+          w.stacked
+      ),
+    [windows, parentWin.id]
+  );
+
+  if (childNotes.length === 0) return null;
+
+  return (
+    <div
+      className="absolute -bottom-11 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center select-none"
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsOpen((prev) => !prev);
+        }}
+        className="flex items-center gap-2 px-3.5 py-1.5 bg-[#f6efe5] hover:bg-[#ebd9c5] text-[#7a4805] border-2 border-[#d9c4af] rounded-full shadow-md text-[12px] font-bold cursor-pointer transition-all hover:scale-105 active:scale-95"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+        </svg>
+        <span>{childNotes.length} Note{childNotes.length > 1 ? "s" : ""} Stacked</span>
+        <span className="text-[10px] opacity-70 transition-transform duration-200" style={{ transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
+          ▲
+        </span>
+      </button>
+
+      {isOpen && (
+        <div className="mt-2 w-[340px] max-h-[260px] overflow-y-auto p-2 bg-[#fdfbf7]/95 backdrop-blur-md border-2 border-[#d6c4b0] rounded-[18px] shadow-2xl flex flex-col gap-2 select-text cursor-default animate-in fade-in slide-in-from-top-2 duration-200">
+          {childNotes.map((note) => (
+            <div key={note.id} className="p-3 bg-[#f0e5d8] border border-[#e4d5c3] rounded-[14px] flex flex-col gap-1.5 text-left shadow-sm">
+              <div className="flex items-center justify-between text-[11px] font-bold text-[#c26100]">
+                <span>{note.isExcerptNote ? "Excerpt Highlight" : "Sticky Note"}</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => unstackNote(note.id)}
+                    className="px-2 py-0.5 bg-white/90 hover:bg-white text-[#c26100] border border-[#e4d5c3] rounded-md font-semibold cursor-pointer transition-colors text-[11px]"
+                    title="Unstack onto canvas"
+                  >
+                    Unstack ↗
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      deleteScroll(note.id);
+                      removeWindow(note.id);
+                      evictClosedWindowArticles();
+                    }}
+                    className="w-5 h-5 flex items-center justify-center hover:bg-red-100 text-red-600 rounded-md font-bold cursor-pointer transition-colors text-[12px] border-none bg-transparent"
+                    title="Delete note"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+              <div className="text-[13px] font-medium text-[#4a3219] leading-snug break-words">
+                {note.stickyText || "(Empty note)"}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
+
 const WindowItem = memo(function WindowItem({
   w,
   onContextMenu,
@@ -729,6 +823,8 @@ useEffect(() => {
   w.height,
 ])
 
+
+  if (w.stacked) return null;
 
   if (w.contentType === "sticky") {
     const isExcerpt = w.isExcerptNote;
@@ -918,7 +1014,16 @@ useEffect(() => {
       id={`win-${w.id}`}
       className={w.active ? 'active' : 'inactive'}
       style={zIndexStyle}
-      titleBarContent={w.title}
+      titleBarContent={
+        <span className="flex items-center gap-1.5">
+          <span>{w.title}</span>
+          {w.alwaysOnTop && (
+            <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold text-[#2563eb] bg-[#dbeafe] rounded-full border border-[#bfdbfe]" title="Always on top">
+              PINNED
+            </span>
+          )}
+        </span>
+      }
       x={w.x}
       y={w.y}
       width={w.width}
@@ -934,6 +1039,7 @@ useEffect(() => {
       }}
     >
       {w.url ? <ArticleView win={w} /> : <LinkEditor win={w} />}
+      <StackedNotesDrawer parentWin={w} />
     </Window>
   )
 })

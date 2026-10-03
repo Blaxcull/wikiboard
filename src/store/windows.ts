@@ -42,6 +42,7 @@ export type WindowData = {
   /** True while the maximize/minimize animation is running */
   pdfAnimating?: boolean;
   alwaysOnTop?: boolean;
+  stacked?: boolean;
   zIndex?: number;
   x?: number;
   y?: number;
@@ -59,6 +60,8 @@ type WindowsStore = {
   spawnWindows: (count: number, startIdx: number, titles?: string[]) => void;
   breakConnections: (id: string) => void;
   toggleAlwaysOnTop: (id: string) => void;
+  toggleStackWindow: (id: string) => void;
+  unstackNote: (id: string) => void;
 };
 
 export const DEFAULT_WIDTH = 750;
@@ -330,6 +333,101 @@ export const useWindows = create<WindowsStore>((set) => ({
           w.id === id
             ? { ...w, alwaysOnTop: nextAlwaysOnTop, zIndex: nextZIndex, active: true }
             : w
+        ),
+      };
+    }),
+
+  toggleStackWindow: (id: string) =>
+    set((state) => {
+      const parentWin = state.windows.find((w) => w.id === id);
+      if (!parentWin) return state;
+
+      const childNotes = state.windows.filter(
+        (w) => (w.parentId === id || w.parentIds?.includes(id)) && w.contentType === "sticky"
+      );
+
+      if (childNotes.length === 0) return state;
+
+      const hasUnstacked = childNotes.some((w) => !w.stacked);
+      const shouldStack = hasUnstacked;
+
+      const parentX = parentWin.x ?? 80;
+      const parentY = parentWin.y ?? 80;
+      const parentW = parentWin.width ?? DEFAULT_WIDTH;
+      const parentH = parentWin.height ?? DEFAULT_HEIGHT;
+
+      let unstackCount = 0;
+
+      return {
+        windows: state.windows.map((w) => {
+          const isChildNote = (w.parentId === id || w.parentIds?.includes(id)) && w.contentType === "sticky";
+          if (!isChildNote) return w;
+
+          if (shouldStack) {
+            return { ...w, stacked: true };
+          } else {
+            const side = w.side ?? "RIGHT";
+            const idx = unstackCount++;
+            const GAP = 160;
+            const childW = w.width ?? 260;
+            const childH = w.height ?? (w.isExcerptNote ? 64 : 200);
+            let nx = parentX + parentW + GAP;
+            let ny = parentY + idx * 40;
+
+            if (side === "LEFT") {
+              nx = parentX - childW - GAP;
+              ny = parentY + idx * 40;
+            } else if (side === "TOP") {
+              nx = parentX + idx * 40;
+              ny = parentY - childH - GAP;
+            } else if (side === "BOTTOM") {
+              nx = parentX + idx * 40;
+              ny = parentY + parentH + GAP;
+            }
+
+            return {
+              ...w,
+              stacked: false,
+              x: nx,
+              y: ny,
+            };
+          }
+        }),
+      };
+    }),
+
+  unstackNote: (id: string) =>
+    set((state) => {
+      const target = state.windows.find((w) => w.id === id);
+      if (!target || !target.stacked) return state;
+
+      const parentId = target.parentId ?? target.parentIds?.[0];
+      const parentWin = parentId ? state.windows.find((w) => w.id === parentId) : undefined;
+
+      const px = parentWin?.x ?? target.x ?? 80;
+      const py = parentWin?.y ?? target.y ?? 80;
+      const pw = parentWin?.width ?? DEFAULT_WIDTH;
+      const ph = parentWin?.height ?? DEFAULT_HEIGHT;
+
+      const side = target.side ?? "RIGHT";
+      const GAP = 160;
+      const childW = target.width ?? 260;
+      const childH = target.height ?? (target.isExcerptNote ? 64 : 200);
+
+      let nx = px + pw + GAP;
+      let ny = py;
+
+      if (side === "LEFT") {
+        nx = px - childW - GAP;
+      } else if (side === "TOP") {
+        ny = py - childH - GAP;
+      } else if (side === "BOTTOM") {
+        ny = py + ph + GAP;
+      }
+
+      return {
+        windows: state.windows.map((w) =>
+          w.id === id ? { ...w, stacked: false, x: nx, y: ny } : w
         ),
       };
     }),

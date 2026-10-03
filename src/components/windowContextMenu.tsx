@@ -60,15 +60,22 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
     };
   }, [pos, onClose]);
 
-  const targetWin = useWindows((s) => s.windows.find((w) => w.id === pos?.windowId));
+  const windows = useWindows((s) => s.windows);
+  const targetWin = windows.find((w) => w.id === pos?.windowId);
   const isAlwaysOnTop = !!targetWin?.alwaysOnTop;
+
+  const childNotes = windows.filter(
+    (w) => (w.parentId === pos?.windowId || w.parentIds?.includes(pos?.windowId ?? "")) && w.contentType === "sticky"
+  );
+  const hasUnstackedNotes = childNotes.some((w) => !w.stacked);
+  const stackLabel = childNotes.length > 0 && !hasUnstackedNotes ? "Unstack notes" : "Stack notes";
 
   if (!pos) return null;
 
   const items = [
     {
       id: "stack",
-      label: "Stack",
+      label: stackLabel,
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="4" y="4" width="6" height="6" rx="1.5" />
@@ -134,6 +141,8 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
               useWindows.getState().breakConnections(pos.windowId);
             } else if (item.id === "always-on-top") {
               useWindows.getState().toggleAlwaysOnTop(pos.windowId);
+            } else if (item.id === "stack") {
+              useWindows.getState().toggleStackWindow(pos.windowId);
             }
             onClose();
           }}

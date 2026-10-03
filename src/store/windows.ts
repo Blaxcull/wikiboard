@@ -43,6 +43,8 @@ export type WindowData = {
   pdfAnimating?: boolean;
   alwaysOnTop?: boolean;
   stacked?: boolean;
+  relX?: number;
+  relY?: number;
   zIndex?: number;
   x?: number;
   y?: number;
@@ -76,6 +78,123 @@ export function nextCascadeOffset(): number {
   return (windowCount++ * CASCADE_STEP) % CASCADE_WRAP;
 }
 
+export function findNonOverlappingPosition(
+  targetX: number,
+  targetY: number,
+  width: number,
+  height: number,
+  existingWindows: WindowData[],
+  ignoreId?: string,
+): { x: number; y: number } {
+  const visibleWindows = existingWindows.filter(
+    (w) => w.id !== ignoreId && !w.stacked && !w.pdfMaximized
+  );
+
+  const MARGIN = 24;
+
+  const isOverlapping = (x: number, y: number): boolean => {
+    for (const w of visibleWindows) {
+      const wx = w.x ?? 0;
+      const wy = w.y ?? 0;
+      const ww = w.width ?? DEFAULT_WIDTH;
+      const wh = w.height ?? DEFAULT_HEIGHT;
+
+      if (
+        x < wx + ww + MARGIN &&
+        x + width + MARGIN > wx &&
+        y < wy + wh + MARGIN &&
+        y + height + MARGIN > wy
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  if (!isOverlapping(targetX, targetY)) {
+    return { x: targetX, y: targetY };
+  }
+
+  const STEP = 50;
+  for (let radius = 1; radius <= 40; radius++) {
+    const dist = radius * STEP;
+    const candidates = [
+      { x: targetX + dist, y: targetY },
+      { x: targetX, y: targetY + dist },
+      { x: targetX - dist, y: targetY },
+      { x: targetX, y: targetY - dist },
+      { x: targetX + dist, y: targetY + dist },
+      { x: targetX - dist, y: targetY + dist },
+      { x: targetX + dist, y: targetY - dist },
+      { x: targetX - dist, y: targetY - dist },
+    ];
+
+    for (const cand of candidates) {
+      if (!isOverlapping(cand.x, cand.y)) {
+        return cand;
+      }
+    }
+  }
+
+  return { x: targetX, y: targetY };
+}
+
+export function getDescendantNotes(
+  rootId: string,
+  windows: WindowData[]
+): WindowData[] {
+  const result: WindowData[] = [];
+  const parentSet = new Set<string>([rootId]);
+
+  let added = true;
+  while (added) {
+    added = false;
+    for (const w of windows) {
+      if (w.contentType !== "sticky") continue;
+      if (result.some((r) => r.id === w.id)) continue;
+
+      const pId = w.parentId;
+      const pIds = w.parentIds;
+      const belongs =
+        (pId && parentSet.has(pId)) ||
+        pIds?.some((id) => parentSet.has(id));
+
+      if (belongs) {
+        result.push(w);
+        parentSet.add(w.id);
+        added = true;
+      }
+    }
+  }
+
+  return result;
+}
+
+export function findRootWindow(
+  id: string,
+  windows: WindowData[]
+): WindowData | undefined {
+  const current = windows.find((w) => w.id === id);
+  if (!current) return undefined;
+
+  let currParentId = current.parentId ?? current.parentIds?.[0];
+  const visited = new Set<string>([id]);
+  let root: WindowData | undefined = undefined;
+
+  while (currParentId && !visited.has(currParentId)) {
+    visited.add(currParentId);
+    const parentWin = windows.find((w) => w.id === currParentId);
+    if (!parentWin) break;
+    root = parentWin;
+    if (parentWin.contentType !== "sticky") {
+      return parentWin;
+    }
+    currParentId = parentWin.parentId ?? parentWin.parentIds?.[0];
+  }
+
+  return root;
+}
+
 export const useWindows = create<WindowsStore>((set) => ({
   windows: [],
   maxZIndex: 0,
@@ -90,8 +209,9 @@ export const useWindows = create<WindowsStore>((set) => ({
       const offset = nextCascadeOffset();
       const activeIdx = state.windows.findIndex((w) => w.active);
 
-      const childW = data?.width ?? DEFAULT_WIDTH;
-      const childH = data?.height ?? DEFAULT_HEIGHT;
+      const isSticky = data?.contentType === "sticky";
+      const childW = data?.width ?? (isSticky ? 260 : DEFAULT_WIDTH);
+      const childH = data?.height ?? (isSticky ? (data?.isExcerptNote ? 64 : 200) : DEFAULT_HEIGHT);
       let posX: number;
       let posY: number;
       let parentWindow: WindowData | undefined;
@@ -150,6 +270,25 @@ export const useWindows = create<WindowsStore>((set) => ({
         posY = data?.y ?? (center.y - DEFAULT_HEIGHT / 2 + offset);
       }
 
+      if (data?.x == null || data?.y == null) {
+        const cleanPos = findNonOverlappingPosition(
+          posX,
+          posY,
+          childW,
+          childH,
+          state.windows
+        );
+        posX = cleanPos.x;
+        posY = cleanPos.y;
+      }
+
+      let relX = data?.relX;
+      let relY = data?.relY;
+      if (parentWindow && relX == null && relY == null) {
+        relX = posX - (parentWindow.x ?? 0);
+        relY = posY - (parentWindow.y ?? 0);
+      }
+
       if (!state.windows.some((w) => w.pdfMaximized)) {
         const childRect = { x: posX, y: posY, width: childW, height: childH };
         const parentRect = parentWindow
@@ -186,6 +325,8 @@ export const useWindows = create<WindowsStore>((set) => ({
             height: childH,
             parentIds: data?.parentIds ?? (data?.parentId ? [data.parentId] : []),
             ...data,
+            relX: data?.relX ?? relX,
+            relY: data?.relY ?? relY,
           },
         ],
       };
@@ -242,17 +383,34 @@ export const useWindows = create<WindowsStore>((set) => ({
       const idx = state.windows.findIndex((w) => w.id === id);
       if (idx === -1) return state;
       const cur = state.windows[idx];
+
+      const updatedPatch: Partial<Omit<WindowData, "id">> = { ...patch };
+      if (patch.x !== undefined || patch.y !== undefined) {
+        const parentId = cur.parentId ?? cur.parentIds?.[0];
+        if (parentId) {
+          const parentWin = state.windows.find((w) => w.id === parentId);
+          if (parentWin) {
+            const newX = patch.x ?? cur.x ?? 0;
+            const newY = patch.y ?? cur.y ?? 0;
+            const px = parentWin.x ?? 0;
+            const py = parentWin.y ?? 0;
+            updatedPatch.relX = newX - px;
+            updatedPatch.relY = newY - py;
+          }
+        }
+      }
+
       let changed = false;
-      for (const k in patch) {
+      for (const k in updatedPatch) {
         const key = k as keyof Omit<WindowData, "id">;
-        if (cur[key] !== patch[key]) {
+        if (cur[key] !== updatedPatch[key]) {
           changed = true;
           break;
         }
       }
       if (!changed) return state;
       return {
-        windows: state.windows.map((w, i) => (i === idx ? { ...w, ...patch } : w)),
+        windows: state.windows.map((w, i) => (i === idx ? { ...w, ...updatedPatch } : w)),
       };
     }),
 
@@ -345,7 +503,6 @@ export const useWindows = create<WindowsStore>((set) => ({
       const childNotes = state.windows.filter(
         (w) => (w.parentId === id || w.parentIds?.includes(id)) && w.contentType === "sticky"
       );
-
       if (childNotes.length === 0) return state;
 
       const hasUnstacked = childNotes.some((w) => !w.stacked);
@@ -364,7 +521,16 @@ export const useWindows = create<WindowsStore>((set) => ({
           if (!isChildNote) return w;
 
           if (shouldStack) {
-            return { ...w, stacked: true };
+            const relX = (w.x ?? 80) - parentX;
+            const relY = (w.y ?? 80) - parentY;
+            const px = parentX + parentW / 2;
+            const py = parentY + parentH / 2;
+            const nx = (w.x ?? 80) + (w.width ?? 260) / 2;
+            const ny = (w.y ?? 80) + (w.height ?? (w.isExcerptNote ? 64 : 200)) / 2;
+            const dx = nx - px;
+            const dy = ny - py;
+            const side = w.side ?? (Math.abs(dx) >= Math.abs(dy) ? (dx >= 0 ? "RIGHT" : "LEFT") : (dy >= 0 ? "BOTTOM" : "TOP"));
+            return { ...w, stacked: true, side, relX, relY };
           } else {
             const side = w.side ?? "RIGHT";
             const idx = unstackCount++;
@@ -385,11 +551,23 @@ export const useWindows = create<WindowsStore>((set) => ({
               ny = parentY + parentH + GAP;
             }
 
+            const targetX = w.relX != null ? parentX + w.relX : nx;
+            const targetY = w.relY != null ? parentY + w.relY : ny;
+
+            const cleanPos = findNonOverlappingPosition(
+              targetX,
+              targetY,
+              childW,
+              childH,
+              state.windows,
+              w.id
+            );
+
             return {
               ...w,
               stacked: false,
-              x: nx,
-              y: ny,
+              x: cleanPos.x,
+              y: cleanPos.y,
             };
           }
         }),
@@ -401,13 +579,15 @@ export const useWindows = create<WindowsStore>((set) => ({
       const target = state.windows.find((w) => w.id === id);
       if (!target || !target.stacked) return state;
 
+      const rootWin = findRootWindow(id, state.windows);
       const parentId = target.parentId ?? target.parentIds?.[0];
       const parentWin = parentId ? state.windows.find((w) => w.id === parentId) : undefined;
+      const refWin = rootWin ?? parentWin;
 
-      const px = parentWin?.x ?? target.x ?? 80;
-      const py = parentWin?.y ?? target.y ?? 80;
-      const pw = parentWin?.width ?? DEFAULT_WIDTH;
-      const ph = parentWin?.height ?? DEFAULT_HEIGHT;
+      const px = refWin?.x ?? target.x ?? 80;
+      const py = refWin?.y ?? target.y ?? 80;
+      const pw = refWin?.width ?? DEFAULT_WIDTH;
+      const ph = refWin?.height ?? DEFAULT_HEIGHT;
 
       const side = target.side ?? "RIGHT";
       const GAP = 160;
@@ -425,9 +605,21 @@ export const useWindows = create<WindowsStore>((set) => ({
         ny = py + ph + GAP;
       }
 
+      const targetX = target.relX != null ? px + target.relX : nx;
+      const targetY = target.relY != null ? py + target.relY : ny;
+
+      const cleanPos = findNonOverlappingPosition(
+        targetX,
+        targetY,
+        childW,
+        childH,
+        state.windows,
+        target.id
+      );
+
       return {
         windows: state.windows.map((w) =>
-          w.id === id ? { ...w, stacked: false, x: nx, y: ny } : w
+          w.id === id ? { ...w, stacked: false, x: cleanPos.x, y: cleanPos.y } : w
         ),
       };
     }),

@@ -237,19 +237,27 @@ export function startWireDrag(
       hasMovedFar = true;
     }
 
-    const targetEl = document.elementFromPoint(ev.clientX, ev.clientY)?.closest(".window") as HTMLElement | null;
+    const targetEl = document.elementFromPoint(ev.clientX, ev.clientY)?.closest("[id^='win-']") as HTMLElement | null;
     const targetId = targetEl ? targetEl.id.replace(/^win-/, "") : null;
 
     if (targetEl && targetId && targetId !== sourceId && !isAlreadyConnected(sourceId, targetId)) {
       if (currentHoverEl !== targetEl) {
-        if (currentHoverEl) currentHoverEl.classList.remove("wire-target-hover");
+        if (currentHoverEl) {
+          currentHoverEl.classList.remove("wire-target-hover");
+          const innerWin = currentHoverEl.querySelector(".window");
+          if (innerWin) innerWin.classList.remove("wire-target-hover");
+        }
         currentHoverEl = targetEl;
         currentHoverEl.classList.add("wire-target-hover");
+        const innerWin = currentHoverEl.querySelector(".window");
+        if (innerWin) innerWin.classList.add("wire-target-hover");
         activeWireTargetId = targetId;
       }
     } else {
       if (currentHoverEl) {
         currentHoverEl.classList.remove("wire-target-hover");
+        const innerWin = currentHoverEl.querySelector(".window");
+        if (innerWin) innerWin.classList.remove("wire-target-hover");
         currentHoverEl = null;
         activeWireTargetId = null;
       }
@@ -265,6 +273,9 @@ export function startWireDrag(
 
     if (currentHoverEl) {
       currentHoverEl.classList.remove("wire-target-hover");
+      const innerWin = currentHoverEl.querySelector(".window");
+      if (innerWin) innerWin.classList.remove("wire-target-hover");
+      currentHoverEl = null;
     }
 
     document.body.style.cursor = "";
@@ -283,7 +294,7 @@ export function startWireDrag(
       return;
     }
 
-    const targetWinEl = document.elementFromPoint(ev.clientX, ev.clientY)?.closest(".window") as HTMLElement | null;
+    const targetWinEl = document.elementFromPoint(ev.clientX, ev.clientY)?.closest("[id^='win-']") as HTMLElement | null;
 
     if (targetWinEl && targetWinEl.id !== `win-${sourceId}`) {
       const targetId = targetWinEl.id.replace(/^win-/, "");

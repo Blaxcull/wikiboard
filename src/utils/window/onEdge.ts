@@ -47,7 +47,8 @@ export function attachEdgeDelegate() {
     document.addEventListener("mousemove", (e: MouseEvent) => {
         if (isDraggingWindow || isResizingWindow) return;
 
-        const target = (e.target as HTMLElement).closest?.(".window") as HTMLElement | null;
+        const rawTarget = (e.target as HTMLElement).closest?.(".window-wrapper, .window") as HTMLElement | null;
+        const target = (rawTarget?.closest?.(".window-wrapper") as HTMLElement) || rawTarget;
         if (!target) return;
         if (target.classList.contains("pdf-window") && target.classList.contains("maximized")) return;
 

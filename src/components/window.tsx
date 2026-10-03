@@ -31,6 +31,8 @@ type WindowProps = {
   onAddSticky?: (side: "TOP" | "RIGHT" | "BOTTOM" | "LEFT") => void;
   /** Called when the window is right-clicked */
   onContextMenu?: (e: React.MouseEvent) => void;
+  /** Visual note card stubs for stacked notes */
+  stubs?: React.ReactNode;
 };
 
 const Window = memo(function Window({
@@ -49,6 +51,7 @@ const Window = memo(function Window({
   onPositionChange,
   onAddSticky,
   onContextMenu,
+  stubs,
 }: React.PropsWithChildren<WindowProps>) {
   const positioned = useRef(false);
 
@@ -72,15 +75,20 @@ const Window = memo(function Window({
         }
       }}
       id={id}
-      className={`window ${className}`}
+      className="window-wrapper absolute"
       style={style}
-      onMouseDown={(e) => {
-        onActivate?.();
-        Resize(e, (rect) => {
-          onPositionChange?.(rect);
-        }, onActivate);
-      }}
     >
+      {stubs}
+      <div
+        className={`window w-full h-full relative ${className}`}
+        style={{ top: 0, left: 0, width: "100%", height: "100%" }}
+        onMouseDown={(e) => {
+          onActivate?.();
+          Resize(e, (rect) => {
+            onPositionChange?.(rect);
+          }, onActivate);
+        }}
+      >
       <div
         className={`titlebar ${titleBarClassName}`}
         onContextMenu={onContextMenu}
@@ -144,8 +152,16 @@ const Window = memo(function Window({
           startWireDrag(e, winId, "LEFT", onAddSticky);
         }}
       />
+      <div className="absolute bottom-1 right-1 pointer-events-none opacity-40 hover:opacity-100 transition-opacity text-[#666] select-none z-30">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+          <circle cx="10" cy="10" r="1.5" />
+          <circle cx="6" cy="10" r="1.5" />
+          <circle cx="10" cy="6" r="1.5" />
+        </svg>
+      </div>
     </div>
-  );
+  </div>
+);
 });
 
 export default Window;

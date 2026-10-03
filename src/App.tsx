@@ -17,6 +17,15 @@ import { handleZoom } from './utils/canvas/zoom'
 import { isDraggingWindow, activeDraggedWindowId } from './utils/window/drag'
 import { isResizingWindow, activeResizingWindowId, Resize } from './utils/window/resize'
 import { startWireDrag, subscribeWire } from './utils/window/wireDrag'
+import {
+  isNoteUnstacking,
+  isWindowStacking,
+  markNoteUnstacking,
+  unmarkNoteUnstacking,
+  subscribeAnimation,
+  stackWindowWithAnimation,
+  getStubTargetOffset,
+} from './utils/stackAnimation'
 
 const ARROW_CTRL = 0.4;
 const ARROW_LEN = 16;
@@ -151,12 +160,34 @@ function computeArrow(
   return { sx, sy, c1x, c1y, c2x, c2y, ex, ey, tipX, tipY, bcx, bcy, b1x, b1y, b2x, b2y, childSide: bestChildSide };
 }
 
+function parseTransformTranslate(el: HTMLElement): { tx: number; ty: number } {
+  const transform = el.style.transform;
+  if (!transform || transform === "none") return { tx: 0, ty: 0 };
+
+  const match = transform.match(/translate(?:3d)?\(([-\d.]+)(?:px)?,\s*([-\d.]+)(?:px)?/);
+  if (match) {
+    return {
+      tx: parseFloat(match[1]) || 0,
+      ty: parseFloat(match[2]) || 0,
+    };
+  }
+
+  try {
+    const matrix = new DOMMatrix(window.getComputedStyle(el).transform);
+    return { tx: matrix.m41, ty: matrix.m42 };
+  } catch {
+    return { tx: 0, ty: 0 };
+  }
+}
+
 function readWindowPos(el: HTMLElement): { x: number; y: number; w: number; h: number; zIndex: number } {
   const x = parseFloat(el.style.left) || 0;
   const y = parseFloat(el.style.top) || 0;
-  const w = el.offsetWidth || parseFloat(el.style.width) || 750;
-  let h = el.offsetHeight || parseFloat(el.style.height) || 550;
+  const w = parseFloat(el.style.width) || el.offsetWidth || 750;
+  let h = parseFloat(el.style.height) || el.offsetHeight || 550;
   const zIndex = parseInt(el.style.zIndex, 10) || 0;
+
+  const { tx, ty } = parseTransformTranslate(el);
 
   if (el.classList.contains("pdf-window") && !el.classList.contains("maximized")) {
     const canvas = el.querySelector("canvas");
@@ -169,14 +200,6 @@ function readWindowPos(el: HTMLElement): { x: number; y: number; w: number; h: n
         const leftOffset = (canvasRect.left - windowRect.left) / cam.zoom;
         const canvasWidth = (canvasRect.right - canvasRect.left) / cam.zoom;
         const canvasHeight = (canvasRect.bottom - canvasRect.top) / cam.zoom;
-        const t = el.style.transform;
-        let tx = 0, ty = 0;
-        if (t) {
-          const mx = t.match(/translate3d\(([-\d.]+)px/);
-          const my = t.match(/translate3d\([-\d.]+px,\s*([-\d.]+)px/);
-          if (mx) tx = parseFloat(mx[1]) || 0;
-          if (my) ty = parseFloat(my[1]) || 0;
-        }
         return {
           x: x + tx + leftOffset,
           y: y + ty + topOffset,
@@ -190,16 +213,192 @@ function readWindowPos(el: HTMLElement): { x: number; y: number; w: number; h: n
     }
   }
 
-  const t = el.style.transform;
-  let tx = 0, ty = 0;
-  if (t) {
-    const mx = t.match(/translate3d\(([-\d.]+)px/);
-    const my = t.match(/translate3d\([-\d.]+px,\s*([-\d.]+)px/);
-    if (mx) tx = parseFloat(mx[1]) || 0;
-    if (my) ty = parseFloat(my[1]) || 0;
-  }
   return { x: x + tx, y: y + ty, w, h, zIndex };
 }
+
+
+
+function getNoteColor(index: number, isExcerpt?: boolean): string {
+  if (isExcerpt) return "#f0e5d8";
+  return "#eee7a6";
+}
+
+function getCardOffsetStyle(
+  side: "RIGHT" | "LEFT" | "TOP" | "BOTTOM",
+  index: number,
+  total: number,
+  w: number,
+  h: number
+): React.CSSProperties {
+  const isCenter = total % 2 === 1 && index === Math.floor(total / 2);
+  const peek = isCenter ? 26 : 18;
+
+  const spreadX = (index - (total - 1) / 2) * 65;
+  const spreadY = (index - (total - 1) / 2) * 55;
+  const zIndex = -index - 1;
+
+  if (side === "RIGHT") {
+    return {
+      left: `calc(100% - ${w - 22}px)`,
+      top: `calc(50% + ${spreadY - h / 2}px)`,
+      zIndex,
+    };
+  }
+
+  if (side === "LEFT") {
+    return {
+      left: `calc(-22px)`,
+      top: `calc(50% + ${spreadY - h / 2}px)`,
+      zIndex,
+    };
+  }
+
+  if (side === "TOP") {
+    return {
+      top: `calc(-${peek}px)`,
+      left: `calc(50% + ${spreadX - w / 2}px)`,
+      zIndex,
+    };
+  }
+
+  // BOTTOM
+  return {
+    top: `calc(100% - ${h - (isCenter ? 26 : 22)}px)`,
+    left: `calc(50% + ${spreadX - w / 2}px)`,
+    zIndex,
+  };
+}
+
+export function determineNoteSide(note: WindowData, parent: WindowData): "TOP" | "RIGHT" | "BOTTOM" | "LEFT" {
+  if (note.side) return note.side;
+
+  const px = parent.x ?? 80;
+  const py = parent.y ?? 80;
+  const pw = parent.width ?? 750;
+  const ph = parent.height ?? 550;
+
+  const nx = note.x ?? (px + pw + 20);
+  const ny = note.y ?? py;
+  const nw = note.width ?? 260;
+  const nh = note.height ?? (note.isExcerptNote ? 64 : 200);
+
+  const parentCenterX = px + pw / 2;
+  const parentCenterY = py + ph / 2;
+  const noteCenterX = nx + nw / 2;
+  const noteCenterY = ny + nh / 2;
+
+  const dx = noteCenterX - parentCenterX;
+  const dy = noteCenterY - parentCenterY;
+
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    return dx >= 0 ? "RIGHT" : "LEFT";
+  } else {
+    return dy >= 0 ? "BOTTOM" : "TOP";
+  }
+}
+
+const StackedNoteStubs = memo(function StackedNoteStubs({
+  parentWin,
+}: {
+  parentWin: WindowData;
+}) {
+  const windows = useWindows((s) => s.windows);
+  const removeWindow = useWindows((s) => s.removeWindow);
+
+  const childNotes = useMemo(
+    () =>
+      windows.filter(
+        (w) =>
+          (w.parentId === parentWin.id || w.parentIds?.includes(parentWin.id)) &&
+          w.contentType === "sticky" &&
+          w.stacked
+      ),
+    [windows, parentWin.id]
+  );
+
+  if (childNotes.length === 0) return null;
+
+  const bySide: Record<string, WindowData[]> = {
+    RIGHT: [],
+    LEFT: [],
+    TOP: [],
+    BOTTOM: [],
+  };
+
+  for (const note of childNotes) {
+    const side = determineNoteSide(note, parentWin);
+    bySide[side].push(note);
+  }
+
+  const parentW = parentWin.width ?? 750;
+  const parentH = parentWin.height ?? 550;
+
+  // Dynamic limit scaling with parent window width and height (no upper cap of 5)
+  const maxHoriz = Math.max(1, Math.floor((parentW - 40) / 65));
+  const maxVert = Math.max(1, Math.floor((parentH - 40) / 55));
+
+  return (
+    <div
+      className="absolute inset-0 pointer-events-none select-none z-[-1]"
+      style={{ overflow: "visible" }}
+    >
+      {(["RIGHT", "LEFT", "TOP", "BOTTOM"] as const).map((side) => {
+        const notes = bySide[side];
+        if (!notes || notes.length === 0) return null;
+        const limit = (side === "TOP" || side === "BOTTOM") ? maxHoriz : maxVert;
+        const visibleNotes = notes.slice(0, limit);
+
+        return (
+          <div key={side}>
+            {visibleNotes.map((note, i) => {
+              const noteW = note.width ?? 260;
+              const noteH = note.height ?? (note.isExcerptNote ? 64 : 200);
+              const posStyle = getCardOffsetStyle(side, i, visibleNotes.length, noteW, noteH);
+              const colorBg = getNoteColor(i, note.isExcerptNote);
+
+              return (
+                <div
+                  key={note.id}
+                  className="absolute pointer-events-auto cursor-pointer transition-transform duration-150 hover:scale-[1.02] flex flex-col p-2.5 rounded-[2px] border border-black/20 shadow-md"
+                  style={{
+                    width: `${noteW}px`,
+                    height: `${noteH}px`,
+                    background: colorBg,
+                    ...posStyle,
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    stackWindowWithAnimation(parentWin.id);
+                  }}
+                  title={`Click to unstack note`}
+                >
+                  <div className="flex items-center justify-between text-[11px] font-bold text-[#333] select-none opacity-85">
+                    <span className="truncate max-w-[170px]">
+                      {note.isExcerptNote ? "Excerpt" : (note.title || "Sticky Note")}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteScroll(note.id);
+                        removeWindow(note.id);
+                        evictClosedWindowArticles();
+                      }}
+                      className="w-4 h-4 flex items-center justify-center text-[10px] text-[#333] hover:text-red-600 font-bold bg-black/5 hover:bg-red-100 rounded-full cursor-pointer transition-colors border-none ml-1"
+                      title="Delete note"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+});
 
 const ConnectionArrows = memo(function ConnectionArrows({
   windows,
@@ -271,20 +470,13 @@ const ConnectionArrows = memo(function ConnectionArrows({
 
     const posMap = cachedPosMapRef.current;
 
-    // Incremental update: during live drag, only update the active moving window in posMap
-    if (onlyActiveId) {
-      const el = document.getElementById(`win-${onlyActiveId}`);
-      if (el) {
-        posMap.set(onlyActiveId, readWindowPos(el));
-      }
-    } else {
-      // Full refresh
-      posMap.clear();
-      for (const w of windows) {
+    // Ensure posMap contains current DOM geometry for all active windows
+    for (const w of windows) {
+      if (!posMap.has(w.id) || !onlyActiveId || w.id === onlyActiveId) {
         const el = document.getElementById(`win-${w.id}`);
         if (el) {
           posMap.set(w.id, readWindowPos(el));
-        } else {
+        } else if (!posMap.has(w.id)) {
           posMap.set(w.id, {
             x: w.x ?? 0,
             y: w.y ?? 0,
@@ -302,15 +494,28 @@ const ConnectionArrows = memo(function ConnectionArrows({
       const child = byId.get(parts[1]);
       if (!parent || !child) continue;
 
-      if (child.stacked || parent.stacked) {
-        if (child.stacked && (child.parentId === parent.id || child.parentIds?.includes(parent.id))) {
-          path.style.display = 'none';
-          poly.style.display = 'none';
-          continue;
-        }
+      if (child.stacked) {
+        path.style.display = 'none';
+        poly.style.display = 'none';
+        continue;
       }
 
-      const parentPos = posMap.get(parent.id);
+      let activeParent = parent;
+      while (activeParent && activeParent.stacked) {
+        const nextPid = activeParent.parentId ?? activeParent.parentIds?.[0];
+        if (!nextPid) break;
+        const nextParent = byId.get(nextPid);
+        if (!nextParent) break;
+        activeParent = nextParent;
+      }
+
+      if (activeParent.stacked) {
+        path.style.display = 'none';
+        poly.style.display = 'none';
+        continue;
+      }
+
+      const parentPos = posMap.get(activeParent.id);
       const childPos = posMap.get(child.id);
       if (!parentPos || !childPos) continue;
 
@@ -340,9 +545,34 @@ const ConnectionArrows = memo(function ConnectionArrows({
         poly.setAttribute('points', `${a.tipX},${a.tipY} ${a.b1x},${a.b1y} ${a.b2x},${a.b2y}`);
         poly.style.display = '';
       }
+
+      const isAnimating =
+        isNoteUnstacking(child.id) ||
+        isNoteUnstacking(parent.id) ||
+        isNoteUnstacking(activeParent.id) ||
+        isWindowStacking(parent.id) ||
+        isWindowStacking(activeParent.id) ||
+        isWindowStacking(child.id);
+
+      if (isAnimating) {
+        path.style.opacity = "0";
+        poly.style.opacity = "0";
+        path.style.transition = "none";
+        poly.style.transition = "none";
+      } else {
+        path.style.transition = "opacity 250ms ease";
+        poly.style.transition = "opacity 250ms ease";
+        path.style.opacity = "1";
+        poly.style.opacity = "1";
+      }
+
       path.style.display = '';
     }
   }, [windows]);
+
+  useEffect(() => {
+    return subscribeAnimation(() => updatePaths());
+  }, [updatePaths]);
 
   // Initial render + store updates (deferred to ensure newly spawned window elements exist in DOM)
   useEffect(() => {
@@ -370,7 +600,8 @@ const ConnectionArrows = memo(function ConnectionArrows({
       raf = requestAnimationFrame(loop);
     }
     function onDown(e: MouseEvent) {
-      const win = (e.target as HTMLElement)?.closest?.('.window');
+      const rawWin = (e.target as HTMLElement)?.closest?.('.window-wrapper, .window');
+      const win = rawWin?.closest?.('.window-wrapper') || rawWin;
       if (win && !active) {
         active = true;
         const activeId = activeDraggedWindowId || activeResizingWindowId;
@@ -667,39 +898,47 @@ const StackedNotesDrawer = memo(function StackedNotesDrawer({
       </button>
 
       {isOpen && (
-        <div className="mt-2 w-[340px] max-h-[260px] overflow-y-auto p-2 bg-[#fdfbf7]/95 backdrop-blur-md border-2 border-[#d6c4b0] rounded-[18px] shadow-2xl flex flex-col gap-2 select-text cursor-default animate-in fade-in slide-in-from-top-2 duration-200">
-          {childNotes.map((note) => (
-            <div key={note.id} className="p-3 bg-[#f0e5d8] border border-[#e4d5c3] rounded-[14px] flex flex-col gap-1.5 text-left shadow-sm">
-              <div className="flex items-center justify-between text-[11px] font-bold text-[#c26100]">
-                <span>{note.isExcerptNote ? "Excerpt Highlight" : "Sticky Note"}</span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => unstackNote(note.id)}
-                    className="px-2 py-0.5 bg-white/90 hover:bg-white text-[#c26100] border border-[#e4d5c3] rounded-md font-semibold cursor-pointer transition-colors text-[11px]"
-                    title="Unstack onto canvas"
-                  >
-                    Unstack ↗
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      deleteScroll(note.id);
-                      removeWindow(note.id);
-                      evictClosedWindowArticles();
-                    }}
-                    className="w-5 h-5 flex items-center justify-center hover:bg-red-100 text-red-600 rounded-md font-bold cursor-pointer transition-colors text-[12px] border-none bg-transparent"
-                    title="Delete note"
-                  >
-                    ✕
-                  </button>
+        <div className="mt-2 max-w-[85vw] max-h-[420px] overflow-auto p-3 bg-[#fdfbf7]/95 backdrop-blur-md border-2 border-[#d6c4b0] rounded-[22px] shadow-2xl flex flex-col items-center gap-3 select-text cursor-default animate-in fade-in slide-in-from-top-2 duration-200">
+          {childNotes.map((note) => {
+            const w = note.width ?? 260;
+            const h = note.height ?? (note.isExcerptNote ? 64 : 200);
+            return (
+              <div
+                key={note.id}
+                className="relative p-3.5 bg-[#f0e5d8] border-2 border-[#e4d5c3] rounded-[18px] flex flex-col gap-2 text-left shadow-md shrink-0 transition-all"
+                style={{ width: `${w}px`, height: `${h}px` }}
+              >
+                <div className="flex items-center justify-between text-[12px] font-bold text-[#c26100] shrink-0">
+                  <span>{note.isExcerptNote ? "Excerpt Highlight" : (note.title || "Sticky Note")}</span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => unstackNote(note.id)}
+                      className="px-2.5 py-1 bg-white/90 hover:bg-white text-[#c26100] border border-[#e4d5c3] rounded-md font-semibold cursor-pointer transition-colors text-[11px] shadow-sm"
+                      title="Unstack onto canvas"
+                    >
+                      Unstack ↗
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        deleteScroll(note.id);
+                        removeWindow(note.id);
+                        evictClosedWindowArticles();
+                      }}
+                      className="w-5 h-5 flex items-center justify-center hover:bg-red-100 text-red-600 rounded-md font-bold cursor-pointer transition-colors text-[12px] border-none bg-transparent"
+                      title="Delete note"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                <div className="flex-1 text-[13px] font-medium text-[#4a3219] leading-snug break-words overflow-y-auto pr-1 select-text">
+                  {note.stickyText || "(Empty note)"}
                 </div>
               </div>
-              <div className="text-[13px] font-medium text-[#4a3219] leading-snug break-words">
-                {note.stickyText || "(Empty note)"}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -823,6 +1062,71 @@ useEffect(() => {
   w.height,
 ])
 
+  const prevStackedRef = useRef(w.stacked);
+
+  useEffect(() => {
+    const wasStacked = prevStackedRef.current;
+    prevStackedRef.current = !!w.stacked;
+
+    if (wasStacked && !w.stacked && w.contentType === "sticky") {
+      const el = document.getElementById(`win-${w.id}`);
+      const parentId = w.parentId ?? w.parentIds?.[0];
+      const parentEl = parentId ? document.getElementById(`win-${parentId}`) : null;
+
+      if (el && parentEl) {
+        const parentWin = useWindows.getState().windows.find((win) => win.id === parentId);
+        const noteRect = el.getBoundingClientRect();
+        const parentRect = parentEl.getBoundingClientRect();
+
+        let fromX = (parentRect.left + parentRect.width / 2) - (noteRect.left + noteRect.width / 2);
+        let fromY = (parentRect.top + parentRect.height / 2) - (noteRect.top + noteRect.height / 2);
+
+        if (parentWin) {
+          const allChildNotes = useWindows.getState().windows.filter(
+            (win) =>
+              (win.parentId === parentId || win.parentIds?.includes(parentId)) &&
+              win.contentType === "sticky"
+          );
+          const side = determineNoteSide(w, parentWin);
+          const sideNotes = allChildNotes.filter((win) => determineNoteSide(win, parentWin) === side);
+          const index = Math.max(0, sideNotes.findIndex((win) => win.id === w.id));
+          const total = sideNotes.length || 1;
+          const noteW = w.width ?? 260;
+          const noteH = w.height ?? (w.isExcerptNote ? 64 : 200);
+
+          const offset = getStubTargetOffset(side, index, total, noteW, noteH, parentRect, noteRect);
+          fromX = offset.toX;
+          fromY = offset.toY;
+
+          const parentZ = parentWin.zIndex ?? 1;
+          el.style.zIndex = `${parentZ - 1}`;
+        }
+
+        markNoteUnstacking(w.id);
+
+        const anim = el.animate(
+          [
+            { transform: `translate3d(${fromX}px, ${fromY}px, 0)`, opacity: 1 },
+            { transform: "translate3d(0, 0, 0)", opacity: 1 },
+          ],
+          {
+            duration: 320,
+            easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+            fill: "forwards",
+          }
+        );
+
+        anim.onfinish = () => {
+          anim.cancel();
+          el.style.transform = "";
+          el.style.opacity = "";
+          el.style.zIndex = "";
+          unmarkNoteUnstacking(w.id);
+          useWindows.getState().setActive(w.id);
+        };
+      }
+    }
+  }, [w.stacked, w.id, w.contentType, w.parentId, w.parentIds]);
 
   if (w.stacked) return null;
 
@@ -831,57 +1135,61 @@ useEffect(() => {
     return (
       <div
         id={`win-${w.id}`}
-        className={`window sticky-window ${isExcerpt ? "excerpt-note-window" : ""} ${w.active ? "active" : "inactive"}`}
+        className="window-wrapper absolute"
         style={{
           ...zIndexStyle,
           left: `${w.x ?? 80}px`,
           top: `${w.y ?? 80}px`,
           width: `${w.width ?? 260}px`,
           height: `${w.height ?? (isExcerpt ? 64 : 200)}px`,
-          ...(isExcerpt
-            ? {
-                borderRadius: "22px",
-                background: "#f0e5d8",
-                border: "1px solid #e4d5c3",
-                boxShadow: "0 4px 14px rgba(0, 0, 0, 0.08)",
-              }
-            : {}),
         }}
-        onMouseDown={(e) => {
-          handleActivate();
-          Resize(e, (rect) => handlePositionChange(rect));
-        }}
+        onMouseDown={handleActivate}
       >
-        <StickyNote
-          win={w}
-          onClose={handleClose}
-          onActivate={handleActivate}
-          onPositionChange={handlePositionChange}
-        />
-        <button
-          type="button"
-          className="connection-point point-top"
-          title="Add sticky note"
-          onMouseDown={(e) => startWireDrag(e, w.id, "TOP", handleAddSticky)}
-        />
-        <button
-          type="button"
-          className="connection-point point-right"
-          title="Add sticky note"
-          onMouseDown={(e) => startWireDrag(e, w.id, "RIGHT", handleAddSticky)}
-        />
-        <button
-          type="button"
-          className="connection-point point-bottom"
-          title="Add sticky note"
-          onMouseDown={(e) => startWireDrag(e, w.id, "BOTTOM", handleAddSticky)}
-        />
-        <button
-          type="button"
-          className="connection-point point-left"
-          title="Add sticky note"
-          onMouseDown={(e) => startWireDrag(e, w.id, "LEFT", handleAddSticky)}
-        />
+        <StackedNoteStubs parentWin={w} />
+        <div
+          className={`window sticky-window ${isExcerpt ? "excerpt-note-window" : ""} ${w.active ? "active" : "inactive"} w-full h-full relative`}
+          style={{
+            ...(isExcerpt
+              ? {
+                  borderRadius: "22px",
+                  background: "#f0e5d8",
+                  border: "1px solid #e4d5c3",
+                  boxShadow: "0 4px 14px rgba(0, 0, 0, 0.08)",
+                }
+              : {}),
+          }}
+        >
+          <StickyNote
+            win={w}
+            onClose={handleClose}
+            onActivate={handleActivate}
+            onPositionChange={handlePositionChange}
+          />
+          <button
+            type="button"
+            className="connection-point point-top"
+            title="Add sticky note"
+            onMouseDown={(e) => startWireDrag(e, w.id, "TOP", handleAddSticky)}
+          />
+          <button
+            type="button"
+            className="connection-point point-right"
+            title="Add sticky note"
+            onMouseDown={(e) => startWireDrag(e, w.id, "RIGHT", handleAddSticky)}
+          />
+          <button
+            type="button"
+            className="connection-point point-bottom"
+            title="Add sticky note"
+            onMouseDown={(e) => startWireDrag(e, w.id, "BOTTOM", handleAddSticky)}
+          />
+          <button
+            type="button"
+            className="connection-point point-left"
+            title="Add sticky note"
+            onMouseDown={(e) => startWireDrag(e, w.id, "LEFT", handleAddSticky)}
+          />
+        </div>
       </div>
     );
   }
@@ -923,38 +1231,39 @@ useEffect(() => {
     Resize(e, (rect) => handlePositionChange(rect))
   }}
 >
+  <StackedNoteStubs parentWin={w} />
   <div className="pdf-window-animation-layer">
     <PdfViewer win={w} onAddSticky={handleAddSticky} />
   </div>
-  {!w.pdfMaximized && (
-    <>
-      <button
-        type="button"
-        className="connection-point point-top"
-        title="Add sticky note"
-        onMouseDown={(e) => startWireDrag(e, w.id, "TOP", handleAddSticky)}
-      />
-      <button
-        type="button"
-        className="connection-point point-right"
-        title="Add sticky note"
-        onMouseDown={(e) => startWireDrag(e, w.id, "RIGHT", handleAddSticky)}
-      />
-      <button
-        type="button"
-        className="connection-point point-bottom"
-        title="Add sticky note"
-        onMouseDown={(e) => startWireDrag(e, w.id, "BOTTOM", handleAddSticky)}
-      />
-      <button
-        type="button"
-        className="connection-point point-left"
-        title="Add sticky note"
-        onMouseDown={(e) => startWireDrag(e, w.id, "LEFT", handleAddSticky)}
-      />
-    </>
-  )}
-</div>
+      {!w.pdfMaximized && (
+        <>
+          <button
+            type="button"
+            className="connection-point point-top"
+            title="Add sticky note"
+            onMouseDown={(e) => startWireDrag(e, w.id, "TOP", handleAddSticky)}
+          />
+          <button
+            type="button"
+            className="connection-point point-right"
+            title="Add sticky note"
+            onMouseDown={(e) => startWireDrag(e, w.id, "RIGHT", handleAddSticky)}
+          />
+          <button
+            type="button"
+            className="connection-point point-bottom"
+            title="Add sticky note"
+            onMouseDown={(e) => startWireDrag(e, w.id, "BOTTOM", handleAddSticky)}
+          />
+          <button
+            type="button"
+            className="connection-point point-left"
+            title="Add sticky note"
+            onMouseDown={(e) => startWireDrag(e, w.id, "LEFT", handleAddSticky)}
+          />
+        </>
+      )}
+    </div>
     )
   }
 
@@ -975,6 +1284,7 @@ useEffect(() => {
           Resize(e, (rect) => handlePositionChange(rect));
         }}
       >
+        <StackedNoteStubs parentWin={w} />
         <ImageViewer
           win={w}
           onClose={handleClose}
@@ -1014,6 +1324,7 @@ useEffect(() => {
       id={`win-${w.id}`}
       className={w.active ? 'active' : 'inactive'}
       style={zIndexStyle}
+      stubs={<StackedNoteStubs parentWin={w} />}
       titleBarContent={
         <span className="flex items-center gap-1.5">
           <span>{w.title}</span>

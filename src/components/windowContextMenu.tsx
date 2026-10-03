@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useWindows } from "../store/windows";
 import { deleteScroll } from "../utils/scrollMemory";
 import { evictClosedWindowArticles } from "../utils/articleCache";
+import { stackWindowWithAnimation } from "../utils/stackAnimation";
 
 export type ContextMenuPosition = {
   x: number;
@@ -142,7 +143,7 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
             } else if (item.id === "always-on-top") {
               useWindows.getState().toggleAlwaysOnTop(pos.windowId);
             } else if (item.id === "stack") {
-              useWindows.getState().toggleStackWindow(pos.windowId);
+              stackWindowWithAnimation(pos.windowId);
             }
             onClose();
           }}

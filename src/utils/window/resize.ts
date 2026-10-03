@@ -15,29 +15,19 @@ export function computeCursorDirection(
   const relX = mouseX - left;
   const relY = mouseY - top;
 
-  const EDGE = 12;
-  const CORNER = 20;
+  const CORNER = 24;
 
   let cornerY = height;
   if (target?.classList.contains("pdf-window")) {
     cornerY = height - 64;
   }
 
-  const nearLeft = relX >= -EDGE && relX <= EDGE;
-  const nearRight = relX >= width - EDGE && relX <= width + EDGE;
-  const nearTop = relY >= -EDGE && relY <= EDGE;
-  const nearBottom = (relY >= cornerY - EDGE && relY <= cornerY + EDGE) || relY >= height - EDGE;
+  const nearRight = relX >= width - CORNER && relX <= width + 8;
+  const nearBottom = (relY >= cornerY - CORNER && relY <= cornerY + 8) || (relY >= height - CORNER && relY <= height + 8);
 
-  if (nearTop && nearLeft) return 'nw-resize';
-  if (nearTop && nearRight) return 'ne-resize';
-  if (nearBottom && nearLeft) return 'sw-resize';
-  if (nearBottom && nearRight) return 'se-resize';
-  if (nearRight) return 'e-resize';
-  if (nearBottom) return 's-resize';
-  if (nearLeft) return 'w-resize';
-  if (nearTop) return 'n-resize';
-
-  if (relX >= width - CORNER && relY >= cornerY - CORNER) return 'se-resize';
+  if (nearRight && nearBottom) {
+    return 'se-resize';
+  }
 
   return null;
 }
@@ -49,7 +39,8 @@ export function Resize(
 ) {
   if (e.button !== 0 || isDraggingWindow || isResizingWindow) return;
 
-  const target = (e.currentTarget.closest(".window") as HTMLElement) || e.currentTarget;
+  const rawTarget = (e.currentTarget.closest(".window-wrapper, .window") as HTMLElement) || e.currentTarget;
+  const target = (rawTarget.closest(".window-wrapper") as HTMLElement) || rawTarget;
   if (target.classList.contains("pdf-window") && target.classList.contains("maximized")) return;
 
   // Read geometry from style — these are world-space coordinates

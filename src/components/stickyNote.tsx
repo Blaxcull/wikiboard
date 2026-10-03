@@ -103,6 +103,14 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange 
         onMouseDown={(e) => e.stopPropagation()}
         autoFocus
       />
+      {/* Visual bottom-right corner resize handle */}
+      <div className="absolute bottom-1 right-2.5 opacity-40 hover:opacity-100 transition-opacity pointer-events-none text-[#787236] z-10">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+          <circle cx="8" cy="8" r="1.2" />
+          <circle cx="4" cy="8" r="1.2" />
+          <circle cx="8" cy="4" r="1.2" />
+        </svg>
+      </div>
     </div>
   );
 }

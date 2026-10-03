@@ -1,4 +1,4 @@
-import { useWindows } from "../../store/windows";
+import { useWindows, getDescendantNotes } from "../../store/windows";
 import { getCamera } from "../camera";
 import { setZoomImmediate } from "../canvas/zoom";
 import { isResizingWindow } from "./resize";
@@ -18,7 +18,8 @@ export default function startDrag(
 ) {
   if (e.button !== 0 || isResizingWindow) return;
 
-  const target = (e.currentTarget.closest(".window") as HTMLElement) || e.currentTarget.parentElement;
+  const rawTarget = (e.currentTarget.closest(".window-wrapper, .window") as HTMLElement) || e.currentTarget;
+  const target = (rawTarget.closest(".window-wrapper") as HTMLElement) || rawTarget;
   if (!target) return;
 
   const startX = e.clientX;
@@ -40,6 +41,16 @@ export default function startDrag(
   const worldShiftX = startWorldMouseX - baseLeft;
   const worldShiftY = startWorldMouseY - baseTop;
 
+  const allWindows = useWindows.getState().windows;
+  const descendantNotes = getDescendantNotes(activeDraggedWindowId, allWindows);
+
+  const descendantData = descendantNotes.map((note) => {
+    const el = document.getElementById(`win-${note.id}`);
+    const bLeft = el ? parseFloat(el.style.left) || el.offsetLeft || note.x || 0 : note.x || 0;
+    const bTop = el ? parseFloat(el.style.top) || el.offsetTop || note.y || 0 : note.y || 0;
+    return { id: note.id, el, baseLeft: bLeft, baseTop: bTop };
+  });
+
   const nextZ = useWindows.getState().maxZIndex + 1;
 
   let rafId = 0;
@@ -54,6 +65,11 @@ export default function startDrag(
     target.closest(".canvas-world")?.classList.add("gesture-active");
     document.body.style.cursor = "move";
     target.style.zIndex = String(nextZ);
+    for (const child of descendantData) {
+      if (child.el) {
+        child.el.classList.add("dragging");
+      }
+    }
   }
 
   applyGestureSetup();
@@ -73,6 +89,11 @@ export default function startDrag(
     const rdy = Math.round(newWorldTop - baseTop);
 
     target.style.transform = `translate3d(${rdx}px, ${rdy}px, 0)`;
+    for (const child of descendantData) {
+      if (child.el) {
+        child.el.style.transform = `translate3d(${rdx}px, ${rdy}px, 0)`;
+      }
+    }
   }
 
   function onMouseMove(ev: MouseEvent) {
@@ -102,9 +123,24 @@ export default function startDrag(
     const finalLeft = Math.round(curWorldMouseX - worldShiftX);
     const finalTop = Math.round(curWorldMouseY - worldShiftY);
 
+    const rdx = finalLeft - baseLeft;
+    const rdy = finalTop - baseTop;
+
     target.style.transform = "";
     target.style.left = `${finalLeft}px`;
     target.style.top = `${finalTop}px`;
+
+    for (const child of descendantData) {
+      if (child.el) {
+        const cLeft = Math.round(child.baseLeft + rdx);
+        const cTop = Math.round(child.baseTop + rdy);
+        child.el.style.transform = "";
+        child.el.style.left = `${cLeft}px`;
+        child.el.style.top = `${cTop}px`;
+        useWindows.getState().updateWindow(child.id, { x: cLeft, y: cTop });
+        child.el.classList.remove("dragging");
+      }
+    }
 
     useWindows.setState({ maxZIndex: nextZ });
 

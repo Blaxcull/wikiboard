@@ -120,6 +120,24 @@ export function connectWithoutCycles(sourceId: string, targetId: string) {
   useWindows.setState({ windows: updatedWindows });
 }
 
+export function isAlreadyConnected(sourceId: string, targetId: string): boolean {
+  if (sourceId === targetId) return true;
+  const windows = useWindows.getState().windows;
+  const targetWin = windows.find((w) => w.id === targetId);
+  const sourceWin = windows.find((w) => w.id === sourceId);
+  if (!targetWin || !sourceWin) return false;
+
+  const targetParents = new Set<string>();
+  if (targetWin.parentIds) for (const p of targetWin.parentIds) targetParents.add(p);
+  if (targetWin.parentId) targetParents.add(targetWin.parentId);
+
+  const sourceParents = new Set<string>();
+  if (sourceWin.parentIds) for (const p of sourceWin.parentIds) sourceParents.add(p);
+  if (sourceWin.parentId) sourceParents.add(sourceWin.parentId);
+
+  return targetParents.has(sourceId) || sourceParents.has(targetId);
+}
+
 export function startWireDrag(
   e: React.MouseEvent<HTMLButtonElement>,
   sourceId: string,
@@ -220,12 +238,14 @@ export function startWireDrag(
     }
 
     const targetEl = document.elementFromPoint(ev.clientX, ev.clientY)?.closest(".window") as HTMLElement | null;
-    if (targetEl && targetEl.id !== `win-${sourceId}`) {
+    const targetId = targetEl ? targetEl.id.replace(/^win-/, "") : null;
+
+    if (targetEl && targetId && targetId !== sourceId && !isAlreadyConnected(sourceId, targetId)) {
       if (currentHoverEl !== targetEl) {
         if (currentHoverEl) currentHoverEl.classList.remove("wire-target-hover");
         currentHoverEl = targetEl;
         currentHoverEl.classList.add("wire-target-hover");
-        activeWireTargetId = targetEl.id.replace(/^win-/, "");
+        activeWireTargetId = targetId;
       }
     } else {
       if (currentHoverEl) {

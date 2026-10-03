@@ -41,6 +41,7 @@ export type WindowData = {
   pdfMaximized?: boolean;
   /** True while the maximize/minimize animation is running */
   pdfAnimating?: boolean;
+  alwaysOnTop?: boolean;
   zIndex?: number;
   x?: number;
   y?: number;
@@ -57,6 +58,7 @@ type WindowsStore = {
   updateWindow: (id: string, patch: Partial<Omit<WindowData, "id">>) => void;
   spawnWindows: (count: number, startIdx: number, titles?: string[]) => void;
   breakConnections: (id: string) => void;
+  toggleAlwaysOnTop: (id: string) => void;
 };
 
 export const DEFAULT_WIDTH = 750;
@@ -315,4 +317,20 @@ export const useWindows = create<WindowsStore>((set) => ({
         return w;
       }),
     })),
+
+  toggleAlwaysOnTop: (id: string) =>
+    set((state) => {
+      const target = state.windows.find((w) => w.id === id);
+      if (!target) return state;
+      const nextAlwaysOnTop = !target.alwaysOnTop;
+      const nextZIndex = state.maxZIndex + 1;
+      return {
+        maxZIndex: nextZIndex,
+        windows: state.windows.map((w) =>
+          w.id === id
+            ? { ...w, alwaysOnTop: nextAlwaysOnTop, zIndex: nextZIndex, active: true }
+            : w
+        ),
+      };
+    }),
 }));

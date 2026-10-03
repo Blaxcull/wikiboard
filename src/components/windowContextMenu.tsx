@@ -60,6 +60,9 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
     };
   }, [pos, onClose]);
 
+  const targetWin = useWindows((s) => s.windows.find((w) => w.id === pos?.windowId));
+  const isAlwaysOnTop = !!targetWin?.alwaysOnTop;
+
   if (!pos) return null;
 
   const items = [
@@ -77,7 +80,7 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
     },
     {
       id: "always-on-top",
-      label: "Always on top",
+      label: isAlwaysOnTop ? "Unpin from top" : "Always on top",
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
           <line x1="12" y1="19" x2="12" y2="5" />
@@ -86,22 +89,15 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
       ),
     },
     {
-      id: "duplicate",
-      label: "Duplicate",
-      icon: (
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="8" y="8" width="12" height="12" rx="2" />
-          <path d="M4 16V6a2 2 0 0 1 2-2h10" />
-        </svg>
-      ),
-    },
-    {
       id: "break-connection",
       label: "Break connection",
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <polyline points="19 12 12 19 5 12" />
+          <circle cx="6" cy="6" r="3" />
+          <circle cx="6" cy="18" r="3" />
+          <line x1="20" y1="4" x2="8.12" y2="15.88" />
+          <line x1="14.47" y1="14.47" x2="20" y2="20" />
+          <line x1="8.12" y1="8.12" x2="12" y2="12" />
         </svg>
       ),
     },
@@ -136,6 +132,8 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
               evictClosedWindowArticles();
             } else if (item.id === "break-connection") {
               useWindows.getState().breakConnections(pos.windowId);
+            } else if (item.id === "always-on-top") {
+              useWindows.getState().toggleAlwaysOnTop(pos.windowId);
             }
             onClose();
           }}

@@ -6,9 +6,7 @@ import { getCamera } from "../camera";
 export let isResizingWindow = false;
 export let activeResizingWindowId: string | null = null;
 
-const CORNER_MARGIN = 24;
-
-function computeCursorDirection(
+export function computeCursorDirection(
   mouseX: number, mouseY: number,
   left: number, top: number,
   width: number, height: number,
@@ -17,15 +15,30 @@ function computeCursorDirection(
   const relX = mouseX - left;
   const relY = mouseY - top;
 
+  const EDGE = 12;
+  const CORNER = 20;
+
   let cornerY = height;
   if (target?.classList.contains("pdf-window")) {
     cornerY = height - 64;
   }
 
-  const nearRight = relX >= width - CORNER_MARGIN;
-  const nearBottom = (relY >= cornerY - CORNER_MARGIN && relY <= cornerY + CORNER_MARGIN) || relY >= height - CORNER_MARGIN;
+  const nearLeft = relX >= -EDGE && relX <= EDGE;
+  const nearRight = relX >= width - EDGE && relX <= width + EDGE;
+  const nearTop = relY >= -EDGE && relY <= EDGE;
+  const nearBottom = (relY >= cornerY - EDGE && relY <= cornerY + EDGE) || relY >= height - EDGE;
 
+  if (nearTop && nearLeft) return 'nw-resize';
+  if (nearTop && nearRight) return 'ne-resize';
+  if (nearBottom && nearLeft) return 'sw-resize';
   if (nearBottom && nearRight) return 'se-resize';
+  if (nearRight) return 'e-resize';
+  if (nearBottom) return 's-resize';
+  if (nearLeft) return 'w-resize';
+  if (nearTop) return 'n-resize';
+
+  if (relX >= width - CORNER && relY >= cornerY - CORNER) return 'se-resize';
+
   return null;
 }
 
@@ -34,16 +47,16 @@ export function Resize(
   onResizeEnd?: (rect: { x: number; y: number; width: number; height: number }) => void,
   onActivate?: () => void,
 ) {
-  if (isDraggingWindow || isResizingWindow) return;
+  if (e.button !== 0 || isDraggingWindow || isResizingWindow) return;
 
-  const target = e.currentTarget;
+  const target = (e.currentTarget.closest(".window") as HTMLElement) || e.currentTarget;
   if (target.classList.contains("pdf-window") && target.classList.contains("maximized")) return;
 
   // Read geometry from style — these are world-space coordinates
-  const baseLeft = parseFloat(target.style.left) || 0;
-  const baseTop = parseFloat(target.style.top) || 0;
-  const startWidth = parseFloat(target.style.width) || 750;
-  const startHeight = parseFloat(target.style.height) || 550;
+  const baseLeft = parseFloat(target.style.left) || target.offsetLeft || 0;
+  const baseTop = parseFloat(target.style.top) || target.offsetTop || 0;
+  const startWidth = parseFloat(target.style.width) || target.offsetWidth || 750;
+  const startHeight = parseFloat(target.style.height) || target.offsetHeight || 550;
 
   // Convert screen mouse to world coords for edge detection
   const cam = getCamera();

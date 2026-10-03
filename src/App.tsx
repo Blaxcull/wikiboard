@@ -625,8 +625,8 @@ const WindowItem = memo(function WindowItem({
   const addWindow = useWindows((s) => s.addWindow)
 
   const zIndexStyle = useMemo(
-    () => ({ zIndex: w.pdfMaximized ? 10000 : w.zIndex }),
-    [w.zIndex, w.pdfMaximized],
+    () => ({ zIndex: w.pdfMaximized ? 100000 : (w.alwaysOnTop ? 50000 + (w.zIndex ?? 0) : w.zIndex) }),
+    [w.zIndex, w.pdfMaximized, w.alwaysOnTop],
   )
 
   const handleActivate = useCallback(() => setActive(w.id), [w.id, setActive])

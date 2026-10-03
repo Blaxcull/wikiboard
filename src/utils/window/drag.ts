@@ -16,7 +16,7 @@ export default function startDrag(
   onDragEnd?: (pos: { x: number; y: number }) => void,
   onActivate?: () => void,
 ) {
-  if (isResizingWindow) return;
+  if (e.button !== 0 || isResizingWindow) return;
 
   const target = (e.currentTarget.closest(".window") as HTMLElement) || e.currentTarget.parentElement;
   if (!target) return;

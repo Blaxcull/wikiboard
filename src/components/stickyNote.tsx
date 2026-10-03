@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useRef } from "react";
 import type { WindowData } from "../store/windows";
 import { useWindows } from "../store/windows";
-import startDrag from "../utils/window/drag";
+import startDrag, { isDraggingWindow } from "../utils/window/drag";
+import { Resize, isResizingWindow } from "../utils/window/resize";
 
 type Props = {
   win: WindowData;
@@ -23,29 +24,39 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange 
     [win.id, updateWindow],
   );
 
-  // Auto-adjust box height to match exact text content length
-  useEffect(() => {
-    if (isExcerpt && textRef.current) {
-      const scrollH = textRef.current.scrollHeight;
-      const targetH = Math.max(60, Math.min(500, scrollH + 32));
-      if (Math.abs((win.height ?? 80) - targetH) > 4) {
-        updateWindow(win.id, { height: targetH });
-      }
-    }
-  }, [isExcerpt, win.id, win.stickyText, win.height, updateWindow]);
-
   if (isExcerpt) {
     return (
       <div
-        className="w-full h-full flex flex-col justify-center px-5 py-3.5 bg-[#f0e5d8] text-[#c26100] font-semibold text-[15px] leading-relaxed cursor-move select-text rounded-[22px] border border-[#e4d5c3] shadow-sm text-center"
+        className="relative w-full h-full flex flex-col justify-center px-5 py-3.5 bg-[#f0e5d8] text-[#c26100] font-semibold text-[15px] leading-relaxed select-text rounded-[22px] border border-[#e4d5c3] shadow-sm text-center overflow-auto scrollbar-hide"
+        onMouseMove={(e) => {
+          if (isDraggingWindow || isResizingWindow) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          const isBottomRight = e.clientX >= rect.right - 24 && e.clientY >= rect.bottom - 24;
+          e.currentTarget.style.cursor = isBottomRight ? "se-resize" : "move";
+        }}
         onMouseDown={(e) => {
           e.stopPropagation();
           onActivate();
-          startDrag(e, (pos) => onPositionChange(pos), onActivate);
+
+          const rect = e.currentTarget.getBoundingClientRect();
+          const isBottomRight = e.clientX >= rect.right - 24 && e.clientY >= rect.bottom - 24;
+
+          if (isBottomRight) {
+            Resize(e, (rect) => onPositionChange(rect), onActivate);
+          } else {
+            startDrag(e, (pos) => onPositionChange(pos), onActivate);
+          }
         }}
       >
         <div ref={textRef} className="w-full overflow-hidden select-text text-center break-words">
           {win.stickyText ?? ""}
+        </div>
+        <div className="absolute bottom-1 right-2.5 opacity-40 hover:opacity-80 transition-opacity pointer-events-none text-[#c26100]">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+            <circle cx="8" cy="8" r="1.2" />
+            <circle cx="4" cy="8" r="1.2" />
+            <circle cx="8" cy="4" r="1.2" />
+          </svg>
         </div>
       </div>
     );

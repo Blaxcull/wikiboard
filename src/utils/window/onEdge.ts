@@ -1,10 +1,8 @@
 import { isDraggingWindow } from "./drag";
-import { isResizingWindow } from "./resize";
+import { isResizingWindow, computeCursorDirection } from "./resize";
 import { getCamera } from "../camera";
 
 let lastCursor = "";
-
-const CORNER_MARGIN = 24;
 
 function computeCursor(
   mouseX: number, mouseY: number,
@@ -12,19 +10,7 @@ function computeCursor(
   width: number, height: number,
   target?: HTMLElement,
 ): string {
-  const relX = mouseX - left;
-  const relY = mouseY - top;
-
-  let cornerY = height;
-  if (target?.classList.contains("pdf-window")) {
-    cornerY = height - 64;
-  }
-
-  const nearRight = relX >= width - CORNER_MARGIN;
-  const nearBottom = (relY >= cornerY - CORNER_MARGIN && relY <= cornerY + CORNER_MARGIN) || relY >= height - CORNER_MARGIN;
-
-  if (nearBottom && nearRight) return 'se-resize';
-  return '';
+  return computeCursorDirection(mouseX, mouseY, left, top, width, height, target) ?? "";
 }
 
 export function OnEdge(e: React.MouseEvent<HTMLDivElement>) {

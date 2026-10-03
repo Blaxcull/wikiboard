@@ -3,7 +3,7 @@ import type { WindowData } from "../store/windows";
 import { useWindows } from "../store/windows";
 import startDrag, { isDraggingWindow } from "../utils/window/drag";
 import { Resize, isResizingWindow } from "../utils/window/resize";
-import { getNoteColor } from "../App";
+import { getNoteColor, getHighlightBgColor } from "../App";
 
 type Props = {
   win: WindowData;
@@ -12,12 +12,12 @@ type Props = {
   onPositionChange: (pos: { x?: number; y?: number; width?: number; height?: number }) => void;
 };
 
-const STICKY_COLORS = [
+const STICKY_COLORS: { id: string; name: string; bg: string; isDark?: boolean }[] = [
   { id: "yellow", name: "Yellow", bg: "#fef08a" },
   { id: "lime", name: "Lime", bg: "#e2f89f" },
   { id: "green", name: "Green", bg: "#bbf7d0" },
   { id: "tan", name: "Tan", bg: "#fed7aa" },
-  { id: "dark", name: "Dark", bg: "#292524", isDark: true },
+  { id: "blue", name: "Blue", bg: "#bae6fd" },
 ];
 
 function MiniStickyIcon({ bg, isDark }: { bg: string; isDark?: boolean }) {
@@ -166,17 +166,54 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange 
     [win.id, updateWindow],
   );
 
+  useEffect(() => {
+    function handleCloseMenus(e: Event) {
+      const customEv = e as CustomEvent;
+      if (customEv.detail?.exceptWindowId !== win.id) {
+        setShowColorPicker(false);
+      }
+    }
+    window.addEventListener("wikiboard:close-menus", handleCloseMenus as EventListener);
+    return () => window.removeEventListener("wikiboard:close-menus", handleCloseMenus as EventListener);
+  }, [win.id]);
+
+  useEffect(() => {
+    if (!win.isExcerptNote) return;
+    const color = getHighlightBgColor(win.noteColor);
+    const isDark = win.noteColor === "dark";
+
+    const updateMark = (mark: HTMLElement) => {
+      mark.style.backgroundColor = color;
+      mark.style.color = isDark ? "#ffffff" : "inherit";
+    };
+
+    const hosts = document.querySelectorAll(".static-preview");
+    hosts.forEach((host) => {
+      const shadow = host.shadowRoot;
+      if (shadow) {
+        const shadowMarks = shadow.querySelectorAll(`mark[data-note-id="${win.id}"], .wiki-highlight[data-note-id="${win.id}"]`);
+        shadowMarks.forEach((mark) => updateMark(mark as HTMLElement));
+      }
+    });
+
+    const marks = document.querySelectorAll(`mark[data-note-id="${win.id}"], .wiki-highlight[data-note-id="${win.id}"], .pdf-highlight[data-note-id="${win.id}"]`);
+    marks.forEach((mark) => updateMark(mark as HTMLElement));
+  }, [win.id, win.noteColor, win.isExcerptNote]);
+
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     onActivate();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("wikiboard:close-menus", { detail: { exceptWindowId: win.id } }));
+    }
     setShowColorPicker((prev) => !prev);
   };
 
   if (isExcerpt) {
     return (
       <div
-        className="relative w-full h-full flex flex-col justify-center px-5 py-3.5 text-[#c26100] font-semibold text-[15px] leading-relaxed select-text rounded-[22px] border border-[#e4d5c3] shadow-sm text-center overflow-visible scrollbar-hide group"
+        className="relative w-full h-full flex flex-col items-center justify-center p-4 text-[#c26100] font-semibold text-[15px] leading-relaxed select-text rounded-[22px] border border-[#e4d5c3] shadow-sm text-center overflow-visible group"
         style={{ backgroundColor: currentBgColor }}
         onContextMenu={handleContextMenu}
         onMouseMove={(e) => {
@@ -199,7 +236,10 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange 
           }
         }}
       >
-        <div ref={textRef} className="w-full overflow-hidden select-text text-center break-words">
+        <div
+          ref={textRef}
+          className="w-full max-h-full overflow-y-auto scrollbar-hide select-text text-center break-words my-auto py-1"
+        >
           {win.stickyText ?? ""}
         </div>
 

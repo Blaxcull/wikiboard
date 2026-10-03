@@ -44,6 +44,13 @@ function notifyAnimation() {
   animationSubscribers.forEach((cb) => cb());
 }
 
+export function getStubDimensions(_note?: { isExcerptNote?: boolean }): { stubW: number; stubH: number } {
+  return {
+    stubW: 220,
+    stubH: 160,
+  };
+}
+
 export function getStubTargetOffset(
   side: "RIGHT" | "LEFT" | "TOP" | "BOTTOM",
   index: number,
@@ -142,18 +149,20 @@ export function stackWindowWithAnimation(windowId: string) {
       }
 
       const noteRect = el.getBoundingClientRect();
-      const noteW = note.width ?? 260;
-      const noteH = note.height ?? (note.isExcerptNote ? 64 : 200);
+      const { stubW, stubH } = getStubDimensions(note);
 
-      const { toX, toY } = getStubTargetOffset(side, i, sideNotes.length, noteW, noteH, parentRect, noteRect);
+      const { toX, toY } = getStubTargetOffset(side, i, sideNotes.length, stubW, stubH, parentRect, noteRect);
 
       const parentZ = parentWin.zIndex ?? 1;
       el.style.zIndex = `${parentZ - 1}`;
 
+      const scaleX = stubW / Math.max(noteRect.width, 1);
+      const scaleY = stubH / Math.max(noteRect.height, 1);
+
       const anim = el.animate(
         [
-          { transform: "translate3d(0, 0, 0)", opacity: 1 },
-          { transform: `translate3d(${toX}px, ${toY}px, 0)`, opacity: 1 },
+          { transform: "translate3d(0, 0, 0) scale(1, 1)", transformOrigin: "top left", opacity: 1 },
+          { transform: `translate3d(${toX}px, ${toY}px, 0) scale(${scaleX}, ${scaleY})`, transformOrigin: "top left", opacity: 1 },
         ],
         {
           duration: 300,
@@ -165,9 +174,9 @@ export function stackWindowWithAnimation(windowId: string) {
       anim.onfinish = () => {
         finishedCount++;
         if (finishedCount >= childNotes.length) {
+          state.toggleStackWindow(windowId);
           unmarkWindowStacking(windowId);
           childNotes.forEach((n) => unmarkNoteUnstacking(n.id));
-          state.toggleStackWindow(windowId);
         }
       };
     }

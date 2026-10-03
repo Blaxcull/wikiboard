@@ -25,6 +25,7 @@ import {
   subscribeAnimation,
   stackWindowWithAnimation,
   getStubTargetOffset,
+  getStubDimensions,
 } from './utils/stackAnimation'
 
 const ARROW_CTRL = 0.4;
@@ -221,15 +222,28 @@ function readWindowPos(el: HTMLElement): { x: number; y: number; w: number; h: n
 export function getNoteColor(win: Partial<WindowData>): string {
   if (win.noteColor) {
     const colorMap: Record<string, string> = {
-      yellow: win.isExcerptNote ? "#f0e5d8" : "#eee7a6",
+      yellow: "#fef08a",
       lime: "#e2f89f",
       green: "#bbf7d0",
       tan: "#fed7aa",
-      dark: "#292524",
+      blue: "#bae6fd",
+      dark: "#bae6fd", // fallback for legacy notes
     };
     return colorMap[win.noteColor] || win.noteColor;
   }
-  return win.isExcerptNote ? "#f0e5d8" : "#eee7a6";
+  return "#fef08a";
+}
+
+export function getHighlightBgColor(colorName?: string): string {
+  const map: Record<string, string> = {
+    yellow: "rgba(254, 240, 138, 0.85)",
+    lime: "rgba(226, 248, 159, 0.85)",
+    green: "rgba(187, 247, 208, 0.85)",
+    tan: "rgba(254, 215, 170, 0.85)",
+    blue: "rgba(186, 230, 253, 0.85)",
+    dark: "rgba(186, 230, 253, 0.85)", // fallback for legacy notes
+  };
+  return map[colorName || "yellow"] || "rgba(254, 240, 138, 0.85)";
 }
 
 function getCardOffsetStyle(
@@ -279,6 +293,10 @@ function getCardOffsetStyle(
 }
 
 export function determineNoteSide(note: WindowData, parent: WindowData): "TOP" | "RIGHT" | "BOTTOM" | "LEFT" {
+  if (note.stacked && note.side) {
+    return note.side;
+  }
+
   const px = parent.x ?? 80;
   const py = parent.y ?? 80;
   const pw = parent.width ?? 750;
@@ -289,35 +307,22 @@ export function determineNoteSide(note: WindowData, parent: WindowData): "TOP" |
   const nw = note.width ?? 260;
   const nh = note.height ?? (note.isExcerptNote ? 64 : 200);
 
+  const parentCenterX = px + pw / 2;
+  const parentCenterY = py + ph / 2;
   const noteCenterX = nx + nw / 2;
   const noteCenterY = ny + nh / 2;
 
-  // Compute signed outward distance to parent window edges
-  const distRight = noteCenterX - (px + pw);
-  const distLeft = px - noteCenterX;
-  const distBottom = noteCenterY - (py + ph);
-  const distTop = py - noteCenterY;
+  const hw = Math.max(pw / 2, 1);
+  const hh = Math.max(ph / 2, 1);
 
-  const maxOutward = Math.max(distRight, distLeft, distBottom, distTop);
+  const normX = (noteCenterX - parentCenterX) / hw;
+  const normY = (noteCenterY - parentCenterY) / hh;
 
-  if (maxOutward > 0) {
-    if (maxOutward === distRight) return "RIGHT";
-    if (maxOutward === distLeft) return "LEFT";
-    if (maxOutward === distBottom) return "BOTTOM";
-    if (maxOutward === distTop) return "TOP";
+  if (Math.abs(normX) >= Math.abs(normY)) {
+    return normX >= 0 ? "RIGHT" : "LEFT";
+  } else {
+    return normY >= 0 ? "BOTTOM" : "TOP";
   }
-
-  // If inside parent or overlapping, compare closest edge
-  const absDistRight = Math.abs(noteCenterX - (px + pw));
-  const absDistLeft = Math.abs(noteCenterX - px);
-  const absDistBottom = Math.abs(noteCenterY - (py + ph));
-  const absDistTop = Math.abs(noteCenterY - py);
-
-  const minDist = Math.min(absDistRight, absDistLeft, absDistBottom, absDistTop);
-  if (minDist === absDistRight) return "RIGHT";
-  if (minDist === absDistLeft) return "LEFT";
-  if (minDist === absDistBottom) return "BOTTOM";
-  return "TOP";
 }
 
 const StackedNoteStubs = memo(function StackedNoteStubs({
@@ -355,7 +360,6 @@ const StackedNoteStubs = memo(function StackedNoteStubs({
   const parentW = parentWin.width ?? 750;
   const parentH = parentWin.height ?? 550;
 
-  // If window dimension is smaller than the minimum sticky note length, hide stubs on that side
   const maxHoriz = parentW < 180 ? 0 : Math.max(0, Math.floor((parentW - 40) / 65));
   const maxVert = parentH < 150 ? 0 : Math.max(0, Math.floor((parentH - 40) / 55));
 
@@ -373,18 +377,17 @@ const StackedNoteStubs = memo(function StackedNoteStubs({
         return (
           <div key={side}>
             {visibleNotes.map((note, i) => {
-              const noteW = note.width ?? 260;
-              const noteH = note.height ?? (note.isExcerptNote ? 64 : 200);
-              const posStyle = getCardOffsetStyle(side, i, visibleNotes.length, noteW, noteH);
+              const { stubW, stubH } = getStubDimensions(note);
+              const posStyle = getCardOffsetStyle(side, i, visibleNotes.length, stubW, stubH);
               const colorBg = getNoteColor(note);
 
               return (
                 <div
                   key={note.id}
-                  className="absolute pointer-events-auto cursor-pointer transition-transform duration-150 hover:scale-[1.02] flex flex-col p-2.5 rounded-[2px] border border-black/20 shadow-md"
+                  className="absolute pointer-events-auto cursor-pointer transition-transform duration-150 hover:scale-[1.02] rounded-[4px] border border-black/20 shadow-md"
                   style={{
-                    width: `${noteW}px`,
-                    height: `${noteH}px`,
+                    width: `${stubW}px`,
+                    height: `${stubH}px`,
                     background: colorBg,
                     ...posStyle,
                   }}
@@ -393,13 +396,7 @@ const StackedNoteStubs = memo(function StackedNoteStubs({
                     stackWindowWithAnimation(parentWin.id);
                   }}
                   title={`Click to unstack note`}
-                >
-                  <div className="flex items-center justify-between text-[11px] font-bold text-[#333] select-none opacity-85">
-                    <span className="truncate max-w-[170px]">
-                      {note.isExcerptNote ? "Excerpt" : (note.title || "Sticky Note")}
-                    </span>
-                  </div>
-                </div>
+                />
               );
             })}
           </div>
@@ -569,8 +566,8 @@ const ConnectionArrows = memo(function ConnectionArrows({
         path.style.transition = "none";
         poly.style.transition = "none";
       } else {
-        path.style.transition = "opacity 250ms ease";
-        poly.style.transition = "opacity 250ms ease";
+        path.style.transition = "opacity 400ms ease-out";
+        poly.style.transition = "opacity 400ms ease-out";
         path.style.opacity = "1";
         poly.style.opacity = "1";
       }
@@ -1087,10 +1084,9 @@ useEffect(() => {
           const sideNotes = allChildNotes.filter((win) => determineNoteSide(win, parentWin) === side);
           const index = Math.max(0, sideNotes.findIndex((win) => win.id === w.id));
           const total = sideNotes.length || 1;
-          const noteW = w.width ?? 260;
-          const noteH = w.height ?? (w.isExcerptNote ? 64 : 200);
+          const { stubW, stubH } = getStubDimensions(w);
 
-          const offset = getStubTargetOffset(side, index, total, noteW, noteH, parentRect, noteRect);
+          const offset = getStubTargetOffset(side, index, total, stubW, stubH, parentRect, noteRect);
           fromX = offset.toX;
           fromY = offset.toY;
 
@@ -1100,13 +1096,17 @@ useEffect(() => {
 
         markNoteUnstacking(w.id);
 
+        const { stubW, stubH } = getStubDimensions(w);
+        const scaleX = stubW / Math.max(noteRect.width, 1);
+        const scaleY = stubH / Math.max(noteRect.height, 1);
+
         const anim = el.animate(
           [
-            { transform: `translate3d(${fromX}px, ${fromY}px, 0)`, opacity: 1 },
-            { transform: "translate3d(0, 0, 0)", opacity: 1 },
+            { transform: `translate3d(${fromX}px, ${fromY}px, 0) scale(${scaleX}, ${scaleY})`, transformOrigin: "top left", opacity: 1 },
+            { transform: "translate3d(0, 0, 0) scale(1, 1)", transformOrigin: "top left", opacity: 1 },
           ],
           {
-            duration: 320,
+            duration: 300,
             easing: "cubic-bezier(0.16, 1, 0.3, 1)",
             fill: "forwards",
           }
@@ -1356,8 +1356,24 @@ function App() {
 
   const [contextMenuPos, setContextMenuPos] = useState<ContextMenuPosition | null>(null);
 
+  useEffect(() => {
+    function handleCloseMenus(e: Event) {
+      const customEv = e as CustomEvent;
+      if (customEv.detail?.exceptWindowId !== contextMenuPos?.windowId) {
+        if (customEv.detail?.exceptWindowId === undefined || customEv.detail?.exceptWindowId !== contextMenuPos?.windowId) {
+          setContextMenuPos(null);
+        }
+      }
+    }
+    window.addEventListener("wikiboard:close-menus", handleCloseMenus as EventListener);
+    return () => window.removeEventListener("wikiboard:close-menus", handleCloseMenus as EventListener);
+  }, [contextMenuPos?.windowId]);
+
   const handleContextMenu = useCallback((e: React.MouseEvent, windowId: string) => {
     e.preventDefault();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("wikiboard:close-menus", { detail: { exceptWindowId: windowId } }));
+    }
     setContextMenuPos({ x: e.clientX, y: e.clientY, windowId });
   }, []);
 

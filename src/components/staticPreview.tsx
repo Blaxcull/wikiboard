@@ -435,7 +435,7 @@ const StaticPreview = memo(function StaticPreview({ winId, title, html, scrollTo
   }, [title, html, winId]);
 
   return (
-    <div ref={hostRef} className="w-full h-full overflow-auto scrollbar-hide bg-white">
+    <div ref={hostRef} className="static-preview w-full h-full overflow-auto scrollbar-hide bg-white">
       <ArticleSelectionToolbox hostRef={hostRef} winId={winId} articleTitle={title} />
     </div>
   );

@@ -53,6 +53,10 @@
   animation: window-pop-in 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.window.sticky-window {
+  animation: none !important;
+}
+
 .window.sticky-window:not(.excerpt-note-window) {
   border: 1px solid rgba(0, 0, 0, 0.08) !important;
   border-radius: 4px !important;
@@ -135,7 +139,12 @@
   box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.18), 0 4px 10px -2px rgba(0, 0, 0, 0.08) !important;
 }
 
-.window-wrapper.wire-target-hover,
+.window-wrapper.wire-target-hover {
+  box-shadow: none !important;
+  border: none !important;
+  outline: none !important;
+}
+
 .window-wrapper.wire-target-hover > .window,
 .window.wire-target-hover {
   border-radius: 12px !important;
@@ -146,7 +155,7 @@
 
 .window-wrapper.wire-target-hover .sticky-window:not(.excerpt-note-window),
 .window.sticky-window:not(.excerpt-note-window).wire-target-hover {
-  border-radius: 8px !important;
+  border-radius: 4px !important;
   border-color: #888888 !important;
   box-shadow: 0 0 0 2px #888888, 0 6px 20px rgba(0, 0, 0, 0.16) !important;
 }

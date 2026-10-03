@@ -57,7 +57,7 @@ export type WindowData = {
 type WindowsStore = {
   windows: WindowData[];
   maxZIndex: number;
-  addWindow: (data?: Partial<Omit<WindowData, "id">>) => void;
+  addWindow: (data?: Partial<WindowData>) => void;
   removeWindow: (id: string) => void;
   setActive: (id: string) => void;
   updateWindow: (id: string, patch: Partial<Omit<WindowData, "id">>) => void;
@@ -314,7 +314,7 @@ export const useWindows = create<WindowsStore>((set) => ({
             i === activeIdx ? { ...w, active: false } : w,
           ),
           {
-            id: crypto.randomUUID(),
+            id: data?.id ?? crypto.randomUUID(),
             url: "",
             title: `Window ${windowCount}`,
             links: [],
@@ -527,30 +527,20 @@ export const useWindows = create<WindowsStore>((set) => ({
             const relY = (w.y ?? 80) - parentY;
             const noteCenterX = (w.x ?? 80) + (w.width ?? 260) / 2;
             const noteCenterY = (w.y ?? 80) + (w.height ?? (w.isExcerptNote ? 64 : 200)) / 2;
+            const parentCenterX = parentX + parentW / 2;
+            const parentCenterY = parentY + parentH / 2;
 
-            const distRight = noteCenterX - (parentX + parentW);
-            const distLeft = parentX - noteCenterX;
-            const distBottom = noteCenterY - (parentY + parentH);
-            const distTop = parentY - noteCenterY;
+            const hw = Math.max(parentW / 2, 1);
+            const hh = Math.max(parentH / 2, 1);
 
-            const maxOutward = Math.max(distRight, distLeft, distBottom, distTop);
+            const normX = (noteCenterX - parentCenterX) / hw;
+            const normY = (noteCenterY - parentCenterY) / hh;
+
             let side: "TOP" | "RIGHT" | "BOTTOM" | "LEFT" = "RIGHT";
-
-            if (maxOutward > 0) {
-              if (maxOutward === distRight) side = "RIGHT";
-              else if (maxOutward === distLeft) side = "LEFT";
-              else if (maxOutward === distBottom) side = "BOTTOM";
-              else if (maxOutward === distTop) side = "TOP";
+            if (Math.abs(normX) >= Math.abs(normY)) {
+              side = normX >= 0 ? "RIGHT" : "LEFT";
             } else {
-              const absR = Math.abs(noteCenterX - (parentX + parentW));
-              const absL = Math.abs(noteCenterX - parentX);
-              const absB = Math.abs(noteCenterY - (parentY + parentH));
-              const absT = Math.abs(noteCenterY - parentY);
-              const min = Math.min(absR, absL, absB, absT);
-              if (min === absR) side = "RIGHT";
-              else if (min === absL) side = "LEFT";
-              else if (min === absB) side = "BOTTOM";
-              else side = "TOP";
+              side = normY >= 0 ? "BOTTOM" : "TOP";
             }
 
             return { ...w, stacked: true, side, relX, relY };

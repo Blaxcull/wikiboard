@@ -91,7 +91,10 @@ export default function ArticleSelectionToolbox({ hostRef, winId, articleTitle }
     const approxLines = Math.max(1, Math.ceil(text.length / 28));
     const initHeight = Math.max(64, Math.min(450, 32 + approxLines * 22));
 
+    const noteId = crypto.randomUUID();
+
     addWindow({
+      id: noteId,
       contentType: "sticky",
       isExcerptNote: true,
       title: `Note (${articleTitle.replace(/^File:/i, "").replace(/_/g, " ")})`,
@@ -99,18 +102,20 @@ export default function ArticleSelectionToolbox({ hostRef, winId, articleTitle }
       parentId: winId,
       width: 260,
       height: initHeight,
+      noteColor: "yellow",
     });
 
     const host = hostRef.current;
     if (host) {
       const root = host.shadowRoot;
       const rootWithSel = root as (ShadowRoot & { getSelection?: () => Selection | null }) | null;
-    const sel = rootWithSel?.getSelection ? rootWithSel.getSelection() : window.getSelection();
+      const sel = rootWithSel?.getSelection ? rootWithSel.getSelection() : window.getSelection();
       if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
         try {
-          const range = sel.getRangeAt(0);
           const mark = document.createElement("mark");
           mark.className = "wiki-highlight";
+          mark.dataset.noteId = noteId;
           mark.style.backgroundColor = "rgba(254, 240, 138, 0.85)";
           mark.style.color = "inherit";
           mark.style.borderRadius = "3px";
@@ -119,6 +124,21 @@ export default function ArticleSelectionToolbox({ hostRef, winId, articleTitle }
           range.surroundContents(mark);
         } catch {
           /* Fallback for cross-container selection */
+          try {
+            const fragment = range.extractContents();
+            const mark = document.createElement("mark");
+            mark.className = "wiki-highlight";
+            mark.dataset.noteId = noteId;
+            mark.style.backgroundColor = "rgba(254, 240, 138, 0.85)";
+            mark.style.color = "inherit";
+            mark.style.borderRadius = "3px";
+            mark.style.padding = "0 2px";
+            mark.style.boxShadow = "0 1px 2px rgba(0,0,0,0.1)";
+            mark.appendChild(fragment);
+            range.insertNode(mark);
+          } catch {
+            /* Range detached fallback */
+          }
         }
         sel.removeAllRanges();
       }

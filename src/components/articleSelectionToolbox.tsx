@@ -1,12 +1,97 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useWindows } from "../store/windows";
+import { getHighlightBgColor } from "../App";
 
 type Props = {
   hostRef: React.RefObject<HTMLDivElement | null>;
   winId?: string;
   articleTitle: string;
 };
+
+function highlightRange(range: Range, noteId: string, noteColor = "yellow") {
+  if (range.collapsed) return;
+
+  const color = getHighlightBgColor(noteColor);
+
+  const createMark = () => {
+    const mark = document.createElement("mark");
+    mark.className = "wiki-highlight";
+    mark.dataset.noteId = noteId;
+    mark.style.backgroundColor = color;
+    mark.style.color = "inherit";
+    mark.style.borderRadius = "3px";
+    mark.style.padding = "0 2px";
+    mark.style.boxShadow = "0 1px 2px rgba(0,0,0,0.1)";
+    return mark;
+  };
+
+  const startContainer = range.startContainer;
+  const startOffset = range.startOffset;
+  const endContainer = range.endContainer;
+  const endOffset = range.endOffset;
+
+  let commonAncestor = range.commonAncestorContainer;
+  if (commonAncestor.nodeType === Node.TEXT_NODE) {
+    commonAncestor = commonAncestor.parentNode || commonAncestor;
+  }
+
+  const doc = commonAncestor.ownerDocument || document;
+  const walker = doc.createTreeWalker(
+    commonAncestor,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode(node) {
+        if (!node.nodeValue || (node.nodeValue.length === 0 && node !== startContainer && node !== endContainer)) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        try {
+          if (range.intersectsNode(node)) {
+            return NodeFilter.FILTER_ACCEPT;
+          }
+        } catch {
+          // Fallback if intersectsNode fails
+          return NodeFilter.FILTER_ACCEPT;
+        }
+        return NodeFilter.FILTER_REJECT;
+      },
+    }
+  );
+
+  const textNodes: Text[] = [];
+  let curr = walker.nextNode();
+  while (curr) {
+    textNodes.push(curr as Text);
+    curr = walker.nextNode();
+  }
+
+  if (textNodes.length === 0 && startContainer.nodeType === Node.TEXT_NODE) {
+    textNodes.push(startContainer as Text);
+  }
+
+  textNodes.forEach((textNode) => {
+    let targetNode = textNode;
+    let nodeStart = textNode === startContainer ? startOffset : 0;
+    let nodeEnd = textNode === endContainer ? endOffset : (textNode.nodeValue?.length || 0);
+
+    if (nodeStart >= nodeEnd) return;
+
+    if (textNode === endContainer && nodeEnd < (textNode.nodeValue?.length || 0)) {
+      textNode.splitText(nodeEnd);
+    }
+
+    if (textNode === startContainer && nodeStart > 0) {
+      targetNode = textNode.splitText(nodeStart);
+    }
+
+    const parent = targetNode.parentNode;
+    if (parent) {
+      const mark = createMark();
+      parent.replaceChild(mark, targetNode);
+      mark.appendChild(targetNode);
+    }
+  });
+}
 
 export default function ArticleSelectionToolbox({ hostRef, winId, articleTitle }: Props) {
   const addWindow = useWindows((s) => s.addWindow);
@@ -113,32 +198,9 @@ export default function ArticleSelectionToolbox({ hostRef, winId, articleTitle }
       if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
         const range = sel.getRangeAt(0);
         try {
-          const mark = document.createElement("mark");
-          mark.className = "wiki-highlight";
-          mark.dataset.noteId = noteId;
-          mark.style.backgroundColor = "rgba(254, 240, 138, 0.85)";
-          mark.style.color = "inherit";
-          mark.style.borderRadius = "3px";
-          mark.style.padding = "0 2px";
-          mark.style.boxShadow = "0 1px 2px rgba(0,0,0,0.1)";
-          range.surroundContents(mark);
-        } catch {
-          /* Fallback for cross-container selection */
-          try {
-            const fragment = range.extractContents();
-            const mark = document.createElement("mark");
-            mark.className = "wiki-highlight";
-            mark.dataset.noteId = noteId;
-            mark.style.backgroundColor = "rgba(254, 240, 138, 0.85)";
-            mark.style.color = "inherit";
-            mark.style.borderRadius = "3px";
-            mark.style.padding = "0 2px";
-            mark.style.boxShadow = "0 1px 2px rgba(0,0,0,0.1)";
-            mark.appendChild(fragment);
-            range.insertNode(mark);
-          } catch {
-            /* Range detached fallback */
-          }
+          highlightRange(range, noteId, "yellow");
+        } catch (err) {
+          console.error("Highlighting selection failed:", err);
         }
         sel.removeAllRanges();
       }

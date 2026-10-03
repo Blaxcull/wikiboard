@@ -187,6 +187,15 @@ const SHADOW_STYLES = `
 
   /* Hatnote */
   .freeze .hatnote { font-style: italic; color: #54595d; margin: 0.5em 0; font-size: 0.9em; padding-left: 1.6em; }
+
+  /* Article Highlights */
+  mark.wiki-highlight {
+    background-color: rgba(254, 240, 138, 0.85);
+    color: inherit;
+    border-radius: 3px;
+    padding: 0 2px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  }
 `;
 
 const StaticPreview = memo(function StaticPreview({ winId, title, html, scrollTop, onLinkClick, onScrollChange }: Props) {
@@ -385,7 +394,27 @@ const StaticPreview = memo(function StaticPreview({ winId, title, html, scrollTo
       }
     };
 
+    const handleNoteClosed = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail?.noteId) return;
+
+      const marks = root.querySelectorAll(
+        `mark[data-note-id="${detail.noteId}"], .wiki-highlight[data-note-id="${detail.noteId}"]`
+      );
+      marks.forEach((mark) => {
+        const parent = mark.parentNode;
+        if (parent) {
+          while (mark.firstChild) {
+            parent.insertBefore(mark.firstChild, mark);
+          }
+          parent.removeChild(mark);
+          parent.normalize();
+        }
+      });
+    };
+
     window.addEventListener("wikiboard:link-closed", handleLinkClosed);
+    window.addEventListener("wikiboard:note-closed", handleNoteClosed);
 
     root.addEventListener("click", handleClick);
     root.addEventListener("mouseover", handleHover);
@@ -421,6 +450,7 @@ const StaticPreview = memo(function StaticPreview({ winId, title, html, scrollTo
 
     return () => {
       window.removeEventListener("wikiboard:link-closed", handleLinkClosed);
+      window.removeEventListener("wikiboard:note-closed", handleNoteClosed);
       cancelAnimationFrame(raf);
       if (resizeObserver) resizeObserver.disconnect();
       images.forEach((img) => img.removeEventListener("load", onImgLoad));

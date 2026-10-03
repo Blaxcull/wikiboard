@@ -42,6 +42,24 @@ export default function startDrag(
   const worldShiftY = startWorldMouseY - baseTop;
 
   const allWindows = useWindows.getState().windows;
+  const selectedIds = useWindows.getState().selectedIds;
+  if (!selectedIds.includes(activeDraggedWindowId!) && !e.shiftKey) {
+    useWindows.getState().clearSelection();
+  }
+
+  const groupIds = selectedIds.includes(activeDraggedWindowId!)
+    ? selectedIds
+    : [activeDraggedWindowId!];
+  const groupTargets = groupIds
+    .map((id) => {
+      const el = document.getElementById(`win-${id}`);
+      if (!el) return null;
+      const bLeft = parseFloat(el.style.left) || el.offsetLeft || 0;
+      const bTop = parseFloat(el.style.top) || el.offsetTop || 0;
+      return { id, el, baseLeft: bLeft, baseTop: bTop };
+    })
+    .filter((gt): gt is { id: string; el: HTMLElement; baseLeft: number; baseTop: number } => gt !== null);
+
   const draggedWin = allWindows.find((w) => w.id === activeDraggedWindowId);
   const isPinned = draggedWin?.alwaysOnTop;
   const nextZ = (isPinned ? 50000 : 0) + useWindows.getState().maxZIndex + 1;
@@ -54,10 +72,12 @@ export default function startDrag(
   function applyGestureSetup() {
     if (setupDone) return;
     setupDone = true;
-    target.classList.add("dragging");
+    for (const gt of groupTargets) {
+      gt.el.classList.add("dragging");
+      gt.el.style.zIndex = String(nextZ);
+    }
     target.closest(".canvas-world")?.classList.add("gesture-active");
     document.body.style.cursor = "move";
-    target.style.zIndex = String(nextZ);
   }
 
   applyGestureSetup();
@@ -76,7 +96,9 @@ export default function startDrag(
     const rdx = Math.round(newWorldLeft - baseLeft);
     const rdy = Math.round(newWorldTop - baseTop);
 
-    target.style.transform = `translate3d(${rdx}px, ${rdy}px, 0)`;
+    for (const gt of groupTargets) {
+      gt.el.style.transform = `translate3d(${rdx}px, ${rdy}px, 0)`;
+    }
   }
 
   function onMouseMove(ev: MouseEvent) {
@@ -103,21 +125,26 @@ export default function startDrag(
     const curCam = getCamera();
     const curWorldMouseX = (mouseX - curCam.panX) / curCam.zoom;
     const curWorldMouseY = (mouseY - curCam.panY) / curCam.zoom;
-    const finalLeft = Math.round(curWorldMouseX - worldShiftX);
-    const finalTop = Math.round(curWorldMouseY - worldShiftY);
+    const rdx = Math.round(curWorldMouseX - worldShiftX - baseLeft);
+    const rdy = Math.round(curWorldMouseY - worldShiftY - baseTop);
 
-    target.style.transform = "";
-    target.style.left = `${finalLeft}px`;
-    target.style.top = `${finalTop}px`;
+    for (const gt of groupTargets) {
+      const finalLeft = gt.baseLeft + rdx;
+      const finalTop = gt.baseTop + rdy;
+      gt.el.style.transform = "";
+      gt.el.style.left = `${finalLeft}px`;
+      gt.el.style.top = `${finalTop}px`;
+      gt.el.classList.remove("dragging");
+      useWindows.getState().updateWindow(gt.id, { x: finalLeft, y: finalTop });
+    }
 
     useWindows.setState({ maxZIndex: nextZ });
 
-    onDragEnd?.({ x: finalLeft, y: finalTop });
+    onDragEnd?.({ x: baseLeft + rdx, y: baseTop + rdy });
     onActivate?.();
 
     isDraggingWindow = false;
     activeDraggedWindowId = null;
-    target.classList.remove("dragging");
     target.closest(".canvas-world")?.classList.remove("gesture-active");
     document.body.style.cursor = "";
     document.removeEventListener("mousemove", onMouseMove);

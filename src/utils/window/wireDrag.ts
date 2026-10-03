@@ -123,17 +123,19 @@ export function connectWithoutCycles(sourceId: string, targetId: string) {
 export function isAlreadyConnected(sourceId: string, targetId: string): boolean {
   if (sourceId === targetId) return true;
   const windows = useWindows.getState().windows;
-  const targetWin = windows.find((w) => w.id === targetId);
-  const sourceWin = windows.find((w) => w.id === sourceId);
-  if (!targetWin || !sourceWin) return false;
+  const groups = useWindows.getState().groups;
+
+  const targetEntity = windows.find((w) => w.id === targetId) || groups.find((g) => g.id === targetId);
+  const sourceEntity = windows.find((w) => w.id === sourceId) || groups.find((g) => g.id === sourceId);
+  if (!targetEntity || !sourceEntity) return false;
 
   const targetParents = new Set<string>();
-  if (targetWin.parentIds) for (const p of targetWin.parentIds) targetParents.add(p);
-  if (targetWin.parentId) targetParents.add(targetWin.parentId);
+  if (targetEntity.parentIds) for (const p of targetEntity.parentIds) targetParents.add(p);
+  if (targetEntity.parentId) targetParents.add(targetEntity.parentId);
 
   const sourceParents = new Set<string>();
-  if (sourceWin.parentIds) for (const p of sourceWin.parentIds) sourceParents.add(p);
-  if (sourceWin.parentId) sourceParents.add(sourceWin.parentId);
+  if (sourceEntity.parentIds) for (const p of sourceEntity.parentIds) sourceParents.add(p);
+  if (sourceEntity.parentId) sourceParents.add(sourceEntity.parentId);
 
   return targetParents.has(sourceId) || sourceParents.has(targetId);
 }
@@ -143,6 +145,8 @@ export function startWireDrag(
   sourceId: string,
   side: Side,
   onAddStickyClick?: (side: Side) => void,
+  customElementId?: string,
+  excludedTargetIds?: string[],
 ) {
   e.stopPropagation();
   e.preventDefault();
@@ -150,7 +154,8 @@ export function startWireDrag(
   const startScreenX = e.clientX;
   const startScreenY = e.clientY;
 
-  const parentEl = document.getElementById(`win-${sourceId}`);
+  const targetElemId = customElementId || `win-${sourceId}`;
+  const parentEl = document.getElementById(targetElemId);
   if (!parentEl) return;
 
   const x = parseFloat(parentEl.style.left) || parentEl.offsetLeft || 0;
@@ -182,7 +187,7 @@ export function startWireDrag(
     const curWorldX = (mouseX - cam.panX) / cam.zoom;
     const curWorldY = (mouseY - cam.panY) / cam.zoom;
 
-    const el = document.getElementById(`win-${sourceId}`);
+    const el = document.getElementById(targetElemId);
     let px = x, py = y, pw = w, ph = h, ptx = tx, pty = ty;
     if (el) {
       px = parseFloat(el.style.left) || el.offsetLeft || 0;
@@ -237,10 +242,19 @@ export function startWireDrag(
       hasMovedFar = true;
     }
 
-    const targetEl = document.elementFromPoint(ev.clientX, ev.clientY)?.closest("[id^='win-']") as HTMLElement | null;
-    const targetId = targetEl ? targetEl.id.replace(/^win-/, "") : null;
+    const targetEl = document.elementFromPoint(ev.clientX, ev.clientY)?.closest("[id^='win-'], [id^='group-box-']") as HTMLElement | null;
+    let targetId: string | null = null;
+    if (targetEl) {
+      if (targetEl.id.startsWith("group-box-")) {
+        targetId = targetEl.id.replace(/^group-box-/, "");
+      } else if (targetEl.id.startsWith("win-")) {
+        targetId = targetEl.id.replace(/^win-/, "");
+      }
+    }
 
-    if (targetEl && targetId && targetId !== sourceId && !isAlreadyConnected(sourceId, targetId)) {
+    const isExcluded = targetId ? excludedTargetIds?.includes(targetId) : false;
+
+    if (targetEl && targetId && targetId !== sourceId && !isExcluded && !isAlreadyConnected(sourceId, targetId)) {
       if (currentHoverEl !== targetEl) {
         if (currentHoverEl) {
           currentHoverEl.classList.remove("wire-target-hover");
@@ -294,11 +308,21 @@ export function startWireDrag(
       return;
     }
 
-    const targetWinEl = document.elementFromPoint(ev.clientX, ev.clientY)?.closest("[id^='win-']") as HTMLElement | null;
+    const targetWinEl = document.elementFromPoint(ev.clientX, ev.clientY)?.closest("[id^='win-'], [id^='group-box-']") as HTMLElement | null;
+    let targetId: string | null = null;
+    if (targetWinEl) {
+      if (targetWinEl.id.startsWith("group-box-")) {
+        targetId = targetWinEl.id.replace(/^group-box-/, "");
+      } else if (targetWinEl.id.startsWith("win-")) {
+        targetId = targetWinEl.id.replace(/^win-/, "");
+      }
+    }
 
-    if (targetWinEl && targetWinEl.id !== `win-${sourceId}`) {
-      const targetId = targetWinEl.id.replace(/^win-/, "");
-      connectWithoutCycles(sourceId, targetId);
+    if (targetId && targetId !== sourceId) {
+      const isExcluded = excludedTargetIds?.includes(targetId);
+      if (!isExcluded) {
+        useWindows.getState().connectEntitiesWithoutCycles(sourceId, targetId);
+      }
     }
   }
 

@@ -11,7 +11,9 @@ import WindowContextMenu, { type ContextMenuPosition } from './components/window
 import { useWindows, type WindowData, nextCascadeOffset } from './store/windows'
 import { deleteScroll } from './utils/scrollMemory'
 import { evictClosedWindowArticles } from './utils/articleCache'
-import { getCamera, subscribeCamera } from './utils/camera'
+import { getCamera, subscribeCamera, screenToWorld } from './utils/camera'
+import SelectionOverlay, { getWindowWorldBounds, type MarqueeState } from './components/selectionOverlay'
+import GroupOverlay from './components/groupOverlay'
 import { startCanvasPan } from './utils/canvas/pan'
 import { handleZoom } from './utils/canvas/zoom'
 import { isDraggingWindow, activeDraggedWindowId } from './utils/window/drag'
@@ -423,15 +425,21 @@ const ConnectionArrows = memo(function ConnectionArrows({
   const arrowSvgRef = useRef<SVGSVGElement>(null);
   const elRefs = useRef<Map<string, [SVGPathElement, SVGPolygonElement]>>(new Map());
 
-  // Rebuild SVG elements when windows change (add/remove)
+  const groups = useWindows((s) => s.groups);
+
+  // Rebuild SVG elements when windows or groups change (add/remove)
   useEffect(() => {
     const lineSvg = lineSvgRef.current;
     const arrowSvg = arrowSvgRef.current;
     if (!lineSvg || !arrowSvg) return;
 
     const winIds = new Set(windows.map((w) => w.id));
+    const groupIds = new Set(groups.map((g) => g.id));
+    const allValidIds = new Set([...winIds, ...groupIds]);
+
     const links: { key: string; parentId: string; childId: string }[] = [];
 
+    // Window children
     for (const child of windows) {
       const pSet = new Set<string>();
       if (child.parentIds) {
@@ -440,8 +448,23 @@ const ConnectionArrows = memo(function ConnectionArrows({
       if (child.parentId) pSet.add(child.parentId);
 
       for (const pid of pSet) {
-        if (winIds.has(pid)) {
+        if (allValidIds.has(pid)) {
           links.push({ key: `${pid}->${child.id}`, parentId: pid, childId: child.id });
+        }
+      }
+    }
+
+    // Group children
+    for (const childGroup of groups) {
+      const pSet = new Set<string>();
+      if (childGroup.parentIds) {
+        for (const pid of childGroup.parentIds) pSet.add(pid);
+      }
+      if (childGroup.parentId) pSet.add(childGroup.parentId);
+
+      for (const pid of pSet) {
+        if (allValidIds.has(pid)) {
+          links.push({ key: `${pid}->${childGroup.id}`, parentId: pid, childId: childGroup.id });
         }
       }
     }
@@ -473,7 +496,7 @@ const ConnectionArrows = memo(function ConnectionArrows({
         elRefs.current.set(link.key, [path, poly]);
       }
     }
-  }, [windows]);
+  }, [windows, groups]);
 
   const cachedPosMapRef = useRef<Map<string, { x: number; y: number; w: number; h: number; zIndex: number }>>(new Map());
 
@@ -481,6 +504,8 @@ const ConnectionArrows = memo(function ConnectionArrows({
   const updatePaths = useCallback((onlyActiveId?: string | null) => {
     if (!lineSvgRef.current || elRefs.current.size === 0) return;
     const byId = new Map(windows.map((w) => [w.id, w]));
+    const currentGroups = useWindows.getState().groups;
+    const groupsById = new Map(currentGroups.map((g) => [g.id, g]));
 
     const posMap = cachedPosMapRef.current;
 
@@ -502,54 +527,64 @@ const ConnectionArrows = memo(function ConnectionArrows({
       }
     }
 
+    const getEntityPos = (id: string) => {
+      const win = byId.get(id);
+      if (win) {
+        if (win.stacked) return null;
+        return posMap.get(win.id);
+      }
+      const grp = groupsById.get(id);
+      if (grp) {
+        const groupEl = document.getElementById(`group-box-${grp.id}`);
+        if (groupEl) {
+          const left = parseFloat(groupEl.style.left) || groupEl.offsetLeft || 0;
+          const top = parseFloat(groupEl.style.top) || groupEl.offsetTop || 0;
+          const w = parseFloat(groupEl.style.width) || groupEl.offsetWidth || 400;
+          const h = parseFloat(groupEl.style.height) || groupEl.offsetHeight || 300;
+          const t = groupEl.style.transform;
+          let tx = 0, ty = 0;
+          if (t && t !== "none") {
+            const match = t.match(/translate(?:3d)?\(([-\d.]+)(?:px)?,\s*([-\d.]+)(?:px)?/);
+            if (match) {
+              tx = parseFloat(match[1]) || 0;
+              ty = parseFloat(match[2]) || 0;
+            }
+          }
+          return { x: left + tx, y: top + ty, w, h };
+        }
+      }
+      return null;
+    };
+
     for (const [key, [path, poly]] of elRefs.current) {
       const parts = key.split("->");
-      const parent = byId.get(parts[0]);
-      const child = byId.get(parts[1]);
-      if (!parent || !child) continue;
+      const parentId = parts[0];
+      const childId = parts[1];
 
-      if (child.stacked) {
+      const parentPos = getEntityPos(parentId);
+      const childPos = getEntityPos(childId);
+      if (!parentPos || !childPos) {
         path.style.display = 'none';
         poly.style.display = 'none';
         continue;
       }
-
-      let activeParent = parent;
-      while (activeParent && activeParent.stacked) {
-        const nextPid = activeParent.parentId ?? activeParent.parentIds?.[0];
-        if (!nextPid) break;
-        const nextParent = byId.get(nextPid);
-        if (!nextParent) break;
-        activeParent = nextParent;
-      }
-
-      if (activeParent.stacked) {
-        path.style.display = 'none';
-        poly.style.display = 'none';
-        continue;
-      }
-
-      const parentPos = posMap.get(activeParent.id);
-      const childPos = posMap.get(child.id);
-      if (!parentPos || !childPos) continue;
 
       const px = parentPos.x, py = parentPos.y, pw = parentPos.w, ph = parentPos.h;
       const cx = childPos.x, cy = childPos.y, cw = childPos.w, ch = childPos.h;
 
       const a = computeArrow(px, py, pw, ph, cx, cy, cw, ch);
 
-      const tailHidden = a.sx >= cx - 2 && a.sx <= cx + cw + 2 && a.sy >= cy - 2 && a.sy <= cy + ch + 2;
-      const headHidden = a.ex >= px - 2 && a.ex <= px + pw + 2 && a.ey >= py - 2 && a.ey <= py + ph + 2;
       const dist = Math.hypot(a.ex - a.sx, a.ey - a.sy);
-      const windowsOverlap = px < cx + cw && px + pw > cx && py < cy + ch && py + ph > cy;
 
-      if (tailHidden || headHidden || (windowsOverlap && dist < 30)) {
+      if (dist < 5) {
         path.style.display = 'none';
         poly.style.display = 'none';
         continue;
       }
 
-      if (child.isExcerptNote) {
+      path.style.display = '';
+      const childWin = byId.get(childId);
+      if (childWin?.isExcerptNote) {
         path.setAttribute('d', `M${a.sx},${a.sy} C${a.c1x},${a.c1y} ${a.c2x},${a.c2y} ${a.ex},${a.ey}`);
         path.setAttribute('stroke-dasharray', '6 4');
         poly.style.display = 'none';
@@ -561,12 +596,10 @@ const ConnectionArrows = memo(function ConnectionArrows({
       }
 
       const isAnimating =
-        isNoteUnstacking(child.id) ||
-        isNoteUnstacking(parent.id) ||
-        isNoteUnstacking(activeParent.id) ||
-        isWindowStacking(parent.id) ||
-        isWindowStacking(activeParent.id) ||
-        isWindowStacking(child.id);
+        isNoteUnstacking(childId) ||
+        isNoteUnstacking(parentId) ||
+        isWindowStacking(parentId) ||
+        isWindowStacking(childId);
 
       if (isAnimating) {
         path.style.opacity = "0";
@@ -579,8 +612,6 @@ const ConnectionArrows = memo(function ConnectionArrows({
         path.style.opacity = "1";
         poly.style.opacity = "1";
       }
-
-      path.style.display = '';
     }
   }, [windows]);
 
@@ -734,7 +765,7 @@ const LiveWireOverlay = memo(function LiveWireOverlay() {
     <>
       <svg
         className="connection-arrows"
-        style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, overflow: 'visible', pointerEvents: 'none', zIndex: 1000 }}
+        style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, overflow: 'visible', pointerEvents: 'none', zIndex: 999999 }}
       >
         <path
           ref={pathRef}
@@ -746,7 +777,7 @@ const LiveWireOverlay = memo(function LiveWireOverlay() {
       </svg>
       <svg
         className="connection-arrows"
-        style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, overflow: 'visible', pointerEvents: 'none', zIndex: 1000 }}
+        style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, overflow: 'visible', pointerEvents: 'none', zIndex: 999999 }}
       >
         <polygon
           ref={polyRef}
@@ -1427,6 +1458,39 @@ function App() {
     [addWindow],
   )
 
+  const [isShiftPressed, setIsShiftPressed] = useState(false);
+  const [marquee, setMarquee] = useState<MarqueeState>(null);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Shift") {
+        setIsShiftPressed(true);
+      } else if (e.key === "Escape") {
+        useWindows.getState().clearSelection();
+      }
+    }
+
+    function handleKeyUp(e: KeyboardEvent) {
+      if (e.key === "Shift") {
+        setIsShiftPressed(false);
+      }
+    }
+
+    function handleBlur() {
+      setIsShiftPressed(false);
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleBlur);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
+    };
+  }, []);
+
   const viewportRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -1443,13 +1507,77 @@ function App() {
     });
 
     function onPanMouseDown(e: MouseEvent) {
+      if (e.button !== 0) return;
       const target = e.target as HTMLElement | null;
-      if (!target?.closest(".window") && !target?.closest(".search-box")) {
+      const isWinClick = Boolean(target?.closest(".window"));
+      const isSearchClick = Boolean(target?.closest(".search-box"));
+      const isMenuClick = Boolean(target?.closest(".group-context-menu"));
+      const isGroupClick = Boolean(target?.closest("[id^='group-box-']"));
+
+      if (isMenuClick || isGroupClick) return;
+
+      if (!isWinClick && !isSearchClick) {
         window.getSelection()?.removeAllRanges();
         document.getSelection()?.removeAllRanges();
       }
+
       if (useWindows.getState().windows.some((win) => win.pdfMaximized)) return;
-      startCanvasPan(e, viewport);
+
+      const currentShift = e.shiftKey || isShiftPressed;
+
+      if (currentShift) {
+        if (isWinClick || isSearchClick) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        const startWorld = screenToWorld(e.clientX, e.clientY);
+        setMarquee({ startX: startWorld.x, startY: startWorld.y, currentX: startWorld.x, currentY: startWorld.y });
+
+        function onMouseMove(ev: MouseEvent) {
+          const curWorld = screenToWorld(ev.clientX, ev.clientY);
+          setMarquee({ startX: startWorld.x, startY: startWorld.y, currentX: curWorld.x, currentY: curWorld.y });
+        }
+
+        function onMouseUp(ev: MouseEvent) {
+          window.removeEventListener("mousemove", onMouseMove);
+          window.removeEventListener("mouseup", onMouseUp);
+
+          const curWorld = screenToWorld(ev.clientX, ev.clientY);
+          const minX = Math.min(startWorld.x, curWorld.x);
+          const minY = Math.min(startWorld.y, curWorld.y);
+          const maxX = Math.max(startWorld.x, curWorld.x);
+          const maxY = Math.max(startWorld.y, curWorld.y);
+
+          const dragDist = Math.hypot(curWorld.x - startWorld.x, curWorld.y - startWorld.y);
+
+          if (dragDist >= 5) {
+            const intersected = useWindows
+              .getState()
+              .windows.filter((w) => !w.stacked)
+              .filter((w) => {
+                const b = getWindowWorldBounds(w);
+                return !(b.right < minX || b.left > maxX || b.bottom < minY || b.top > maxY);
+              })
+              .map((w) => w.id);
+
+            useWindows.getState().setSelectedIds(intersected);
+          } else {
+            useWindows.getState().clearSelection();
+          }
+
+          setMarquee(null);
+        }
+
+        window.addEventListener("mousemove", onMouseMove);
+        window.addEventListener("mouseup", onMouseUp);
+        return;
+      }
+
+      if (!isWinClick && !isSearchClick) {
+        useWindows.getState().clearSelection();
+        startCanvasPan(e, viewport);
+      }
     }
     function onWheel(e: WheelEvent) {
       if (useWindows.getState().windows.some((win) => win.pdfMaximized)) return;
@@ -1466,7 +1594,7 @@ function App() {
       viewport.removeEventListener("mousedown", onPanMouseDown);
       viewport.removeEventListener("wheel", onWheel);
     };
-  }, []);
+  }, [isShiftPressed]);
 
   async function spawnWithRealTitles() {
     try {
@@ -1545,14 +1673,16 @@ function App() {
         Spawn 75 Windows
       </button>
 
-      <div ref={viewportRef} className="canvas-viewport">
+      <div ref={viewportRef} className="canvas-viewport" style={{ cursor: isShiftPressed ? "crosshair" : undefined }}>
         <div ref={gridRef} className="canvas-grid" />
         <div ref={worldRef} className="canvas-world">
+          <GroupOverlay />
           <ConnectionArrows windows={windows} />
-          <LiveWireOverlay />
           {windows.map((w) => (
             <WindowItem key={w.id} w={w} onContextMenu={handleContextMenu} />
           ))}
+          <LiveWireOverlay />
+          <SelectionOverlay marquee={marquee} />
         </div>
       </div>
 

@@ -54,13 +54,15 @@
 }
 
 .window.sticky-window {
-  animation: none !important;
+  will-change: transform, opacity;
 }
 
 .window.sticky-window:not(.excerpt-note-window) {
   border: 1px solid rgba(0, 0, 0, 0.08) !important;
   border-radius: 4px !important;
   box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.18), 0 4px 10px -2px rgba(0, 0, 0, 0.08) !important;
+  animation: sticky-note-pop-in 0.36s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  transform-origin: center center;
 }
 
 .window.excerpt-note-window {
@@ -69,26 +71,69 @@
   background: transparent !important;
   box-shadow: none !important;
   overflow: visible !important;
+  animation: excerpt-note-pop-in 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  transform-origin: center center;
 }
 
 @keyframes window-pop-in {
   0% {
     opacity: 0;
-    transform: scale(0.85);
+    transform: scale(0.88) translateY(10px);
   }
   70% {
     opacity: 1;
-    transform: scale(1.02);
+    transform: scale(1.02) translateY(-2px);
   }
   100% {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes sticky-note-pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.75) translateY(14px) rotate(-1.5deg);
+    filter: blur(2px);
+  }
+  65% {
+    opacity: 1;
+    transform: scale(1.04) translateY(-2px) rotate(0.5deg);
+    filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0) rotate(0deg);
+    filter: blur(0px);
+  }
+}
+
+@keyframes excerpt-note-pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.68) translateY(18px) rotate(1.8deg);
+    filter: blur(3px);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.05) translateY(-3px) rotate(-0.5deg);
+    filter: blur(0px);
+  }
+  85% {
+    transform: scale(0.98) translateY(1px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0) rotate(0deg);
+    filter: blur(0px);
   }
 }
 
 .window.dragging,
-.window.resizing {
+.window.resizing,
+.window-wrapper.unstacking .window {
   will-change: transform;
+  animation: none !important;
 }
 
 .window.active,
@@ -171,6 +216,11 @@
 .window-wrapper.wire-target-hover .image-window,
 .window.image-window.wire-target-hover {
   border-radius: 12px !important;
+  box-shadow: 0 0 0 2px #888888, 0 6px 20px rgba(0, 0, 0, 0.16) !important;
+}
+
+.group-box.wire-target-hover {
+  border-color: #888888 !important;
   box-shadow: 0 0 0 2px #888888, 0 6px 20px rgba(0, 0, 0, 0.16) !important;
 }
 
@@ -385,10 +435,11 @@
   transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease;
   pointer-events: auto;
   cursor: pointer;
-  z-index: 20;
+  z-index: 50;
 }
 
-.window:hover .connection-point {
+.window:hover .connection-point,
+.group-box:hover .connection-point {
   opacity: 1;
 }
 

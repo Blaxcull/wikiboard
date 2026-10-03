@@ -92,7 +92,12 @@ function StickyColorPicker({
   useEffect(() => {
     if (!isOpen) return;
     const handleDismiss = (e: Event) => {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+      const target = e.target as HTMLElement | null;
+      if (
+        pickerRef.current &&
+        !pickerRef.current.contains(target as Node) &&
+        !target?.closest(".window-context-menu")
+      ) {
         onClose();
       }
     };
@@ -133,7 +138,7 @@ function StickyColorPicker({
   return createPortal(
     <div
       ref={pickerRef}
-      className="fixed z-[100000] flex items-center justify-center pointer-events-auto select-none p-1"
+      className="sticky-color-picker fixed z-[100000] flex items-center justify-center pointer-events-auto select-none p-1"
       style={{ left: stylePos.left, top: stylePos.top, transform: "translateX(-50%)" }}
       onMouseDown={(e) => e.stopPropagation()}
       onMouseEnter={handleMouseEnter}

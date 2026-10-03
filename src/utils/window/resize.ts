@@ -132,44 +132,15 @@ export function Resize(
       const dy = screenDy / curCam.zoom;
 
       if (aspectRatio && aspectRatio > 0) {
-        let newW: number;
-        let newH: number;
-        if (Math.abs(dx) >= Math.abs(dy * aspectRatio)) {
-          newW = Math.max(100, Math.round(startWidth + (resizeDir.includes("w") ? -dx : dx)));
-          newH = Math.max(100, Math.round(newW / aspectRatio));
-        } else {
-          newH = Math.max(100, Math.round(startHeight + (resizeDir.includes("n") ? -dy : dy)));
-          newW = Math.max(100, Math.round(newH * aspectRatio));
-        }
-        if (resizeDir.includes("w") || resizeDir.includes("n")) {
-          const tx = resizeDir.includes("w") ? startWidth - newW : 0;
-          const ty = resizeDir.includes("n") ? startHeight - newH : 0;
-          target.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
-        }
+        const newW = Math.max(100, Math.round(startWidth + dx));
+        const newH = Math.max(100, Math.round(newW / aspectRatio));
         target.style.width = `${newW}px`;
         target.style.height = `${newH}px`;
       } else {
-        const needsLeft = resizeDir.includes("w");
-        const needsTop = resizeDir.includes("n");
-
-        if (needsLeft || needsTop) {
-          const tx = needsLeft && startWidth - dx > 100 ? Math.round(dx) : 0;
-          const ty = needsTop && startHeight - dy > 100 ? Math.round(dy) : 0;
-          target.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
-        }
-
-        if (resizeDir.includes("e") && startWidth + dx > 100) {
-          target.style.width = `${Math.round(startWidth + dx)}px`;
-        }
-        if (resizeDir.includes("w") && startWidth - dx > 100) {
-          target.style.width = `${Math.round(startWidth - dx)}px`;
-        }
-        if (resizeDir.includes("s") && startHeight + dy > 100) {
-          target.style.height = `${Math.round(startHeight + dy)}px`;
-        }
-        if (resizeDir.includes("n") && startHeight - dy > 100) {
-          target.style.height = `${Math.round(startHeight - dy)}px`;
-        }
+        const newW = Math.max(100, Math.round(startWidth + dx));
+        const newH = Math.max(100, Math.round(startHeight + dy));
+        target.style.width = `${newW}px`;
+        target.style.height = `${newH}px`;
       }
     });
   }
@@ -191,18 +162,9 @@ export function Resize(
     target.classList.remove("resizing");
     target.closest(".canvas-world")?.classList.remove("gesture-active");
 
-    // Read transform — values are in world units
-    const txMatch = target.style.transform?.match(/translate3d\(([-\d.]+)px/);
-    const tyMatch = target.style.transform?.match(/translate3d\([-\d.]+px,\s*([-\d.]+)px/);
-    const tx = txMatch ? Math.round(parseFloat(txMatch[1])) : 0;
-    const ty = tyMatch ? Math.round(parseFloat(tyMatch[1])) : 0;
-
-    const finalLeft = baseLeft + tx;
-    const finalTop = baseTop + ty;
-
     target.style.transform = "";
-    target.style.left = `${finalLeft}px`;
-    target.style.top = `${finalTop}px`;
+    target.style.left = `${baseLeft}px`;
+    target.style.top = `${baseTop}px`;
 
     const curCam = getCamera();
     const screenDx = lastX - startX;
@@ -210,36 +172,20 @@ export function Resize(
     const dx = screenDx / curCam.zoom;
     const dy = screenDy / curCam.zoom;
 
+    let finalW: number;
+    let finalH: number;
     if (aspectRatio && aspectRatio > 0) {
-      let finalW: number;
-      let finalH: number;
-      if (Math.abs(dx) >= Math.abs(dy * aspectRatio)) {
-        finalW = Math.max(100, Math.round(startWidth + (resizeDir.includes("w") ? -dx : dx)));
-        finalH = Math.max(100, Math.round(finalW / aspectRatio));
-      } else {
-        finalH = Math.max(100, Math.round(startHeight + (resizeDir.includes("n") ? -dy : dy)));
-        finalW = Math.max(100, Math.round(finalH * aspectRatio));
-      }
-      target.style.width = `${finalW}px`;
-      target.style.height = `${finalH}px`;
+      finalW = Math.max(100, Math.round(startWidth + dx));
+      finalH = Math.max(100, Math.round(finalW / aspectRatio));
     } else {
-      if (resizeDir.includes("e") && startWidth + dx > 100) {
-        target.style.width = `${Math.round(startWidth + dx)}px`;
-      }
-      if (resizeDir.includes("w") && startWidth - dx > 100) {
-        target.style.width = `${Math.round(startWidth - dx)}px`;
-      }
-      if (resizeDir.includes("s") && startHeight + dy > 100) {
-        target.style.height = `${Math.round(startHeight + dy)}px`;
-      }
-      if (resizeDir.includes("n") && startHeight - dy > 100) {
-        target.style.height = `${Math.round(startHeight - dy)}px`;
-      }
+      finalW = Math.max(100, Math.round(startWidth + dx));
+      finalH = Math.max(100, Math.round(startHeight + dy));
     }
 
-    const width = parseFloat(target.style.width) || startWidth;
-    const height = parseFloat(target.style.height) || startHeight;
-    onResizeEnd?.({ x: finalLeft, y: finalTop, width, height });
+    target.style.width = `${finalW}px`;
+    target.style.height = `${finalH}px`;
+
+    onResizeEnd?.({ x: baseLeft, y: baseTop, width: finalW, height: finalH });
 
     useWindows.setState({ maxZIndex: nextZ });
     onActivate?.();

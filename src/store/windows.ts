@@ -54,8 +54,19 @@ export type WindowData = {
   height?: number;
 };
 
+export type WindowGroup = {
+  id: string;
+  memberIds: string[];
+  color?: string;
+  alwaysOnTop?: boolean;
+  parentId?: string;
+  parentIds?: string[];
+  side?: "TOP" | "RIGHT" | "BOTTOM" | "LEFT";
+};
+
 type WindowsStore = {
   windows: WindowData[];
+  groups: WindowGroup[];
   maxZIndex: number;
   addWindow: (data?: Partial<WindowData>) => void;
   removeWindow: (id: string) => void;
@@ -63,10 +74,19 @@ type WindowsStore = {
   updateWindow: (id: string, patch: Partial<Omit<WindowData, "id">>) => void;
   spawnWindows: (count: number, startIdx: number, titles?: string[]) => void;
   breakConnections: (id: string) => void;
+  breakGroupExternalConnections: (groupId: string) => void;
+  connectEntitiesWithoutCycles: (sourceId: string, targetId: string) => void;
   toggleAlwaysOnTop: (id: string) => void;
   toggleStackWindow: (id: string) => void;
   toggleStackSingleNote: (id: string) => void;
   unstackNote: (id: string) => void;
+  selectedIds: string[];
+  setSelectedIds: (ids: string[]) => void;
+  clearSelection: () => void;
+  addGroup: (memberIds: string[], color?: string) => void;
+  removeGroup: (groupId: string) => void;
+  updateGroup: (groupId: string, patch: Partial<Omit<WindowGroup, "id">>) => void;
+  ungroup: (groupId: string) => void;
 };
 
 export const DEFAULT_WIDTH = 750;
@@ -200,7 +220,36 @@ export function findRootWindow(
 
 export const useWindows = create<WindowsStore>((set) => ({
   windows: [],
+  groups: [],
   maxZIndex: 0,
+  selectedIds: [],
+  setSelectedIds: (ids) => set({ selectedIds: ids }),
+  clearSelection: () => set({ selectedIds: [] }),
+  addGroup: (memberIds, color) =>
+    set((state) => {
+      const cleanIds = Array.from(new Set(memberIds));
+      if (cleanIds.length === 0) return state;
+      const newGroup: WindowGroup = {
+        id: crypto.randomUUID(),
+        memberIds: cleanIds,
+        color: color ?? "#525252",
+      };
+      const filteredExisting = state.groups
+        .map((g) => ({
+          ...g,
+          memberIds: g.memberIds.filter((id) => !cleanIds.includes(id)),
+        }))
+        .filter((g) => g.memberIds.length > 0);
+      return { groups: [...filteredExisting, newGroup] };
+    }),
+  removeGroup: (groupId) =>
+    set((state) => ({ groups: state.groups.filter((g) => g.id !== groupId) })),
+  ungroup: (groupId) =>
+    set((state) => ({ groups: state.groups.filter((g) => g.id !== groupId) })),
+  updateGroup: (groupId, patch) =>
+    set((state) => ({
+      groups: state.groups.map((g) => (g.id === groupId ? { ...g, ...patch } : g)),
+    })),
 
   addWindow: (data) =>
     set((state) => {
@@ -218,15 +267,24 @@ export const useWindows = create<WindowsStore>((set) => ({
       let posX: number;
       let posY: number;
       let parentWindow: WindowData | undefined;
+      let parentGroup: WindowGroup | undefined;
 
       if (data?.parentId && data?.x == null && data?.y == null) {
         parentWindow = state.windows.find((w) => w.id === data.parentId);
-        if (parentWindow) {
-          const parentEl = typeof document !== "undefined" ? document.getElementById(`win-${parentWindow.id}`) : null;
-          let px = parentWindow.x ?? 0;
-          let py = parentWindow.y ?? 0;
-          let pw = parentWindow.width ?? DEFAULT_WIDTH;
-          let ph = parentWindow.height ?? DEFAULT_HEIGHT;
+        parentGroup = state.groups.find((g) => g.id === data.parentId);
+
+        const parentEl = parentGroup
+          ? (typeof document !== "undefined" ? document.getElementById(`group-box-${parentGroup.id}`) : null)
+          : parentWindow
+          ? (typeof document !== "undefined" ? document.getElementById(`win-${parentWindow.id}`) : null)
+          : null;
+
+        if (parentWindow || parentGroup) {
+          let px = parentWindow ? (parentWindow.x ?? 0) : 0;
+          let py = parentWindow ? (parentWindow.y ?? 0) : 0;
+          let pw = parentWindow ? (parentWindow.width ?? DEFAULT_WIDTH) : 400;
+          let ph = parentWindow ? (parentWindow.height ?? DEFAULT_HEIGHT) : 300;
+
           if (parentEl) {
             const styleLeft = parseFloat(parentEl.style.left) || parentEl.offsetLeft || px;
             const styleTop = parseFloat(parentEl.style.top) || parentEl.offsetTop || py;
@@ -338,16 +396,28 @@ export const useWindows = create<WindowsStore>((set) => ({
   removeWindow: (id) =>
     set((state) => {
       const closingWin = state.windows.find((w) => w.id === id);
-      if (closingWin?.parentId && closingWin?.sourceHref) {
-        if (typeof window !== "undefined") {
+      if (typeof window !== "undefined") {
+        if (closingWin?.parentId && closingWin?.sourceHref) {
           window.dispatchEvent(
             new CustomEvent("wikiboard:link-closed", {
               detail: { parentId: closingWin.parentId, href: closingWin.sourceHref, closingId: id },
             })
           );
         }
+        window.dispatchEvent(
+          new CustomEvent("wikiboard:note-closed", {
+            detail: { noteId: id, parentId: closingWin?.parentId },
+          })
+        );
       }
       return {
+        selectedIds: state.selectedIds.filter((sid) => sid !== id),
+        groups: state.groups
+          .map((g) => ({
+            ...g,
+            memberIds: g.memberIds.filter((mId) => mId !== id),
+          }))
+          .filter((g) => g.memberIds.length > 0),
         windows: state.windows
           .filter((w) => w.id !== id)
           .map((w) => ({
@@ -481,6 +551,135 @@ export const useWindows = create<WindowsStore>((set) => ({
         return w;
       }),
     })),
+
+  breakGroupExternalConnections: (groupId: string) =>
+    set((state) => {
+      const group = state.groups.find((g) => g.id === groupId);
+      const memberIds = group ? group.memberIds : [];
+      const memberSet = new Set(memberIds);
+
+      const newWindows = state.windows.map((w) => {
+        const isMember = memberSet.has(w.id);
+        const existingParents =
+          w.parentIds && w.parentIds.length > 0
+            ? w.parentIds
+            : w.parentId
+            ? [w.parentId]
+            : [];
+
+        // For members: keep parents that are ALSO in memberSet (internal window-to-window).
+        // For non-members: drop parents that ARE in memberSet or equal to groupId.
+        const newParentIds = existingParents.filter((pid) => {
+          if (pid === groupId) return false;
+          if (isMember) return memberSet.has(pid);
+          return !memberSet.has(pid);
+        });
+
+        const newParentId = w.parentId
+          ? (newParentIds.includes(w.parentId) ? w.parentId : newParentIds[0])
+          : newParentIds[0];
+
+        return {
+          ...w,
+          parentId: newParentId,
+          parentIds: newParentIds.length > 0 ? newParentIds : undefined,
+        };
+      });
+
+      const newGroups = state.groups.map((g) => {
+        if (g.id === groupId) {
+          return {
+            ...g,
+            parentId: undefined,
+            parentIds: undefined,
+          };
+        }
+
+        const existingParents =
+          g.parentIds && g.parentIds.length > 0
+            ? g.parentIds
+            : g.parentId
+            ? [g.parentId]
+            : [];
+
+        const newParentIds = existingParents.filter(
+          (pid) => pid !== groupId && !memberSet.has(pid)
+        );
+
+        const newParentId = g.parentId
+          ? (newParentIds.includes(g.parentId) ? g.parentId : newParentIds[0])
+          : newParentIds[0];
+
+        return {
+          ...g,
+          parentId: newParentId,
+          parentIds: newParentIds.length > 0 ? newParentIds : undefined,
+        };
+      });
+
+      return { windows: newWindows, groups: newGroups };
+    }),
+
+  connectEntitiesWithoutCycles: (sourceId: string, targetId: string) =>
+    set((state) => {
+      if (sourceId === targetId) return state;
+
+      const targetWin = state.windows.find((w) => w.id === targetId);
+      const targetGroup = state.groups.find((g) => g.id === targetId);
+      if (!targetWin && !targetGroup) return state;
+
+      const getParents = (entity: { parentId?: string; parentIds?: string[] }): string[] => {
+        const set = new Set<string>();
+        if (entity.parentIds) for (const p of entity.parentIds) set.add(p);
+        if (entity.parentId) set.add(entity.parentId);
+        return Array.from(set);
+      };
+
+      const isAncestor = (curId: string, searchId: string, visited = new Set<string>()): boolean => {
+        if (curId === searchId) return true;
+        if (visited.has(curId)) return false;
+        visited.add(curId);
+
+        const win = state.windows.find((w) => w.id === curId);
+        const grp = state.groups.find((g) => g.id === curId);
+        const entity = win || grp;
+        if (!entity) return false;
+
+        for (const pId of getParents(entity)) {
+          if (isAncestor(pId, searchId, visited)) return true;
+        }
+        return false;
+      };
+
+      if (isAncestor(sourceId, targetId)) return state;
+
+      let newWindows = [...state.windows];
+      let newGroups = [...state.groups];
+
+      if (targetWin) {
+        newWindows = newWindows.map((w) => {
+          if (w.id === targetId) {
+            const pSet = new Set(getParents(w));
+            pSet.add(sourceId);
+            const newPList = Array.from(pSet);
+            return { ...w, parentIds: newPList, parentId: newPList[0] };
+          }
+          return w;
+        });
+      } else if (targetGroup) {
+        newGroups = newGroups.map((g) => {
+          if (g.id === targetId) {
+            const pSet = new Set(getParents(g));
+            pSet.add(sourceId);
+            const newPList = Array.from(pSet);
+            return { ...g, parentIds: newPList, parentId: newPList[0] };
+          }
+          return g;
+        });
+      }
+
+      return { windows: newWindows, groups: newGroups };
+    }),
 
   toggleAlwaysOnTop: (id: string) =>
     set((state) => {

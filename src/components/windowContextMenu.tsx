@@ -43,7 +43,12 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
   useEffect(() => {
     if (!pos) return;
     const handleDismiss = (e: Event) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      const target = e.target as HTMLElement | null;
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(target as Node) &&
+        !target?.closest(".sticky-color-picker")
+      ) {
         onClose();
       }
     };
@@ -139,7 +144,7 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
   return createPortal(
     <div
       ref={menuRef}
-      className="fixed z-[100000] w-[185px] p-1.5 bg-white border-2 border-[#d0d0d0] rounded-[16px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] select-none"
+      className="window-context-menu fixed z-[100000] w-[185px] p-1.5 bg-white border-2 border-[#d0d0d0] rounded-[16px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] select-none"
       style={{ left: stylePos.left, top: stylePos.top }}
       onContextMenu={(e) => e.preventDefault()}
     >

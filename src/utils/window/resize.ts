@@ -12,18 +12,38 @@ export function computeCursorDirection(
   width: number, height: number,
   target?: HTMLElement,
 ): string | null {
+  if (target) {
+    const rect = target.getBoundingClientRect();
+    const cam = getCamera();
+    const screenX = mouseX * cam.zoom + cam.panX;
+    const screenY = mouseY * cam.zoom + cam.panY;
+    const distFromRight = rect.right - screenX;
+    const distFromBottom = rect.bottom - screenY;
+
+    if (target.classList.contains("pdf-window")) {
+      const pdfBottomDist = (rect.bottom - 64) - screenY;
+      if (distFromRight >= -10 && distFromRight <= 32 && pdfBottomDist >= -10 && pdfBottomDist <= 32) {
+        return 'se-resize';
+      }
+    }
+
+    if (distFromRight >= -10 && distFromRight <= 32 && distFromBottom >= -10 && distFromBottom <= 32) {
+      return 'se-resize';
+    }
+  }
+
   const relX = mouseX - left;
   const relY = mouseY - top;
 
-  const CORNER = 24;
+  const CORNER = 32;
 
   let cornerY = height;
   if (target?.classList.contains("pdf-window")) {
     cornerY = height - 64;
   }
 
-  const nearRight = relX >= width - CORNER && relX <= width + 8;
-  const nearBottom = (relY >= cornerY - CORNER && relY <= cornerY + 8) || (relY >= height - CORNER && relY <= height + 8);
+  const nearRight = relX >= width - CORNER && relX <= width + 10;
+  const nearBottom = (relY >= cornerY - CORNER && relY <= cornerY + 10) || (relY >= height - CORNER && relY <= height + 10);
 
   if (nearRight && nearBottom) {
     return 'se-resize';

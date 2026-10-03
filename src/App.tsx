@@ -1143,7 +1143,13 @@ useEffect(() => {
           width: `${w.width ?? 260}px`,
           height: `${w.height ?? (isExcerpt ? 64 : 200)}px`,
         }}
-        onMouseDown={handleActivate}
+        onMouseDown={(e) => {
+          handleActivate();
+          const rect = e.currentTarget.getBoundingClientRect();
+          if (e.clientX >= rect.right - 32 && e.clientY >= rect.bottom - 32) {
+            Resize(e, (pos) => handlePositionChange(pos), handleActivate);
+          }
+        }}
       >
         <StackedNoteStubs parentWin={w} />
         <div

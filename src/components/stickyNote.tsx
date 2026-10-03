@@ -31,7 +31,7 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange 
         onMouseMove={(e) => {
           if (isDraggingWindow || isResizingWindow) return;
           const rect = e.currentTarget.getBoundingClientRect();
-          const isBottomRight = e.clientX >= rect.right - 24 && e.clientY >= rect.bottom - 24;
+          const isBottomRight = e.clientX >= rect.right - 32 && e.clientY >= rect.bottom - 32;
           e.currentTarget.style.cursor = isBottomRight ? "se-resize" : "move";
         }}
         onMouseDown={(e) => {
@@ -39,10 +39,10 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange 
           onActivate();
 
           const rect = e.currentTarget.getBoundingClientRect();
-          const isBottomRight = e.clientX >= rect.right - 24 && e.clientY >= rect.bottom - 24;
+          const isBottomRight = e.clientX >= rect.right - 32 && e.clientY >= rect.bottom - 32;
 
           if (isBottomRight) {
-            Resize(e, (rect) => onPositionChange(rect), onActivate);
+            Resize(e, (pos) => onPositionChange(pos), onActivate);
           } else {
             startDrag(e, (pos) => onPositionChange(pos), onActivate);
           }
@@ -63,11 +63,32 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange 
   }
 
   return (
-    <div className="relative w-full h-full flex flex-col bg-[#eee7a6] rounded-sm overflow-hidden select-none shadow-sm">
+    <div
+      className="relative w-full h-full flex flex-col bg-[#eee7a6] rounded-sm overflow-hidden select-none shadow-sm"
+      onMouseMove={(e) => {
+        if (isDraggingWindow || isResizingWindow) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const isBottomRight = e.clientX >= rect.right - 32 && e.clientY >= rect.bottom - 32;
+        e.currentTarget.style.cursor = isBottomRight ? "se-resize" : "default";
+      }}
+      onMouseDown={(e) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const isBottomRight = e.clientX >= rect.right - 32 && e.clientY >= rect.bottom - 32;
+        if (isBottomRight) {
+          e.stopPropagation();
+          onActivate();
+          Resize(e, (pos) => onPositionChange(pos), onActivate);
+        }
+      }}
+    >
       {/* Top Header Drag Bar */}
       <div
         className="w-full h-7 cursor-move relative shrink-0"
         onMouseDown={(e) => {
+          const rect = e.currentTarget.closest(".window-wrapper, .window")?.getBoundingClientRect();
+          if (rect && e.clientX >= rect.right - 32 && e.clientY >= rect.bottom - 32) {
+            return;
+          }
           e.stopPropagation();
           onActivate();
           startDrag(e, (pos) => onPositionChange(pos), onActivate);
@@ -100,7 +121,20 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange 
         placeholder="Write a note…"
         value={win.stickyText ?? ""}
         onChange={handleTextChange}
-        onMouseDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => {
+          const rawTarget = e.currentTarget.closest(".window-wrapper, .window") as HTMLElement | null;
+          if (rawTarget) {
+            const rect = rawTarget.getBoundingClientRect();
+            if (e.clientX >= rect.right - 32 && e.clientY >= rect.bottom - 32) {
+              e.stopPropagation();
+              onActivate();
+              Resize(e, (pos) => onPositionChange(pos), onActivate);
+              return;
+            }
+          }
+          e.stopPropagation();
+          onActivate();
+        }}
         autoFocus
       />
       {/* Visual bottom-right corner resize handle */}

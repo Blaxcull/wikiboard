@@ -1,4 +1,5 @@
 import { useWindows } from "../store/windows";
+import { determineNoteSide } from "../App";
 
 const stackingWinIds = new Set<string>();
 const unstackingNoteIds = new Set<string>();
@@ -115,15 +116,7 @@ export function stackWindowWithAnimation(windowId: string) {
   };
 
   for (const note of childNotes) {
-    const px = parentWin.x ?? 80;
-    const py = parentWin.y ?? 80;
-    const pw = parentWin.width ?? 750;
-    const ph = parentWin.height ?? 550;
-    const nx = (note.x ?? 80) + (note.width ?? 260) / 2;
-    const ny = (note.y ?? 80) + (note.height ?? (note.isExcerptNote ? 64 : 200)) / 2;
-    const dx = nx - (px + pw / 2);
-    const dy = ny - (py + ph / 2);
-    const side = note.side ?? (Math.abs(dx) >= Math.abs(dy) ? (dx >= 0 ? "RIGHT" : "LEFT") : (dy >= 0 ? "BOTTOM" : "TOP"));
+    const side = determineNoteSide(note, parentWin);
     bySide[side].push(note);
   }
 

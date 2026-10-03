@@ -279,8 +279,6 @@ function getCardOffsetStyle(
 }
 
 export function determineNoteSide(note: WindowData, parent: WindowData): "TOP" | "RIGHT" | "BOTTOM" | "LEFT" {
-  if (note.side) return note.side;
-
   const px = parent.x ?? 80;
   const py = parent.y ?? 80;
   const pw = parent.width ?? 750;
@@ -291,19 +289,35 @@ export function determineNoteSide(note: WindowData, parent: WindowData): "TOP" |
   const nw = note.width ?? 260;
   const nh = note.height ?? (note.isExcerptNote ? 64 : 200);
 
-  const parentCenterX = px + pw / 2;
-  const parentCenterY = py + ph / 2;
   const noteCenterX = nx + nw / 2;
   const noteCenterY = ny + nh / 2;
 
-  const dx = noteCenterX - parentCenterX;
-  const dy = noteCenterY - parentCenterY;
+  // Compute signed outward distance to parent window edges
+  const distRight = noteCenterX - (px + pw);
+  const distLeft = px - noteCenterX;
+  const distBottom = noteCenterY - (py + ph);
+  const distTop = py - noteCenterY;
 
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    return dx >= 0 ? "RIGHT" : "LEFT";
-  } else {
-    return dy >= 0 ? "BOTTOM" : "TOP";
+  const maxOutward = Math.max(distRight, distLeft, distBottom, distTop);
+
+  if (maxOutward > 0) {
+    if (maxOutward === distRight) return "RIGHT";
+    if (maxOutward === distLeft) return "LEFT";
+    if (maxOutward === distBottom) return "BOTTOM";
+    if (maxOutward === distTop) return "TOP";
   }
+
+  // If inside parent or overlapping, compare closest edge
+  const absDistRight = Math.abs(noteCenterX - (px + pw));
+  const absDistLeft = Math.abs(noteCenterX - px);
+  const absDistBottom = Math.abs(noteCenterY - (py + ph));
+  const absDistTop = Math.abs(noteCenterY - py);
+
+  const minDist = Math.min(absDistRight, absDistLeft, absDistBottom, absDistTop);
+  if (minDist === absDistRight) return "RIGHT";
+  if (minDist === absDistLeft) return "LEFT";
+  if (minDist === absDistBottom) return "BOTTOM";
+  return "TOP";
 }
 
 const StackedNoteStubs = memo(function StackedNoteStubs({
@@ -312,7 +326,6 @@ const StackedNoteStubs = memo(function StackedNoteStubs({
   parentWin: WindowData;
 }) {
   const windows = useWindows((s) => s.windows);
-  const removeWindow = useWindows((s) => s.removeWindow);
 
   const childNotes = useMemo(
     () =>
@@ -342,9 +355,9 @@ const StackedNoteStubs = memo(function StackedNoteStubs({
   const parentW = parentWin.width ?? 750;
   const parentH = parentWin.height ?? 550;
 
-  // Dynamic limit scaling with parent window width and height (no upper cap of 5)
-  const maxHoriz = Math.max(1, Math.floor((parentW - 40) / 65));
-  const maxVert = Math.max(1, Math.floor((parentH - 40) / 55));
+  // If window dimension is smaller than the minimum sticky note length, hide stubs on that side
+  const maxHoriz = parentW < 180 ? 0 : Math.max(0, Math.floor((parentW - 40) / 65));
+  const maxVert = parentH < 150 ? 0 : Math.max(0, Math.floor((parentH - 40) / 55));
 
   return (
     <div
@@ -385,19 +398,6 @@ const StackedNoteStubs = memo(function StackedNoteStubs({
                     <span className="truncate max-w-[170px]">
                       {note.isExcerptNote ? "Excerpt" : (note.title || "Sticky Note")}
                     </span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteScroll(note.id);
-                        removeWindow(note.id);
-                        evictClosedWindowArticles();
-                      }}
-                      className="w-4 h-4 flex items-center justify-center text-[10px] text-[#333] hover:text-red-600 font-bold bg-black/5 hover:bg-red-100 rounded-full cursor-pointer transition-colors border-none ml-1"
-                      title="Delete note"
-                    >
-                      ×
-                    </button>
                   </div>
                 </div>
               );
@@ -867,7 +867,6 @@ const StackedNotesDrawer = memo(function StackedNotesDrawer({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const windows = useWindows((s) => s.windows);
-  const removeWindow = useWindows((s) => s.removeWindow);
   const unstackNote = useWindows((s) => s.unstackNote);
 
   const childNotes = useMemo(
@@ -927,18 +926,6 @@ const StackedNotesDrawer = memo(function StackedNotesDrawer({
                       title="Unstack onto canvas"
                     >
                       Unstack ↗
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        deleteScroll(note.id);
-                        removeWindow(note.id);
-                        evictClosedWindowArticles();
-                      }}
-                      className="w-5 h-5 flex items-center justify-center hover:bg-red-100 text-red-600 rounded-md font-bold cursor-pointer transition-colors text-[12px] border-none bg-transparent"
-                      title="Delete note"
-                    >
-                      ✕
                     </button>
                   </div>
                 </div>

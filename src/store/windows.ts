@@ -525,13 +525,34 @@ export const useWindows = create<WindowsStore>((set) => ({
           if (shouldStack) {
             const relX = (w.x ?? 80) - parentX;
             const relY = (w.y ?? 80) - parentY;
-            const px = parentX + parentW / 2;
-            const py = parentY + parentH / 2;
-            const nx = (w.x ?? 80) + (w.width ?? 260) / 2;
-            const ny = (w.y ?? 80) + (w.height ?? (w.isExcerptNote ? 64 : 200)) / 2;
-            const dx = nx - px;
-            const dy = ny - py;
-            const side = w.side ?? (Math.abs(dx) >= Math.abs(dy) ? (dx >= 0 ? "RIGHT" : "LEFT") : (dy >= 0 ? "BOTTOM" : "TOP"));
+            const noteCenterX = (w.x ?? 80) + (w.width ?? 260) / 2;
+            const noteCenterY = (w.y ?? 80) + (w.height ?? (w.isExcerptNote ? 64 : 200)) / 2;
+
+            const distRight = noteCenterX - (parentX + parentW);
+            const distLeft = parentX - noteCenterX;
+            const distBottom = noteCenterY - (parentY + parentH);
+            const distTop = parentY - noteCenterY;
+
+            const maxOutward = Math.max(distRight, distLeft, distBottom, distTop);
+            let side: "TOP" | "RIGHT" | "BOTTOM" | "LEFT" = "RIGHT";
+
+            if (maxOutward > 0) {
+              if (maxOutward === distRight) side = "RIGHT";
+              else if (maxOutward === distLeft) side = "LEFT";
+              else if (maxOutward === distBottom) side = "BOTTOM";
+              else if (maxOutward === distTop) side = "TOP";
+            } else {
+              const absR = Math.abs(noteCenterX - (parentX + parentW));
+              const absL = Math.abs(noteCenterX - parentX);
+              const absB = Math.abs(noteCenterY - (parentY + parentH));
+              const absT = Math.abs(noteCenterY - parentY);
+              const min = Math.min(absR, absL, absB, absT);
+              if (min === absR) side = "RIGHT";
+              else if (min === absL) side = "LEFT";
+              else if (min === absB) side = "BOTTOM";
+              else side = "TOP";
+            }
+
             return { ...w, stacked: true, side, relX, relY };
           } else {
             const side = w.side ?? "RIGHT";

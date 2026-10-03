@@ -218,7 +218,7 @@ function readWindowPos(el: HTMLElement): { x: number; y: number; w: number; h: n
 
 
 
-function getNoteColor(index: number, isExcerpt?: boolean): string {
+function getNoteColor(isExcerpt?: boolean): string {
   if (isExcerpt) return "#f0e5d8";
   return "#eee7a6";
 }
@@ -354,7 +354,7 @@ const StackedNoteStubs = memo(function StackedNoteStubs({
               const noteW = note.width ?? 260;
               const noteH = note.height ?? (note.isExcerptNote ? 64 : 200);
               const posStyle = getCardOffsetStyle(side, i, visibleNotes.length, noteW, noteH);
-              const colorBg = getNoteColor(i, note.isExcerptNote);
+              const colorBg = getNoteColor(note.isExcerptNote);
 
               return (
                 <div
@@ -1081,7 +1081,7 @@ useEffect(() => {
         let fromX = (parentRect.left + parentRect.width / 2) - (noteRect.left + noteRect.width / 2);
         let fromY = (parentRect.top + parentRect.height / 2) - (noteRect.top + noteRect.height / 2);
 
-        if (parentWin) {
+        if (parentWin && parentId) {
           const allChildNotes = useWindows.getState().windows.filter(
             (win) =>
               (win.parentId === parentId || win.parentIds?.includes(parentId)) &&

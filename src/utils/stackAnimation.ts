@@ -95,9 +95,7 @@ export function stackWindowWithAnimation(windowId: string) {
   if (!parentWin) return;
 
   const childNotes = state.windows.filter(
-    (w) =>
-      (w.parentId === windowId || w.parentIds?.includes(windowId)) &&
-      w.contentType === "sticky"
+    (w) => w.parentId === windowId || w.parentIds?.includes(windowId)
   );
 
   if (childNotes.length === 0) return;

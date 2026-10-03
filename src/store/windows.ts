@@ -504,7 +504,7 @@ export const useWindows = create<WindowsStore>((set) => ({
       if (!parentWin) return state;
 
       const childNotes = state.windows.filter(
-        (w) => (w.parentId === id || w.parentIds?.includes(id)) && w.contentType === "sticky"
+        (w) => w.parentId === id || w.parentIds?.includes(id)
       );
       if (childNotes.length === 0) return state;
 
@@ -520,7 +520,7 @@ export const useWindows = create<WindowsStore>((set) => ({
 
       return {
         windows: state.windows.map((w) => {
-          const isChildNote = (w.parentId === id || w.parentIds?.includes(id)) && w.contentType === "sticky";
+          const isChildNote = w.parentId === id || w.parentIds?.includes(id);
           if (!isChildNote) return w;
 
           if (shouldStack) {

@@ -66,14 +66,21 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
   const targetWin = windows.find((w) => w.id === pos?.windowId);
   const isAlwaysOnTop = !!targetWin?.alwaysOnTop;
   const isSticky = targetWin?.contentType === "sticky";
+  const isImage = !!(targetWin?.directImageUrl || targetWin?.title?.startsWith("File:"));
 
   const childNotes = windows.filter(
-    (w) => (w.parentId === pos?.windowId || w.parentIds?.includes(pos?.windowId ?? "")) && w.contentType === "sticky"
+    (w) => (w.parentId === pos?.windowId || w.parentIds?.includes(pos?.windowId ?? ""))
   );
   const hasUnstackedNotes = childNotes.some((w) => !w.stacked);
 
   let stackLabel = "Stack notes";
-  if (isSticky) {
+  if (isImage) {
+    if (childNotes.length > 0) {
+      stackLabel = hasUnstackedNotes ? "Stack notes" : "Unstack notes";
+    } else {
+      stackLabel = targetWin?.stacked ? "Unstack image" : "Stack image";
+    }
+  } else if (isSticky) {
     stackLabel = targetWin?.stacked ? "Unstack note" : "Stack note";
   } else {
     stackLabel = childNotes.length > 0 && !hasUnstackedNotes ? "Unstack notes" : "Stack notes";
@@ -151,7 +158,7 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
             } else if (item.id === "always-on-top") {
               useWindows.getState().toggleAlwaysOnTop(pos.windowId);
             } else if (item.id === "stack") {
-              if (isSticky) {
+              if (isSticky || (isImage && childNotes.length === 0)) {
                 stackSingleNoteWithAnimation(pos.windowId);
               } else {
                 stackWindowWithAnimation(pos.windowId);

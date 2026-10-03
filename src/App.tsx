@@ -1226,6 +1226,11 @@ useEffect(() => {
     w.pdfMaximized && !w.pdfAnimating ? "maximized-done" : ""
   } ${w.active ? "active" : "inactive"} ${w.pdfAnimating ? "no-transition" : ""}`}
   style={zIndexStyle}
+  onContextMenu={(e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onContextMenu?.(e, w.id);
+  }}
   onMouseDown={(e) => {
     handleActivate()
     if (w.pdfMaximized) return
@@ -1280,6 +1285,11 @@ useEffect(() => {
           top: `${w.y ?? 80}px`,
           width: `${w.width ?? 250}px`,
           height: `${w.height ?? 190}px`,
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onContextMenu?.(e, w.id);
         }}
         onMouseDown={(e) => {
           handleActivate();

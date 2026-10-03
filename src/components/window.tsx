@@ -29,6 +29,8 @@ type WindowProps = {
   onPositionChange?: (pos: { x?: number; y?: number; width?: number; height?: number }) => void;
   /** Called when any of the 4 connection point dots is clicked */
   onAddSticky?: (side: "TOP" | "RIGHT" | "BOTTOM" | "LEFT") => void;
+  /** Called when the window is right-clicked */
+  onContextMenu?: (e: React.MouseEvent) => void;
 };
 
 const Window = memo(function Window({
@@ -46,6 +48,7 @@ const Window = memo(function Window({
   onActivate,
   onPositionChange,
   onAddSticky,
+  onContextMenu,
 }: React.PropsWithChildren<WindowProps>) {
   const positioned = useRef(false);
 
@@ -80,6 +83,7 @@ const Window = memo(function Window({
     >
       <div
         className={`titlebar ${titleBarClassName}`}
+        onContextMenu={onContextMenu}
         onMouseDown={(e) => {
           e.stopPropagation();
           startDrag(e, (pos) => {

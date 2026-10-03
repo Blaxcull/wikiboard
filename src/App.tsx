@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/immutability */
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Window from './components/window'
 import LinkEditor from './components/linkEditor'
 import SearchBox from './components/searchBox'
@@ -7,6 +7,7 @@ import ArticleView from './components/articleView'
 import PdfViewer from './components/pdfViewer'
 import ImageViewer from './components/imageViewer'
 import StickyNote from './components/stickyNote'
+import WindowContextMenu, { type ContextMenuPosition } from './components/windowContextMenu'
 import { useWindows, type WindowData, nextCascadeOffset } from './store/windows'
 import { deleteScroll } from './utils/scrollMemory'
 import { evictClosedWindowArticles } from './utils/articleCache'
@@ -310,17 +311,41 @@ const ConnectionArrows = memo(function ConnectionArrows({
 
       const a = computeArrow(px, py, pw, ph, cx, cy, cw, ch);
 
-      path.setAttribute('d', `M${a.sx},${a.sy} C${a.c1x},${a.c1y} ${a.c2x},${a.c2y} ${a.bcx},${a.bcy}`);
-      poly.setAttribute('points', `${a.tipX},${a.tipY} ${a.b1x},${a.b1y} ${a.b2x},${a.b2y}`);
-      poly.style.display = '';
+      const tailHidden = a.sx >= cx - 2 && a.sx <= cx + cw + 2 && a.sy >= cy - 2 && a.sy <= cy + ch + 2;
+      const headHidden = a.ex >= px - 2 && a.ex <= px + pw + 2 && a.ey >= py - 2 && a.ey <= py + ph + 2;
+      const dist = Math.hypot(a.ex - a.sx, a.ey - a.sy);
+      const windowsOverlap = px < cx + cw && px + pw > cx && py < cy + ch && py + ph > cy;
+
+      if (tailHidden || headHidden || (windowsOverlap && dist < 30)) {
+        path.style.display = 'none';
+        poly.style.display = 'none';
+        continue;
+      }
+
+      if (child.isExcerptNote) {
+        path.setAttribute('d', `M${a.sx},${a.sy} C${a.c1x},${a.c1y} ${a.c2x},${a.c2y} ${a.ex},${a.ey}`);
+        path.setAttribute('stroke-dasharray', '6 4');
+        poly.style.display = 'none';
+      } else {
+        path.setAttribute('d', `M${a.sx},${a.sy} C${a.c1x},${a.c1y} ${a.c2x},${a.c2y} ${a.bcx},${a.bcy}`);
+        path.removeAttribute('stroke-dasharray');
+        poly.setAttribute('points', `${a.tipX},${a.tipY} ${a.b1x},${a.b1y} ${a.b2x},${a.b2y}`);
+        poly.style.display = '';
+      }
       path.style.display = '';
     }
   }, [windows]);
 
-  // Initial render + store updates
+  // Initial render + store updates (deferred to ensure newly spawned window elements exist in DOM)
   useEffect(() => {
     updatePaths();
-  }, [updatePaths]);
+    const raf = requestAnimationFrame(() => updatePaths());
+    const timer = setTimeout(() => updatePaths(), 60);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+    };
+  }, [windows, updatePaths]);
 
   // rAF loop for live drag/resize tracking — imperative, no React state
   useEffect(() => {
@@ -587,7 +612,13 @@ const animatePdfMaximize = (
 
 
 
-const WindowItem = memo(function WindowItem({ w }: { w: WindowData }) {
+const WindowItem = memo(function WindowItem({
+  w,
+  onContextMenu,
+}: {
+  w: WindowData;
+  onContextMenu?: (e: React.MouseEvent, winId: string) => void;
+}) {
   const setActive = useWindows((s) => s.setActive)
   const updateWindow = useWindows((s) => s.updateWindow)
   const removeWindow = useWindows((s) => s.removeWindow)
@@ -700,16 +731,25 @@ useEffect(() => {
 
 
   if (w.contentType === "sticky") {
+    const isExcerpt = w.isExcerptNote;
     return (
       <div
         id={`win-${w.id}`}
-        className={`window sticky-window ${w.active ? "active" : "inactive"}`}
+        className={`window sticky-window ${isExcerpt ? "excerpt-note-window" : ""} ${w.active ? "active" : "inactive"}`}
         style={{
           ...zIndexStyle,
           left: `${w.x ?? 80}px`,
           top: `${w.y ?? 80}px`,
           width: `${w.width ?? 260}px`,
-          height: `${w.height ?? 200}px`,
+          height: `${w.height ?? (isExcerpt ? 64 : 200)}px`,
+          ...(isExcerpt
+            ? {
+                borderRadius: "22px",
+                background: "#f0e5d8",
+                border: "1px solid #e4d5c3",
+                boxShadow: "0 4px 14px rgba(0, 0, 0, 0.08)",
+              }
+            : {}),
         }}
         onMouseDown={(e) => {
           handleActivate();
@@ -887,6 +927,11 @@ useEffect(() => {
       onClose={handleClose}
       onPositionChange={handlePositionChange}
       onAddSticky={handleAddSticky}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onContextMenu?.(e, w.id);
+      }}
     >
       {w.url ? <ArticleView win={w} /> : <LinkEditor win={w} />}
     </Window>
@@ -898,6 +943,13 @@ function App() {
   const spawnWindows = useWindows((s) => s.spawnWindows)
   const addWindow = useWindows((s) => s.addWindow)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const [contextMenuPos, setContextMenuPos] = useState<ContextMenuPosition | null>(null);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, windowId: string) => {
+    e.preventDefault();
+    setContextMenuPos({ x: e.clientX, y: e.clientY, windowId });
+  }, []);
 
   const handleOpenPdf = useCallback(() => {
     const name = window.prompt("PDF path (e.g. /myfile.pdf):", "/viewer.pdf")
@@ -1054,10 +1106,12 @@ function App() {
           <ConnectionArrows windows={windows} />
           <LiveWireOverlay />
           {windows.map((w) => (
-            <WindowItem key={w.id} w={w} />
+            <WindowItem key={w.id} w={w} onContextMenu={handleContextMenu} />
           ))}
         </div>
       </div>
+
+      <WindowContextMenu pos={contextMenuPos} onClose={() => setContextMenuPos(null)} />
     </>
   )
 }

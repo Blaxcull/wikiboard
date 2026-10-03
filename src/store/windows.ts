@@ -27,6 +27,8 @@ export type WindowData = {
   contentType?: "article" | "pdf" | "sticky";
   /** Text stored in a sticky note window */
   stickyText?: string;
+  /** True for non-editable, extra-rounded highlight excerpt note boxes */
+  isExcerptNote?: boolean;
   /** Preferred attachment side when spawned from a parent window connection point */
   side?: "TOP" | "RIGHT" | "BOTTOM" | "LEFT";
   /** URL or blob URL for PDF file */
@@ -54,6 +56,7 @@ type WindowsStore = {
   setActive: (id: string) => void;
   updateWindow: (id: string, patch: Partial<Omit<WindowData, "id">>) => void;
   spawnWindows: (count: number, startIdx: number, titles?: string[]) => void;
+  breakConnections: (id: string) => void;
 };
 
 export const DEFAULT_WIDTH = 750;
@@ -289,4 +292,27 @@ export const useWindows = create<WindowsStore>((set) => ({
         windows,
       };
     }),
+
+  breakConnections: (id: string) =>
+    set((state) => ({
+      windows: state.windows.map((w) => {
+        if (w.id === id) {
+          return {
+            ...w,
+            parentId: undefined,
+            parentIds: [],
+          };
+        }
+        const hasParent = w.parentId === id || w.parentIds?.includes(id);
+        if (hasParent) {
+          const newParentIds = w.parentIds?.filter((pid) => pid !== id) ?? [];
+          return {
+            ...w,
+            parentIds: newParentIds,
+            parentId: w.parentId === id ? (newParentIds[0] ?? undefined) : w.parentId,
+          };
+        }
+        return w;
+      }),
+    })),
 }));

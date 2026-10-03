@@ -40,6 +40,21 @@
   animation: window-pop-in 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.window.sticky-window:not(.excerpt-note-window) {
+  background: #eee7a6 !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  border-radius: 4px !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12), 0 3px 10px rgba(0, 0, 0, 0.06) !important;
+}
+
+.window.excerpt-note-window {
+  border-radius: 22px !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+
 @keyframes window-pop-in {
   0% {
     opacity: 0;
@@ -102,7 +117,7 @@
   -webkit-user-select: none !important;
 }
 
-.window.sticky-window {
+.window.sticky-window:not(.excerpt-note-window) {
   background: #eee7a6 !important;
   border: 1px solid rgba(0, 0, 0, 0.08) !important;
   border-radius: 4px !important;

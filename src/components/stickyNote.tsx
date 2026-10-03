@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { WindowData } from "../store/windows";
 import { useWindows } from "../store/windows";
 import startDrag from "../utils/window/drag";
@@ -12,6 +12,9 @@ type Props = {
 
 export default function StickyNote({ win, onClose, onActivate, onPositionChange }: Props) {
   const updateWindow = useWindows((s) => s.updateWindow);
+  const textRef = useRef<HTMLDivElement>(null);
+
+  const isExcerpt = win.isExcerptNote;
 
   const handleTextChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -19,6 +22,34 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange 
     },
     [win.id, updateWindow],
   );
+
+  // Auto-adjust box height to match exact text content length
+  useEffect(() => {
+    if (isExcerpt && textRef.current) {
+      const scrollH = textRef.current.scrollHeight;
+      const targetH = Math.max(60, Math.min(500, scrollH + 32));
+      if (Math.abs((win.height ?? 80) - targetH) > 4) {
+        updateWindow(win.id, { height: targetH });
+      }
+    }
+  }, [isExcerpt, win.id, win.stickyText, win.height, updateWindow]);
+
+  if (isExcerpt) {
+    return (
+      <div
+        className="w-full h-full flex flex-col justify-center px-5 py-3.5 bg-[#f0e5d8] text-[#c26100] font-semibold text-[15px] leading-relaxed cursor-move select-text rounded-[22px] border border-[#e4d5c3] shadow-sm text-center"
+        onMouseDown={(e) => {
+          e.stopPropagation();
+          onActivate();
+          startDrag(e, (pos) => onPositionChange(pos), onActivate);
+        }}
+      >
+        <div ref={textRef} className="w-full overflow-hidden select-text text-center break-words">
+          {win.stickyText ?? ""}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full h-full flex flex-col bg-[#eee7a6] rounded-sm overflow-hidden select-none shadow-sm">

@@ -3,6 +3,7 @@ import { escapeHtml, extractTitle, isPdfUrl, isWaybackUrl, isOriginalRefLabel, W
 import { prefetchArticles } from "../utils/articleCache";
 import { prefetchPdf } from "../utils/pdfCache";
 import { useWindows } from "../store/windows";
+import ArticleSelectionToolbox from "./articleSelectionToolbox";
 
 // Fetch Wikipedia CSS once, share via adoptedStyleSheets across all shadow DOMs
 let sharedWikiStyleSheet: CSSStyleSheet | null = null;
@@ -433,7 +434,11 @@ const StaticPreview = memo(function StaticPreview({ winId, title, html, scrollTo
     };
   }, [title, html, winId]);
 
-  return <div ref={hostRef} className="w-full h-full overflow-auto scrollbar-hide bg-white" />;
+  return (
+    <div ref={hostRef} className="w-full h-full overflow-auto scrollbar-hide bg-white">
+      <ArticleSelectionToolbox hostRef={hostRef} winId={winId} articleTitle={title} />
+    </div>
+  );
 });
 
 export default StaticPreview;

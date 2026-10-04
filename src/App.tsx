@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/immutability */
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import Window from './components/window'
 import LinkEditor from './components/linkEditor'
 import SearchBox from './components/searchBox'
@@ -27,6 +27,8 @@ import {
   subscribeAnimation,
   getStubTargetOffset,
   getStubDimensions,
+  lastUnstackedRects,
+  lastStackedStubRects,
 } from './utils/stackAnimation'
 
 const ARROW_CTRL = 0.4;
@@ -266,6 +268,7 @@ function getCardOffsetStyle(
       left: `calc(100% - ${w - 22}px)`,
       top: `calc(50% + ${spreadY - h / 2}px)`,
       zIndex,
+      clipPath: "inset(0 0 0 calc(100% - 22px))",
     };
   }
 
@@ -274,6 +277,7 @@ function getCardOffsetStyle(
       left: `calc(-22px)`,
       top: `calc(50% + ${spreadY - h / 2}px)`,
       zIndex,
+      clipPath: "inset(0 calc(100% - 22px) 0 0)",
     };
   }
 
@@ -282,14 +286,17 @@ function getCardOffsetStyle(
       top: `calc(-${peek}px)`,
       left: `calc(50% + ${spreadX - w / 2}px)`,
       zIndex,
+      clipPath: `inset(0 0 calc(100% - ${peek}px) 0)`,
     };
   }
 
   // BOTTOM
+  const botPeek = isCenter ? 26 : 22;
   return {
-    top: `calc(100% - ${h - (isCenter ? 26 : 22)}px)`,
+    top: `calc(100% - ${h - botPeek}px)`,
     left: `calc(50% + ${spreadX - w / 2}px)`,
     zIndex,
+    clipPath: `inset(calc(100% - ${botPeek}px) 0 0 0)`,
   };
 }
 
@@ -325,6 +332,87 @@ export function determineNoteSide(note: WindowData, parent: WindowData): "TOP" |
     return normY >= 0 ? "BOTTOM" : "TOP";
   }
 }
+
+const StackedNoteStubItem = memo(function StackedNoteStubItem({
+  note,
+  stubW,
+  stubH,
+  posStyle,
+  colorBg,
+  isImage,
+  imgUrl,
+  onUnstack,
+}: {
+  note: WindowData;
+  stubW: number;
+  stubH: number;
+  posStyle: React.CSSProperties;
+  colorBg: string;
+  isImage: boolean;
+  imgUrl?: string;
+  onUnstack: () => void;
+}) {
+  const elRef = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    const el = elRef.current;
+    if (!el) return;
+    const prevRect = lastUnstackedRects.get(note.id);
+    if (prevRect) {
+      lastUnstackedRects.delete(note.id);
+      const stubRect = el.getBoundingClientRect();
+      const fromX = prevRect.left - stubRect.left;
+      const fromY = prevRect.top - stubRect.top;
+      const scaleX = prevRect.width / Math.max(stubRect.width, 1);
+      const scaleY = prevRect.height / Math.max(stubRect.height, 1);
+
+      el.animate(
+        [
+          { transform: `translate3d(${fromX}px, ${fromY}px, 0) scale(${scaleX}, ${scaleY})`, transformOrigin: "top left", opacity: 1 },
+          { transform: "translate3d(0, 0, 0) scale(1, 1)", transformOrigin: "top left", opacity: 1 },
+        ],
+        {
+          duration: 300,
+          easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+          fill: "forwards",
+        }
+      );
+    }
+  }, [note.id]);
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const el = elRef.current;
+    if (el) {
+      lastStackedStubRects.set(note.id, el.getBoundingClientRect());
+    }
+    onUnstack();
+  };
+
+  return (
+    <div
+      ref={elRef}
+      id={`stub-${note.id}`}
+      className="absolute pointer-events-auto cursor-pointer transition-transform duration-150 hover:scale-[1.02] rounded-[6px] border border-black/20 shadow-md overflow-hidden"
+      style={{
+        width: `${stubW}px`,
+        height: `${stubH}px`,
+        background: colorBg,
+        ...posStyle,
+      }}
+      onClick={handleClick}
+      title={`Click to unstack ${isImage ? "image" : "note"}`}
+    >
+      {isImage && imgUrl && (
+        <img
+          src={imgUrl}
+          alt={note.title}
+          className="w-full h-full object-cover opacity-90"
+        />
+      )}
+    </div>
+  );
+});
 
 const StackedNoteStubs = memo(function StackedNoteStubs({
   parentWin,
@@ -376,32 +464,19 @@ const StackedNoteStubs = memo(function StackedNoteStubs({
               const posStyle = getCardOffsetStyle(side, i, visibleNotes.length, stubW, stubH);
               const isImage = !!(note.directImageUrl || note.title?.startsWith("File:"));
               const colorBg = isImage ? "#e2e8f0" : getNoteColor(note);
-              const imgUrl = note.directImageUrl;
 
               return (
-                <div
+                <StackedNoteStubItem
                   key={note.id}
-                  className="absolute pointer-events-auto cursor-pointer transition-transform duration-150 hover:scale-[1.02] rounded-[6px] border border-black/20 shadow-md overflow-hidden"
-                  style={{
-                    width: `${stubW}px`,
-                    height: `${stubH}px`,
-                    background: colorBg,
-                    ...posStyle,
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    useWindows.getState().unstackNote(note.id);
-                  }}
-                  title={`Click to unstack ${isImage ? "image" : "note"}`}
-                >
-                  {isImage && imgUrl && (
-                    <img
-                      src={imgUrl}
-                      alt={note.title}
-                      className="w-full h-full object-cover opacity-90"
-                    />
-                  )}
-                </div>
+                  note={note}
+                  stubW={stubW}
+                  stubH={stubH}
+                  posStyle={posStyle}
+                  colorBg={colorBg}
+                  isImage={isImage}
+                  imgUrl={note.directImageUrl}
+                  onUnstack={() => useWindows.getState().unstackNote(note.id)}
+                />
               );
             })}
           </div>
@@ -1100,48 +1175,17 @@ useEffect(() => {
 
     if (wasStacked && !w.stacked && w.contentType === "sticky") {
       const el = document.getElementById(`win-${w.id}`);
-      let parentWin = (w.parentId || w.parentIds?.[0])
-        ? useWindows.getState().windows.find((win) => win.id === (w.parentId || w.parentIds?.[0]))
-        : undefined;
+      const prevStubRect = lastStackedStubRects.get(w.id);
 
-      if (!parentWin) {
-        parentWin = useWindows.getState().windows.find(
-          (win) => win.contentType !== "sticky" && (win.parentId === w.id || win.parentIds?.includes(w.id))
-        );
-      }
-
-      const parentEl = parentWin ? document.getElementById(`win-${parentWin.id}`) : null;
-
-      if (el && parentEl && parentWin) {
+      if (el && prevStubRect) {
+        lastStackedStubRects.delete(w.id);
         const noteRect = el.getBoundingClientRect();
-        const parentRect = parentEl.getBoundingClientRect();
-
-        let fromX = (parentRect.left + parentRect.width / 2) - (noteRect.left + noteRect.width / 2);
-        let fromY = (parentRect.top + parentRect.height / 2) - (noteRect.top + noteRect.height / 2);
-
-        const allChildNotes = getConnectedChildNotes(
-          parentWin.id,
-          useWindows.getState().windows,
-          useWindows.getState().groups
-        ).filter((win) => win.contentType === "sticky");
-
-        const side = determineNoteSide(w, parentWin);
-        const sideNotes = allChildNotes.filter((win) => determineNoteSide(win, parentWin) === side);
-        const index = Math.max(0, sideNotes.findIndex((win) => win.id === w.id));
-        const total = sideNotes.length || 1;
-        const { stubW, stubH } = getStubDimensions(w);
-
-        const offset = getStubTargetOffset(side, index, total, stubW, stubH, parentRect, noteRect);
-        fromX = offset.toX;
-        fromY = offset.toY;
-
-        const parentZ = parentWin.zIndex ?? 1;
-        el.style.zIndex = `${parentZ - 1}`;
+        const fromX = prevStubRect.left - noteRect.left;
+        const fromY = prevStubRect.top - noteRect.top;
+        const scaleX = prevStubRect.width / Math.max(noteRect.width, 1);
+        const scaleY = prevStubRect.height / Math.max(noteRect.height, 1);
 
         markNoteUnstacking(w.id);
-
-        const scaleX = stubW / Math.max(noteRect.width, 1);
-        const scaleY = stubH / Math.max(noteRect.height, 1);
 
         const anim = el.animate(
           [
@@ -1163,6 +1207,80 @@ useEffect(() => {
           unmarkNoteUnstacking(w.id);
           useWindows.getState().setActive(w.id);
         };
+      } else if (el) {
+        let parentId = w.parentId || w.parentIds?.[0];
+        let parentWin = parentId
+          ? useWindows.getState().windows.find((win) => win.id === parentId)
+          : undefined;
+
+        if (!parentWin) {
+          parentWin = useWindows.getState().windows.find(
+            (win) => win.contentType !== "sticky" && (win.parentId === w.id || win.parentIds?.includes(w.id))
+          );
+        }
+
+        const parentEl = parentWin
+          ? document.getElementById(`win-${parentWin.id}`)
+          : (parentId ? document.getElementById(`group-box-${parentId}`) : null);
+
+        if (parentEl) {
+          const parentRect = parentEl.getBoundingClientRect();
+          const noteRect = el.getBoundingClientRect();
+          const parentEntity: WindowData = parentWin ?? {
+            id: parentId ?? "parent",
+            url: "",
+            title: "",
+            links: [],
+            active: false,
+            lastFocusedAt: 0,
+            x: parentRect.left,
+            y: parentRect.top,
+            width: parentRect.width,
+            height: parentRect.height,
+            zIndex: 1,
+          };
+
+          const allChildNotes = getConnectedChildNotes(
+            parentId || w.id,
+            useWindows.getState().windows,
+            useWindows.getState().groups
+          ).filter((win) => win.contentType === "sticky");
+
+          const side = determineNoteSide(w, parentEntity);
+          const sideNotes = allChildNotes.filter((win) => determineNoteSide(win, parentEntity) === side);
+          const index = Math.max(0, sideNotes.findIndex((win) => win.id === w.id));
+          const total = sideNotes.length || 1;
+          const { stubW, stubH } = getStubDimensions(w);
+
+          const offset = getStubTargetOffset(side, index, total, stubW, stubH, parentRect, noteRect);
+          const fromX = offset.toX;
+          const fromY = offset.toY;
+          const scaleX = stubW / Math.max(noteRect.width, 1);
+          const scaleY = stubH / Math.max(noteRect.height, 1);
+
+          markNoteUnstacking(w.id);
+
+          const anim = el.animate(
+            [
+              { transform: `translate3d(${fromX}px, ${fromY}px, 0) scale(${scaleX}, ${scaleY})`, transformOrigin: "top left", opacity: 1 },
+              { transform: "translate3d(0, 0, 0) scale(1, 1)", transformOrigin: "top left", opacity: 1 },
+            ],
+            {
+              duration: 300,
+              easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+              fill: "forwards",
+            }
+          );
+
+          anim.onfinish = () => {
+            anim.cancel();
+            el.style.transform = "";
+            el.style.opacity = "";
+            el.style.zIndex = "";
+            unmarkNoteUnstacking(w.id);
+            useWindows.getState().setActive(w.id);
+          };
+        }
       }
     }
   }, [w.stacked, w.id, w.contentType, w.parentId, w.parentIds]);

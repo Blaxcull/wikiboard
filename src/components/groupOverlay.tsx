@@ -1,10 +1,10 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useWindows, type WindowData, type WindowGroup } from "../store/windows";
+import { useWindows, getDescendantNotes, type WindowData, type WindowGroup } from "../store/windows";
 import { getWindowWorldBounds } from "./selectionOverlay";
 import { deleteScroll } from "../utils/scrollMemory";
 import { evictClosedWindowArticles } from "../utils/articleCache";
-import { stackWindowWithAnimation } from "../utils/stackAnimation";
+import { lastUnstackedRects, lastStackedStubRects } from "../utils/stackAnimation";
 import { getCamera } from "../utils/camera";
 import { isDraggingWindow, setDraggingWindow } from "../utils/window/drag";
 import { isResizingWindow } from "../utils/window/resize";
@@ -56,6 +56,92 @@ export function readLiveWindowWorldBounds(el: HTMLElement | null, w: WindowData)
   const top = baseTop + ty;
   return { left, top, right: left + baseW, bottom: top + baseH };
 }
+
+const GroupStackedStubItem = memo(function GroupStackedStubItem({
+  note,
+  stubW,
+  stubH,
+  posStyle,
+  colorBg,
+  isImage,
+  imgUrl,
+  onUnstack,
+}: {
+  note: WindowData;
+  stubW: number;
+  stubH: number;
+  posStyle: React.CSSProperties;
+  colorBg: string;
+  isImage: boolean;
+  imgUrl?: string;
+  onUnstack: () => void;
+}) {
+  const elRef = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    const el = elRef.current;
+    if (!el) return;
+    const prevRect = lastUnstackedRects.get(note.id);
+    if (prevRect) {
+      lastUnstackedRects.delete(note.id);
+      const stubRect = el.getBoundingClientRect();
+      const fromX = prevRect.left - stubRect.left;
+      const fromY = prevRect.top - stubRect.top;
+      const scaleX = prevRect.width / Math.max(stubRect.width, 1);
+      const scaleY = prevRect.height / Math.max(stubRect.height, 1);
+
+      el.animate(
+        [
+          { transform: `translate3d(${fromX}px, ${fromY}px, 0) scale(${scaleX}, ${scaleY})`, transformOrigin: "top left", opacity: 1 },
+          { transform: "translate3d(0, 0, 0) scale(1, 1)", transformOrigin: "top left", opacity: 1 },
+        ],
+        {
+          duration: 300,
+          easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+          fill: "forwards",
+        }
+      );
+    }
+  }, [note.id]);
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const el = elRef.current;
+    if (el) {
+      lastStackedStubRects.set(note.id, el.getBoundingClientRect());
+    }
+    onUnstack();
+  };
+
+  return (
+    <div
+      ref={elRef}
+      id={`stub-${note.id}`}
+      className="absolute pointer-events-auto cursor-pointer transition-transform duration-150 hover:scale-[1.02] rounded-[10px] border border-black/20 shadow-md overflow-hidden"
+      style={{
+        width: `${stubW}px`,
+        height: `${stubH}px`,
+        background: colorBg,
+        ...posStyle,
+      }}
+      onClick={handleClick}
+      title="Click to unstack note"
+    >
+      {isImage && imgUrl && (
+        <img
+          src={imgUrl}
+          alt={note.title}
+          className="w-full h-full object-cover opacity-90"
+        />
+      )}
+      {!isImage && (
+        <div className="p-3 text-[12px] font-sans text-neutral-800 line-clamp-5">
+          {note.stickyText || note.title || "Note"}
+        </div>
+      )}
+    </div>
+  );
+});
 
 function GroupColorPickerPortal({
   groupId,
@@ -318,11 +404,31 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
   const boxZIndex = minMemberZ !== Infinity ? Math.max(0, minMemberZ - 1) : 0;
 
   const handleActivateGroup = () => {
-    const isPinned = memberWins.some((w) => w.alwaysOnTop);
-    const startMaxZ = useWindows.getState().maxZIndex;
+    const state = useWindows.getState();
+    const groupAndMemberIds = new Set([group.id, ...group.memberIds]);
+
+    const activeMemberWins = state.windows.filter(
+      (w) => group.memberIds.includes(w.id) && !w.stacked
+    );
+
+    const childNotes: WindowData[] = [];
+    for (const id of groupAndMemberIds) {
+      const descs = getDescendantNotes(id, state.windows);
+      for (const d of descs) {
+        if (!d.stacked && !childNotes.some((cn) => cn.id === d.id) && !group.memberIds.includes(d.id)) {
+          childNotes.push(d);
+        }
+      }
+    }
+
+    const allWinsToActivate = [...activeMemberWins, ...childNotes];
+    if (allWinsToActivate.length === 0) return;
+
+    const isPinned = allWinsToActivate.some((w) => w.alwaysOnTop);
+    const startMaxZ = state.maxZIndex;
     let curMaxZ = startMaxZ;
 
-    const sorted = [...memberWins].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+    const sorted = [...allWinsToActivate].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
     const zMap = new Map<string, number>();
     for (const w of sorted) {
       curMaxZ += 1;
@@ -367,7 +473,26 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
     const startX = e.clientX;
     const startY = e.clientY;
 
-    const groupTargets = memberWins
+    const state = useWindows.getState();
+    const groupAndMemberIds = new Set([group.id, ...group.memberIds]);
+
+    const activeMemberWins = state.windows.filter(
+      (w) => group.memberIds.includes(w.id) && !w.stacked
+    );
+
+    const childNotes: WindowData[] = [];
+    for (const id of groupAndMemberIds) {
+      const descs = getDescendantNotes(id, state.windows);
+      for (const d of descs) {
+        if (!d.stacked && !childNotes.some((cn) => cn.id === d.id) && !group.memberIds.includes(d.id)) {
+          childNotes.push(d);
+        }
+      }
+    }
+
+    const allWinsToDrag = [...activeMemberWins, ...childNotes];
+
+    const groupTargets = allWinsToDrag
       .map((w) => {
         const el = document.getElementById(`win-${w.id}`);
         if (!el) return null;
@@ -383,6 +508,7 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
 
     isDraggingGroupRef.current = true;
     document.body.style.cursor = "move";
+    containerEl?.classList.add("dragging");
     containerEl?.closest(".canvas-world")?.classList.add("gesture-active");
     setDraggingWindow(true);
 
@@ -425,10 +551,6 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
         rafId = 0;
       }
 
-      isDraggingGroupRef.current = false;
-      setDraggingWindow(false);
-      document.body.style.cursor = "";
-      containerEl?.closest(".canvas-world")?.classList.remove("gesture-active");
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
 
@@ -462,6 +584,14 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
           return up ? { ...w, ...up } : w;
         }),
       }));
+
+      requestAnimationFrame(() => {
+        isDraggingGroupRef.current = false;
+        setDraggingWindow(false);
+        document.body.style.cursor = "";
+        containerEl?.classList.remove("dragging");
+        containerEl?.closest(".canvas-world")?.classList.remove("gesture-active");
+      });
     }
 
     window.addEventListener("mousemove", onMouseMove);
@@ -480,32 +610,38 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
     e.stopPropagation();
 
     const state = useWindows.getState();
-    const groupAndMemberIds = new Set([group.id, ...group.memberIds]);
 
-    const childNotes = state.windows.filter(
+    const groupDirectNotes = state.windows.filter(
       (w) =>
-        (w.parentId && groupAndMemberIds.has(w.parentId)) ||
-        w.parentIds?.some((pid) => groupAndMemberIds.has(pid))
+        !group.memberIds.includes(w.id) &&
+        (w.parentId === group.id || w.parentIds?.includes(group.id))
     );
 
-    if (childNotes.length > 0) {
-      const hasUnstacked = childNotes.some((w) => !w.stacked);
+    if (groupDirectNotes.length > 0) {
+      const hasUnstacked = groupDirectNotes.some((w) => !w.stacked);
       const shouldStack = hasUnstacked;
 
-      useWindows.setState((s) => ({
-        windows: s.windows.map((w) => {
-          const isChild =
-            (w.parentId && groupAndMemberIds.has(w.parentId)) ||
-            w.parentIds?.some((pid) => groupAndMemberIds.has(pid));
-
-          if (isChild) {
-            return { ...w, stacked: shouldStack };
+      if (shouldStack) {
+        groupDirectNotes.forEach((note) => {
+          if (!note.stacked) {
+            const noteEl = document.getElementById(`win-${note.id}`);
+            if (noteEl) {
+              lastUnstackedRects.set(note.id, noteEl.getBoundingClientRect());
+            }
+            state.toggleStackSingleNote(note.id);
           }
-          return w;
-        }),
-      }));
-    } else if (memberWins.length > 0) {
-      stackWindowWithAnimation(memberWins[0].id);
+        });
+      } else {
+        groupDirectNotes.forEach((note) => {
+          if (note.stacked) {
+            const stubEl = document.getElementById(`stub-${note.id}`);
+            if (stubEl) {
+              lastStackedStubRects.set(note.id, stubEl.getBoundingClientRect());
+            }
+            state.unstackNote(note.id);
+          }
+        });
+      }
     }
     setMenuOpen(false);
   };
@@ -630,23 +766,18 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
     setMenuOpen(false);
   };
 
-  const stackedGroupNotes = windows.filter(
-    (w) => w.stacked && (w.parentId === group.id || w.parentIds?.includes(group.id))
-  );
-
-  const groupAndMemberIds = new Set([group.id, ...group.memberIds]);
-  const childNotes = windows.filter(
+  const groupDirectNotes = windows.filter(
     (w) =>
-      (w.parentId && groupAndMemberIds.has(w.parentId)) ||
-      w.parentIds?.some((pid) => groupAndMemberIds.has(pid))
+      !group.memberIds.includes(w.id) &&
+      (w.parentId === group.id || w.parentIds?.includes(group.id))
   );
 
   const areObjectsStacked =
-    childNotes.length > 0
-      ? childNotes.every((w) => w.stacked)
-      : memberWins.length > 0
-      ? memberWins.every((w) => w.stacked)
-      : false;
+    groupDirectNotes.length > 0 ? groupDirectNotes.every((w) => w.stacked) : false;
+
+  const stackedGroupNotes = windows.filter(
+    (w) => w.stacked && (w.parentId === group.id || w.parentIds?.includes(group.id))
+  );
 
   const borderColor = group.color || "#333333";
   const allSelectedAlwaysOnTop = memberWins.every((w) => w.alwaysOnTop);
@@ -713,25 +844,30 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
                         left: `calc(100% - ${stubW - 22}px)`,
                         top: `calc(50% + ${spreadY - stubH / 2}px)`,
                         zIndex,
+                        clipPath: "inset(0 0 0 calc(100% - 22px))",
                       };
                     } else if (side === "LEFT") {
                       posStyle = {
                         left: `calc(-22px)`,
                         top: `calc(50% + ${spreadY - stubH / 2}px)`,
                         zIndex,
+                        clipPath: "inset(0 calc(100% - 22px) 0 0)",
                       };
                     } else if (side === "TOP") {
                       posStyle = {
                         top: `calc(-${peek}px)`,
                         left: `calc(50% + ${spreadX - stubW / 2}px)`,
                         zIndex,
+                        clipPath: `inset(0 0 calc(100% - ${peek}px) 0)`,
                       };
                     } else {
                       // BOTTOM
+                      const botPeek = isCenter ? 26 : 22;
                       posStyle = {
-                        top: `calc(100% - ${stubH - (isCenter ? 26 : 22)}px)`,
+                        top: `calc(100% - ${stubH - botPeek}px)`,
                         left: `calc(50% + ${spreadX - stubW / 2}px)`,
                         zIndex,
+                        clipPath: `inset(calc(100% - ${botPeek}px) 0 0 0)`,
                       };
                     }
 
@@ -739,34 +875,17 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
                     const colorBg = isImage ? "#e2e8f0" : (note.noteColor || "#fef08a");
 
                     return (
-                      <div
+                      <GroupStackedStubItem
                         key={note.id}
-                        className="absolute pointer-events-auto cursor-pointer transition-transform duration-150 hover:scale-[1.02] rounded-[10px] border border-black/20 shadow-md overflow-hidden"
-                        style={{
-                          width: `${stubW}px`,
-                          height: `${stubH}px`,
-                          background: colorBg,
-                          ...posStyle,
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          useWindows.getState().unstackNote(note.id);
-                        }}
-                        title={`Click to unstack note`}
-                      >
-                        {isImage && note.directImageUrl && (
-                          <img
-                            src={note.directImageUrl}
-                            alt={note.title}
-                            className="w-full h-full object-cover opacity-90"
-                          />
-                        )}
-                        {!isImage && (
-                          <div className="p-3 text-[12px] font-sans text-neutral-800 line-clamp-5">
-                            {note.stickyText || note.title || "Note"}
-                          </div>
-                        )}
-                      </div>
+                        note={note}
+                        stubW={stubW}
+                        stubH={stubH}
+                        posStyle={posStyle}
+                        colorBg={colorBg}
+                        isImage={isImage}
+                        imgUrl={note.directImageUrl}
+                        onUnstack={() => useWindows.getState().unstackNote(note.id)}
+                      />
                     );
                   })}
                 </div>
@@ -792,7 +911,8 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
                   side,
                 });
               },
-              `group-box-${group.id}`
+              `group-box-${group.id}`,
+              group.memberIds
             );
           }}
         />
@@ -812,7 +932,8 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
                   side,
                 });
               },
-              `group-box-${group.id}`
+              `group-box-${group.id}`,
+              group.memberIds
             );
           }}
         />
@@ -832,7 +953,8 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
                   side,
                 });
               },
-              `group-box-${group.id}`
+              `group-box-${group.id}`,
+              group.memberIds
             );
           }}
         />
@@ -852,7 +974,8 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
                   side,
                 });
               },
-              `group-box-${group.id}`
+              `group-box-${group.id}`,
+              group.memberIds
             );
           }}
         />

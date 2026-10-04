@@ -1,5 +1,7 @@
 import { useWindows, getConnectedChildNotes } from "../store/windows";
-import { determineNoteSide } from "../App";
+
+export const lastUnstackedRects = new Map<string, DOMRect>();
+export const lastStackedStubRects = new Map<string, DOMRect>();
 
 const stackingWinIds = new Set<string>();
 const unstackingNoteIds = new Set<string>();
@@ -91,90 +93,30 @@ export function getStubTargetOffset(
 
 export function stackWindowWithAnimation(windowId: string) {
   const state = useWindows.getState();
-  const parentWin = state.windows.find((w) => w.id === windowId);
-  if (!parentWin) return;
-
   const childNotes = getConnectedChildNotes(windowId, state.windows, state.groups);
-
   if (childNotes.length === 0) return;
 
   const hasUnstacked = childNotes.some((w) => !w.stacked);
-  const parentEl = document.getElementById(`win-${windowId}`);
-
-  if (!parentEl || !hasUnstacked) {
-    state.toggleStackWindow(windowId);
-    return;
-  }
-
-  const parentRect = parentEl.getBoundingClientRect();
-  const unstackedNotes = childNotes.filter((n) => !n.stacked);
-
-  // Group child notes by side before updating state
-  const bySide: Record<string, typeof unstackedNotes> = {
-    RIGHT: [],
-    LEFT: [],
-    TOP: [],
-    BOTTOM: [],
-  };
-
-  for (const note of unstackedNotes) {
-    const side = determineNoteSide(note, parentWin);
-    bySide[side].push(note);
-  }
-
-  markWindowStacking(windowId);
-  unstackedNotes.forEach((n) => markNoteUnstacking(n.id));
-
-  let finishedCount = 0;
-  for (const side of ["RIGHT", "LEFT", "TOP", "BOTTOM"] as const) {
-    const sideNotes = bySide[side];
-    if (!sideNotes || sideNotes.length === 0) continue;
-
-    for (let i = 0; i < sideNotes.length; i++) {
-      const note = sideNotes[i];
-      const el = document.getElementById(`win-${note.id}`);
-      if (!el) {
-        finishedCount++;
-        if (finishedCount >= unstackedNotes.length) {
-          unmarkWindowStacking(windowId);
-          unstackedNotes.forEach((n) => unmarkNoteUnstacking(n.id));
-          state.toggleStackWindow(windowId);
+  if (hasUnstacked) {
+    childNotes.forEach((note) => {
+      if (!note.stacked) {
+        const noteEl = document.getElementById(`win-${note.id}`);
+        if (noteEl) {
+          lastUnstackedRects.set(note.id, noteEl.getBoundingClientRect());
         }
-        continue;
       }
-
-      const noteRect = el.getBoundingClientRect();
-      const { stubW, stubH } = getStubDimensions(note);
-
-      const { toX, toY } = getStubTargetOffset(side, i, sideNotes.length, stubW, stubH, parentRect, noteRect);
-
-      const parentZ = parentWin.zIndex ?? 1;
-      el.style.zIndex = `${parentZ - 1}`;
-
-      const scaleX = stubW / Math.max(noteRect.width, 1);
-      const scaleY = stubH / Math.max(noteRect.height, 1);
-
-      const anim = el.animate(
-        [
-          { transform: "translate3d(0, 0, 0) scale(1, 1)", transformOrigin: "top left", opacity: 1 },
-          { transform: `translate3d(${toX}px, ${toY}px, 0) scale(${scaleX}, ${scaleY})`, transformOrigin: "top left", opacity: 1 },
-        ],
-        {
-          duration: 300,
-          easing: "cubic-bezier(0.16, 1, 0.3, 1)",
-          fill: "forwards",
+    });
+    state.toggleStackWindow(windowId);
+  } else {
+    childNotes.forEach((note) => {
+      if (note.stacked) {
+        const stubEl = document.getElementById(`stub-${note.id}`);
+        if (stubEl) {
+          lastStackedStubRects.set(note.id, stubEl.getBoundingClientRect());
         }
-      );
-
-      anim.onfinish = () => {
-        finishedCount++;
-        if (finishedCount >= unstackedNotes.length) {
-          state.toggleStackWindow(windowId);
-          unmarkWindowStacking(windowId);
-          unstackedNotes.forEach((n) => unmarkNoteUnstacking(n.id));
-        }
-      };
-    }
+      }
+    });
+    state.toggleStackWindow(windowId);
   }
 }
 
@@ -184,59 +126,16 @@ export function stackSingleNoteWithAnimation(noteId: string) {
   if (!note) return;
 
   if (note.stacked) {
-    state.toggleStackSingleNote(noteId);
-    return;
-  }
-
-  let parentId = note.parentId ?? note.parentIds?.[0];
-  let parentWin = parentId ? state.windows.find((w) => w.id === parentId) : null;
-  if (!parentWin) {
-    parentWin = state.windows.find(
-      (w) => w.contentType !== "sticky" && (w.parentId === noteId || w.parentIds?.includes(noteId))
-    ) || null;
-  }
-
-  if (!parentWin) {
-    state.toggleStackSingleNote(noteId);
-    return;
-  }
-
-  const parentEl = document.getElementById(`win-${parentWin.id}`);
-  const noteEl = document.getElementById(`win-${noteId}`);
-  if (!parentEl || !noteEl) {
-    state.toggleStackSingleNote(noteId);
-    return;
-  }
-
-  const parentRect = parentEl.getBoundingClientRect();
-  const noteRect = noteEl.getBoundingClientRect();
-  const side = determineNoteSide(note, parentWin);
-  const { stubW, stubH } = getStubDimensions(note);
-
-  const { toX, toY } = getStubTargetOffset(side, 0, 1, stubW, stubH, parentRect, noteRect);
-
-  const parentZ = parentWin.zIndex ?? 1;
-  noteEl.style.zIndex = `${parentZ - 1}`;
-
-  markNoteUnstacking(noteId);
-
-  const scaleX = stubW / Math.max(noteRect.width, 1);
-  const scaleY = stubH / Math.max(noteRect.height, 1);
-
-  const anim = noteEl.animate(
-    [
-      { transform: "translate3d(0, 0, 0) scale(1, 1)", transformOrigin: "top left", opacity: 1 },
-      { transform: `translate3d(${toX}px, ${toY}px, 0) scale(${scaleX}, ${scaleY})`, transformOrigin: "top left", opacity: 1 },
-    ],
-    {
-      duration: 300,
-      easing: "cubic-bezier(0.16, 1, 0.3, 1)",
-      fill: "forwards",
+    const stubEl = document.getElementById(`stub-${noteId}`);
+    if (stubEl) {
+      lastStackedStubRects.set(noteId, stubEl.getBoundingClientRect());
     }
-  );
-
-  anim.onfinish = () => {
     state.toggleStackSingleNote(noteId);
-    unmarkNoteUnstacking(noteId);
-  };
+  } else {
+    const noteEl = document.getElementById(`win-${noteId}`);
+    if (noteEl) {
+      lastUnstackedRects.set(noteId, noteEl.getBoundingClientRect());
+    }
+    state.toggleStackSingleNote(noteId);
+  }
 }

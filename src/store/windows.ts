@@ -228,7 +228,7 @@ export function findRootWindow(
 export function getConnectedChildNotes(
   windowId: string,
   windows: WindowData[],
-  groups: WindowGroup[] = []
+  _groups: WindowGroup[] = []
 ): WindowData[] {
   const parentWin = windows.find((w) => w.id === windowId);
   if (!parentWin) return [];
@@ -241,16 +241,53 @@ export function getConnectedChildNotes(
         w.contentType === "sticky" &&
         (parentWin.parentId === w.id || parentWin.parentIds?.includes(w.id)));
 
-    if (!isConnected) return false;
-
-    // Group Boundary Lock: If child note belongs to a group, and parent is NOT in that group, block stacking!
-    const childGroup = groups.find((g) => g.memberIds.includes(w.id));
-    if (childGroup && !childGroup.memberIds.includes(windowId)) {
-      return false;
-    }
-
-    return true;
+    return isConnected;
   });
+}
+
+export function getParentEntityGeometry(
+  parentId: string | undefined,
+  windows: WindowData[],
+  groups: WindowGroup[]
+): { px: number; py: number; pw: number; ph: number } | null {
+  if (!parentId) return null;
+
+  const win = windows.find((w) => w.id === parentId);
+  if (win) {
+    return {
+      px: win.x ?? 80,
+      py: win.y ?? 80,
+      pw: win.width ?? DEFAULT_WIDTH,
+      ph: win.height ?? DEFAULT_HEIGHT,
+    };
+  }
+
+  const grp = groups.find((g) => g.id === parentId);
+  if (grp) {
+    const memberWins = windows.filter((w) => grp.memberIds.includes(w.id) && !w.stacked);
+    if (memberWins.length > 0) {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const w of memberWins) {
+        const wx = w.x ?? 80;
+        const wy = w.y ?? 80;
+        const ww = w.width ?? (w.contentType === "sticky" ? 260 : DEFAULT_WIDTH);
+        const wh = w.height ?? (w.contentType === "sticky" ? (w.isExcerptNote ? 64 : 200) : DEFAULT_HEIGHT);
+        if (wx < minX) minX = wx;
+        if (wy < minY) minY = wy;
+        if (wx + ww > maxX) maxX = wx + ww;
+        if (wy + wh > maxY) maxY = wy + wh;
+      }
+      const PAD = 44;
+      return {
+        px: minX - PAD,
+        py: minY - PAD,
+        pw: maxX - minX + PAD * 2,
+        ph: maxY - minY + PAD * 2,
+      };
+    }
+  }
+
+  return null;
 }
 
 export const useWindows = create<WindowsStore>((set) => ({
@@ -659,9 +696,14 @@ export const useWindows = create<WindowsStore>((set) => ({
     set((state) => {
       if (sourceId === targetId) return state;
 
+      const sourceGroup = state.groups.find((g) => g.memberIds.includes(sourceId));
+      const targetGroup = state.groups.find((g) => g.memberIds.includes(targetId));
+      if (sourceGroup && targetId === sourceGroup.id) return state;
+      if (targetGroup && sourceId === targetGroup.id) return state;
+
       const targetWin = state.windows.find((w) => w.id === targetId);
-      const targetGroup = state.groups.find((g) => g.id === targetId);
-      if (!targetWin && !targetGroup) return state;
+      const targetGroupEntity = state.groups.find((g) => g.id === targetId);
+      if (!targetWin && !targetGroupEntity) return state;
 
       const getParents = (entity: { parentId?: string; parentIds?: string[] }): string[] => {
         const set = new Set<string>();
@@ -701,7 +743,7 @@ export const useWindows = create<WindowsStore>((set) => ({
           }
           return w;
         });
-      } else if (targetGroup) {
+      } else if (targetGroupEntity) {
         newGroups = newGroups.map((g) => {
           if (g.id === targetId) {
             const pSet = new Set(getParents(g));
@@ -797,23 +839,14 @@ export const useWindows = create<WindowsStore>((set) => ({
               ny = parentY + parentH + GAP;
             }
 
-            const targetX = w.relX != null ? parentX + w.relX : nx;
-            const targetY = w.relY != null ? parentY + w.relY : ny;
-
-            const cleanPos = findNonOverlappingPosition(
-              targetX,
-              targetY,
-              childW,
-              childH,
-              state.windows,
-              w.id
-            );
+            const finalX = w.relX != null ? parentX + w.relX : nx;
+            const finalY = w.relY != null ? parentY + w.relY : ny;
 
             return {
               ...w,
               stacked: false,
-              x: cleanPos.x,
-              y: cleanPos.y,
+              x: finalX,
+              y: finalY,
             };
           }
         }),
@@ -825,20 +858,13 @@ export const useWindows = create<WindowsStore>((set) => ({
       const target = state.windows.find((w) => w.id === id);
       if (!target || !target.stacked) return state;
 
-      const rootWin = findRootWindow(id, state.windows);
       const parentId = target.parentId ?? target.parentIds?.[0];
-      let parentWin = parentId ? state.windows.find((w) => w.id === parentId) : undefined;
-      if (!parentWin) {
-        parentWin = state.windows.find(
-          (w) => w.contentType !== "sticky" && (w.parentId === id || w.parentIds?.includes(id))
-        );
-      }
-      const refWin = rootWin ?? parentWin;
+      const parentGeo = getParentEntityGeometry(parentId, state.windows, state.groups);
 
-      const px = refWin?.x ?? target.x ?? 80;
-      const py = refWin?.y ?? target.y ?? 80;
-      const pw = refWin?.width ?? DEFAULT_WIDTH;
-      const ph = refWin?.height ?? DEFAULT_HEIGHT;
+      const px = parentGeo?.px ?? target.x ?? 80;
+      const py = parentGeo?.py ?? target.y ?? 80;
+      const pw = parentGeo?.pw ?? DEFAULT_WIDTH;
+      const ph = parentGeo?.ph ?? DEFAULT_HEIGHT;
 
       const side = target.side ?? "RIGHT";
       const GAP = 160;
@@ -856,21 +882,12 @@ export const useWindows = create<WindowsStore>((set) => ({
         ny = py + ph + GAP;
       }
 
-      const targetX = target.relX != null ? px + target.relX : nx;
-      const targetY = target.relY != null ? py + target.relY : ny;
-
-      const cleanPos = findNonOverlappingPosition(
-        targetX,
-        targetY,
-        childW,
-        childH,
-        state.windows,
-        target.id
-      );
+      const finalX = target.relX != null ? px + target.relX : nx;
+      const finalY = target.relY != null ? py + target.relY : ny;
 
       return {
         windows: state.windows.map((w) =>
-          w.id === id ? { ...w, stacked: false, x: cleanPos.x, y: cleanPos.y } : w
+          w.id === id ? { ...w, stacked: false, x: finalX, y: finalY } : w
         ),
       };
     }),
@@ -881,20 +898,13 @@ export const useWindows = create<WindowsStore>((set) => ({
       if (!target) return state;
 
       if (target.stacked) {
-        const rootWin = findRootWindow(id, state.windows);
         const parentId = target.parentId ?? target.parentIds?.[0];
-        let parentWin = parentId ? state.windows.find((w) => w.id === parentId) : undefined;
-        if (!parentWin) {
-          parentWin = state.windows.find(
-            (w) => w.contentType !== "sticky" && (w.parentId === id || w.parentIds?.includes(id))
-          );
-        }
-        const refWin = rootWin ?? parentWin;
+        const parentGeo = getParentEntityGeometry(parentId, state.windows, state.groups);
 
-        const px = refWin?.x ?? target.x ?? 80;
-        const py = refWin?.y ?? target.y ?? 80;
-        const pw = refWin?.width ?? DEFAULT_WIDTH;
-        const ph = refWin?.height ?? DEFAULT_HEIGHT;
+        const px = parentGeo?.px ?? target.x ?? 80;
+        const py = parentGeo?.py ?? target.y ?? 80;
+        const pw = parentGeo?.pw ?? DEFAULT_WIDTH;
+        const ph = parentGeo?.ph ?? DEFAULT_HEIGHT;
 
         const side = target.side ?? "RIGHT";
         const GAP = 160;
@@ -912,48 +922,39 @@ export const useWindows = create<WindowsStore>((set) => ({
           ny = py + ph + GAP;
         }
 
-        const targetX = target.relX != null ? px + target.relX : nx;
-        const targetY = target.relY != null ? py + target.relY : ny;
-
-        const cleanPos = findNonOverlappingPosition(
-          targetX,
-          targetY,
-          childW,
-          childH,
-          state.windows,
-          target.id
-        );
+        const finalX = target.relX != null ? px + target.relX : nx;
+        const finalY = target.relY != null ? py + target.relY : ny;
 
         return {
           windows: state.windows.map((w) =>
-            w.id === id ? { ...w, stacked: false, x: cleanPos.x, y: cleanPos.y } : w
+            w.id === id ? { ...w, stacked: false, x: finalX, y: finalY } : w
           ),
         };
       } else {
         const parentId = target.parentId ?? target.parentIds?.[0];
-        let parentWin = parentId ? state.windows.find((w) => w.id === parentId) : undefined;
-        if (!parentWin) {
-          parentWin = state.windows.find(
+        const pGeom = getParentEntityGeometry(parentId, state.windows, state.groups);
+
+        let parentX = 80;
+        let parentY = 80;
+        let parentW = DEFAULT_WIDTH;
+        let parentH = DEFAULT_HEIGHT;
+
+        if (pGeom) {
+          parentX = pGeom.px;
+          parentY = pGeom.py;
+          parentW = pGeom.pw;
+          parentH = pGeom.ph;
+        } else {
+          const parentWin = state.windows.find(
             (w) => w.contentType !== "sticky" && (w.parentId === id || w.parentIds?.includes(id))
           );
+          if (parentWin) {
+            parentX = parentWin.x ?? 80;
+            parentY = parentWin.y ?? 80;
+            parentW = parentWin.width ?? DEFAULT_WIDTH;
+            parentH = parentWin.height ?? DEFAULT_HEIGHT;
+          }
         }
-
-        if (!parentWin) {
-          return {
-            windows: state.windows.map((w) => (w.id === id ? { ...w, stacked: true } : w)),
-          };
-        }
-
-        // Group Boundary Lock: Block single note from stacking under an external parent window outside its group
-        const childGroup = state.groups.find((g) => g.memberIds.includes(target.id));
-        if (childGroup && !childGroup.memberIds.includes(parentWin.id)) {
-          return state;
-        }
-
-        const parentX = parentWin.x ?? 80;
-        const parentY = parentWin.y ?? 80;
-        const parentW = parentWin.width ?? DEFAULT_WIDTH;
-        const parentH = parentWin.height ?? DEFAULT_HEIGHT;
 
         const relX = (target.x ?? 80) - parentX;
         const relY = (target.y ?? 80) - parentY;

@@ -125,6 +125,11 @@ export function isAlreadyConnected(sourceId: string, targetId: string): boolean 
   const windows = useWindows.getState().windows;
   const groups = useWindows.getState().groups;
 
+  const sourceGroup = groups.find((g) => g.memberIds.includes(sourceId));
+  const targetGroup = groups.find((g) => g.memberIds.includes(targetId));
+  if (sourceGroup && targetId === sourceGroup.id) return true;
+  if (targetGroup && sourceId === targetGroup.id) return true;
+
   const targetEntity = windows.find((w) => w.id === targetId) || groups.find((g) => g.id === targetId);
   const sourceEntity = windows.find((w) => w.id === sourceId) || groups.find((g) => g.id === sourceId);
   if (!targetEntity || !sourceEntity) return false;

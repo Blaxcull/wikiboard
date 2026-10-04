@@ -8,7 +8,7 @@ import PdfViewer from './components/pdfViewer'
 import ImageViewer from './components/imageViewer'
 import StickyNote from './components/stickyNote'
 import WindowContextMenu, { type ContextMenuPosition } from './components/windowContextMenu'
-import { useWindows, getConnectedChildNotes, type WindowData, nextCascadeOffset } from './store/windows'
+import { useWindows, getConnectedChildNotes, findRootWindow, type WindowData, nextCascadeOffset } from './store/windows'
 import { deleteScroll } from './utils/scrollMemory'
 import { evictClosedWindowArticles } from './utils/articleCache'
 import { getCamera, subscribeCamera, screenToWorld } from './utils/camera'
@@ -525,7 +525,13 @@ const ConnectionArrows = memo(function ConnectionArrows({
     const getEntityPos = (id: string) => {
       const win = byId.get(id);
       if (win) {
-        if (win.stacked) return null;
+        if (win.stacked) {
+          const rootWin = findRootWindow(win.id, windows);
+          if (rootWin && rootWin.id !== win.id && !rootWin.stacked) {
+            return posMap.get(rootWin.id);
+          }
+          return null;
+        }
         return posMap.get(win.id);
       }
       const grp = groupsById.get(id);

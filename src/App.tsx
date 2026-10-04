@@ -645,6 +645,14 @@ const ConnectionArrows = memo(function ConnectionArrows({
         continue;
       }
 
+      const pGrp = currentGroups.find((g) => g.memberIds.includes(parentId));
+      const cGrp = currentGroups.find((g) => g.memberIds.includes(childId));
+      if (pGrp && cGrp && pGrp.id === cGrp.id && pGrp.compressed) {
+        path.style.display = 'none';
+        poly.style.display = 'none';
+        continue;
+      }
+
       const px = parentPos.x, py = parentPos.y, pw = parentPos.w, ph = parentPos.h;
       const cx = childPos.x, cy = childPos.y, cw = childPos.w, ch = childPos.h;
 
@@ -1062,9 +1070,34 @@ const WindowItem = memo(function WindowItem({
   const removeWindow = useWindows((s) => s.removeWindow)
   const addWindow = useWindows((s) => s.addWindow)
 
+  const groups = useWindows((s) => s.groups)
+  const windows = useWindows((s) => s.windows)
+  const parentGroup = groups.find((g) => g.memberIds.includes(w.id))
+  const isCompressedGroupMember = !!parentGroup?.compressed
+
+  const connectedCompressedGroup = useMemo(() => {
+    if (isCompressedGroupMember) return null;
+    const pIds = w.parentIds ?? (w.parentId ? [w.parentId] : []);
+    if (pIds.length === 0) return null;
+    return groups.find((g) => g.compressed && (pIds.includes(g.id) || g.memberIds.some((mId) => pIds.includes(mId))));
+  }, [groups, isCompressedGroupMember, w.parentId, w.parentIds]);
+
   const zIndexStyle = useMemo(
-    () => ({ zIndex: w.pdfMaximized ? 100000 : (w.alwaysOnTop ? 50000 + (w.zIndex ?? 0) : w.zIndex) }),
-    [w.zIndex, w.pdfMaximized, w.alwaysOnTop],
+    () => {
+      let effZ = w.pdfMaximized ? 100000 : (w.alwaysOnTop ? 50000 + (w.zIndex ?? 0) : (w.zIndex ?? 0));
+      if (connectedCompressedGroup) {
+        const groupMembers = windows.filter((win) => connectedCompressedGroup.memberIds.includes(win.id));
+        const minZ = groupMembers.reduce((min, win) => Math.min(min, win.zIndex ?? 0), Infinity);
+        if (minZ !== Infinity) {
+          effZ = Math.min(effZ, minZ - 1);
+        }
+      }
+      return {
+        zIndex: effZ,
+        ...(isCompressedGroupMember ? { pointerEvents: "none" as const } : {}),
+      };
+    },
+    [w.zIndex, w.pdfMaximized, w.alwaysOnTop, isCompressedGroupMember, connectedCompressedGroup, windows],
   )
 
   const handleActivate = useCallback(() => setActive(w.id), [w.id, setActive])
@@ -1289,6 +1322,9 @@ useEffect(() => {
 
   if (w.contentType === "sticky") {
     const isExcerpt = w.isExcerptNote;
+    const itemW = isCompressedGroupMember ? (isExcerpt ? 140 : 180) : (w.width ?? 260);
+    const itemH = isCompressedGroupMember ? (isExcerpt ? 54 : 120) : (w.height ?? (isExcerpt ? 64 : 200));
+
     return (
       <div
         id={`win-${w.id}`}
@@ -1297,10 +1333,11 @@ useEffect(() => {
           ...zIndexStyle,
           left: `${w.x ?? 80}px`,
           top: `${w.y ?? 80}px`,
-          width: `${w.width ?? 260}px`,
-          height: `${w.height ?? (isExcerpt ? 64 : 200)}px`,
+          width: `${itemW}px`,
+          height: `${itemH}px`,
         }}
         onMouseDown={(e) => {
+          if (isCompressedGroupMember) return;
           handleActivate();
           const rect = e.currentTarget.getBoundingClientRect();
           if (e.clientX >= rect.right - 32 && e.clientY >= rect.bottom - 32) {
@@ -1329,114 +1366,125 @@ useEffect(() => {
             onPositionChange={handlePositionChange}
             onContextMenu={(e) => onContextMenu?.(e, w.id)}
           />
-          <button
-            type="button"
-            className="connection-point point-top"
-            title="Add sticky note"
-            onMouseDown={(e) => startWireDrag(e, w.id, "TOP", handleAddSticky)}
-          />
-          <button
-            type="button"
-            className="connection-point point-right"
-            title="Add sticky note"
-            onMouseDown={(e) => startWireDrag(e, w.id, "RIGHT", handleAddSticky)}
-          />
-          <button
-            type="button"
-            className="connection-point point-bottom"
-            title="Add sticky note"
-            onMouseDown={(e) => startWireDrag(e, w.id, "BOTTOM", handleAddSticky)}
-          />
-          <button
-            type="button"
-            className="connection-point point-left"
-            title="Add sticky note"
-            onMouseDown={(e) => startWireDrag(e, w.id, "LEFT", handleAddSticky)}
-          />
+          {!isCompressedGroupMember && (
+            <>
+              <button
+                type="button"
+                className="connection-point point-top"
+                title="Add sticky note"
+                onMouseDown={(e) => startWireDrag(e, w.id, "TOP", handleAddSticky)}
+              />
+              <button
+                type="button"
+                className="connection-point point-right"
+                title="Add sticky note"
+                onMouseDown={(e) => startWireDrag(e, w.id, "RIGHT", handleAddSticky)}
+              />
+              <button
+                type="button"
+                className="connection-point point-bottom"
+                title="Add sticky note"
+                onMouseDown={(e) => startWireDrag(e, w.id, "BOTTOM", handleAddSticky)}
+              />
+              <button
+                type="button"
+                className="connection-point point-left"
+                title="Add sticky note"
+                onMouseDown={(e) => startWireDrag(e, w.id, "LEFT", handleAddSticky)}
+              />
+            </>
+          )}
         </div>
       </div>
     );
   }
 
   if (w.contentType === "pdf") {
+    const itemW = isCompressedGroupMember ? 200 : (w.width ?? 620);
+    const itemH = isCompressedGroupMember ? 140 : (w.height ?? 945);
+
     return (
-        <div
-  ref={(el) => {
-    pdfRef.current = el
+      <div
+        ref={(el) => {
+          pdfRef.current = el;
 
-    if (el && !el.dataset.pos) {
-      el.dataset.pos = "1"
+          if (el && !el.dataset.pos) {
+            el.dataset.pos = "1";
 
-      const offset =
-        w.x === undefined || w.y === undefined
-          ? nextCascadeOffset()
-          : 0
+            const offset =
+              w.x === undefined || w.y === undefined
+                ? nextCascadeOffset()
+                : 0;
 
-      const left = w.x !== undefined ? w.x : 80 + offset
-      const top = w.y !== undefined ? w.y : 80 + offset
+            const left = w.x !== undefined ? w.x : 80 + offset;
+            const top = w.y !== undefined ? w.y : 80 + offset;
 
-      el.style.left = `${left}px`
-      el.style.top = `${top}px`
-      el.style.width = `${w.width ?? 620}px`
-      el.style.height = `${w.height ?? 945}px`
-    }
-  }}
-  id={`win-${w.id}`}
-  className={`window pdf-window ${
-    w.pdfMaximized ? "maximized" : ""
-  } ${
-    w.pdfMaximized && !w.pdfAnimating ? "maximized-done" : ""
-  } ${w.active ? "active" : "inactive"} ${w.pdfAnimating ? "no-transition" : ""}`}
-  style={zIndexStyle}
-  onContextMenu={(e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onContextMenu?.(e, w.id);
-  }}
-  onMouseDown={(e) => {
-    handleActivate()
-    if (w.pdfMaximized) return
+            el.style.left = `${left}px`;
+            el.style.top = `${top}px`;
+            el.style.width = `${itemW}px`;
+            el.style.height = `${itemH}px`;
+          }
+        }}
+        id={`win-${w.id}`}
+        className={`window pdf-window ${
+          w.pdfMaximized ? "maximized" : ""
+        } ${
+          w.pdfMaximized && !w.pdfAnimating ? "maximized-done" : ""
+        } ${w.active ? "active" : "inactive"} ${w.pdfAnimating ? "no-transition" : ""}`}
+        style={zIndexStyle}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onContextMenu?.(e, w.id);
+        }}
+        onMouseDown={(e) => {
+          if (isCompressedGroupMember) return;
+          handleActivate();
+          if (w.pdfMaximized) return;
 
-    Resize(e, (rect) => handlePositionChange(rect))
-  }}
->
-  <StackedNoteStubs parentWin={w} />
-  <div className="pdf-window-animation-layer">
-    <PdfViewer win={w} onAddSticky={handleAddSticky} />
-  </div>
-      {!w.pdfMaximized && (
-        <>
-          <button
-            type="button"
-            className="connection-point point-top"
-            title="Add sticky note"
-            onMouseDown={(e) => startWireDrag(e, w.id, "TOP", handleAddSticky)}
-          />
-          <button
-            type="button"
-            className="connection-point point-right"
-            title="Add sticky note"
-            onMouseDown={(e) => startWireDrag(e, w.id, "RIGHT", handleAddSticky)}
-          />
-          <button
-            type="button"
-            className="connection-point point-bottom"
-            title="Add sticky note"
-            onMouseDown={(e) => startWireDrag(e, w.id, "BOTTOM", handleAddSticky)}
-          />
-          <button
-            type="button"
-            className="connection-point point-left"
-            title="Add sticky note"
-            onMouseDown={(e) => startWireDrag(e, w.id, "LEFT", handleAddSticky)}
-          />
-        </>
-      )}
-    </div>
-    )
+          Resize(e, (rect) => handlePositionChange(rect));
+        }}
+      >
+        <StackedNoteStubs parentWin={w} />
+        <div className="pdf-window-animation-layer">
+          <PdfViewer win={w} onAddSticky={handleAddSticky} />
+        </div>
+        {!w.pdfMaximized && !isCompressedGroupMember && (
+          <>
+            <button
+              type="button"
+              className="connection-point point-top"
+              title="Add sticky note"
+              onMouseDown={(e) => startWireDrag(e, w.id, "TOP", handleAddSticky)}
+            />
+            <button
+              type="button"
+              className="connection-point point-right"
+              title="Add sticky note"
+              onMouseDown={(e) => startWireDrag(e, w.id, "RIGHT", handleAddSticky)}
+            />
+            <button
+              type="button"
+              className="connection-point point-bottom"
+              title="Add sticky note"
+              onMouseDown={(e) => startWireDrag(e, w.id, "BOTTOM", handleAddSticky)}
+            />
+            <button
+              type="button"
+              className="connection-point point-left"
+              title="Add sticky note"
+              onMouseDown={(e) => startWireDrag(e, w.id, "LEFT", handleAddSticky)}
+            />
+          </>
+        )}
+      </div>
+    );
   }
 
   if (w.directImageUrl || w.title.startsWith("File:")) {
+    const itemW = isCompressedGroupMember ? 200 : (w.width ?? 250);
+    const itemH = isCompressedGroupMember ? 140 : (w.height ?? 190);
+
     return (
       <div
         id={`win-${w.id}`}
@@ -1445,8 +1493,8 @@ useEffect(() => {
           ...zIndexStyle,
           left: `${w.x ?? 80}px`,
           top: `${w.y ?? 80}px`,
-          width: `${w.width ?? 250}px`,
-          height: `${w.height ?? 190}px`,
+          width: `${itemW}px`,
+          height: `${itemH}px`,
         }}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -1454,6 +1502,7 @@ useEffect(() => {
           onContextMenu?.(e, w.id);
         }}
         onMouseDown={(e) => {
+          if (isCompressedGroupMember) return;
           handleActivate();
           Resize(e, (rect) => handlePositionChange(rect));
         }}
@@ -1465,49 +1514,56 @@ useEffect(() => {
           onActivate={handleActivate}
           onPositionChange={handlePositionChange}
         />
-        <button
-          type="button"
-          className="connection-point point-top"
-          title="Add sticky note"
-          onMouseDown={(e) => startWireDrag(e, w.id, "TOP", handleAddSticky)}
-        />
-        <button
-          type="button"
-          className="connection-point point-right"
-          title="Add sticky note"
-          onMouseDown={(e) => startWireDrag(e, w.id, "RIGHT", handleAddSticky)}
-        />
-        <button
-          type="button"
-          className="connection-point point-bottom"
-          title="Add sticky note"
-          onMouseDown={(e) => startWireDrag(e, w.id, "BOTTOM", handleAddSticky)}
-        />
-        <button
-          type="button"
-          className="connection-point point-left"
-          title="Add sticky note"
-          onMouseDown={(e) => startWireDrag(e, w.id, "LEFT", handleAddSticky)}
-        />
+        {!isCompressedGroupMember && (
+          <>
+            <button
+              type="button"
+              className="connection-point point-top"
+              title="Add sticky note"
+              onMouseDown={(e) => startWireDrag(e, w.id, "TOP", handleAddSticky)}
+            />
+            <button
+              type="button"
+              className="connection-point point-right"
+              title="Add sticky note"
+              onMouseDown={(e) => startWireDrag(e, w.id, "RIGHT", handleAddSticky)}
+            />
+            <button
+              type="button"
+              className="connection-point point-bottom"
+              title="Add sticky note"
+              onMouseDown={(e) => startWireDrag(e, w.id, "BOTTOM", handleAddSticky)}
+            />
+            <button
+              type="button"
+              className="connection-point point-left"
+              title="Add sticky note"
+              onMouseDown={(e) => startWireDrag(e, w.id, "LEFT", handleAddSticky)}
+            />
+          </>
+        )}
       </div>
-    )
+    );
   }
+
+  const itemW = isCompressedGroupMember ? 200 : w.width;
+  const itemH = isCompressedGroupMember ? 140 : w.height;
 
   return (
     <Window
       id={`win-${w.id}`}
-      className={w.active ? 'active' : 'inactive'}
+      className={w.active ? "active" : "inactive"}
       style={zIndexStyle}
       stubs={<StackedNoteStubs parentWin={w} />}
       titleBarContent={<span>{w.title}</span>}
       x={w.x}
       y={w.y}
-      width={w.width}
-      height={w.height}
+      width={itemW}
+      height={itemH}
       onActivate={handleActivate}
-      onClose={handleClose}
+      onClose={isCompressedGroupMember ? undefined : handleClose}
       onPositionChange={handlePositionChange}
-      onAddSticky={handleAddSticky}
+      onAddSticky={isCompressedGroupMember ? undefined : handleAddSticky}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -1517,7 +1573,7 @@ useEffect(() => {
       {w.url ? <ArticleView win={w} /> : <LinkEditor win={w} />}
       <StackedNotesDrawer parentWin={w} />
     </Window>
-  )
+  );
 })
 
 function App() {

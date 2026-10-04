@@ -296,6 +296,214 @@ function GroupColorPickerPortal({
   );
 }
 
+function GroupContextMenuPortal({
+  group,
+  isOpen,
+  onClose,
+  areObjectsStacked,
+  allSelectedAlwaysOnTop,
+  handleUngroup,
+  handleStackObjects,
+  handleCompress,
+  handleAlwaysOnTop,
+  handleBreakConnections,
+  handleDelete,
+}: {
+  group: WindowGroup;
+  isOpen: boolean;
+  onClose: () => void;
+  areObjectsStacked: boolean;
+  allSelectedAlwaysOnTop: boolean;
+  handleUngroup: (e: React.MouseEvent) => void;
+  handleStackObjects: (e: React.MouseEvent) => void;
+  handleCompress: (e: React.MouseEvent) => void;
+  handleAlwaysOnTop: (e: React.MouseEvent) => void;
+  handleBreakConnections: (e: React.MouseEvent) => void;
+  handleDelete: (e: React.MouseEvent) => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [stylePos, setStylePos] = useState({ left: 0, top: 0 });
+
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+
+    function updatePos() {
+      const menuEl = menuRef.current;
+      const groupEl = document.getElementById(`group-box-${group.id}`);
+      if (!groupEl || !menuEl) return;
+
+      const rect = groupEl.getBoundingClientRect();
+      const menuW = menuEl.offsetWidth;
+
+      const top = rect.top - 12;
+      let left = rect.left + rect.width / 2;
+
+      if (left + menuW / 2 > window.innerWidth - 12) left = window.innerWidth - 12 - menuW / 2;
+      if (left - menuW / 2 < 12) left = 12 + menuW / 2;
+
+      setStylePos({ left, top });
+    }
+
+    updatePos();
+    let rafId = requestAnimationFrame(function loop() {
+      updatePos();
+      rafId = requestAnimationFrame(loop);
+    });
+
+    return () => cancelAnimationFrame(rafId);
+  }, [isOpen, group.id]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleDismiss = (e: Event) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(target as Node) &&
+        !target?.closest(".group-color-picker")
+      ) {
+        onClose();
+      }
+    };
+    const timer = setTimeout(() => {
+      window.addEventListener("mousedown", handleDismiss, true);
+      window.addEventListener("pointerdown", handleDismiss, true);
+      window.addEventListener("click", handleDismiss, true);
+      window.addEventListener("wheel", handleDismiss, true);
+    }, 0);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("mousedown", handleDismiss, true);
+      window.removeEventListener("pointerdown", handleDismiss, true);
+      window.removeEventListener("click", handleDismiss, true);
+      window.removeEventListener("wheel", handleDismiss, true);
+    };
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      className="group-context-menu fixed z-[100000] w-[185px] p-1.5 bg-white border-2 border-[#d0d0d0] rounded-[16px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] select-none flex flex-col gap-0.5 pointer-events-auto"
+      onMouseDown={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+      style={{
+        left: `${stylePos.left}px`,
+        top: `${stylePos.top}px`,
+        transform: "translate(-50%, -100%)",
+      }}
+    >
+      <button
+        type="button"
+        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        onClick={handleUngroup}
+        className="w-full flex items-center gap-3 px-3 py-2 text-[13px] font-semibold text-[#171717] rounded-[10px] transition-colors cursor-pointer border-none bg-transparent hover:bg-black/10 active:bg-black/15 text-left"
+      >
+        <span className="shrink-0 text-[#171717]">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M7 17l9.2-9.2M17 17V7H7" />
+          </svg>
+        </span>
+        Ungroup
+      </button>
+
+      <button
+        type="button"
+        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        onClick={handleStackObjects}
+        className="w-full flex items-center gap-3 px-3 py-2 text-[13px] font-semibold text-[#171717] rounded-[10px] transition-colors cursor-pointer border-none bg-transparent hover:bg-black/10 active:bg-black/15 text-left"
+      >
+        <span className="shrink-0 text-[#171717]">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="4" y="4" width="6" height="6" rx="1.5" />
+            <circle cx="16" cy="7" r="1.5" />
+            <circle cx="16" cy="16" r="1.5" />
+            <circle cx="7" cy="16" r="1.5" />
+          </svg>
+        </span>
+        {areObjectsStacked ? "Unstack objects" : "Stack objects"}
+      </button>
+
+      <button
+        type="button"
+        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        onClick={handleCompress}
+        className="w-full flex items-center gap-3 px-3 py-2 text-[13px] font-semibold text-[#171717] rounded-[10px] transition-colors cursor-pointer border-none bg-transparent hover:bg-black/10 active:bg-black/15 text-left"
+      >
+        <span className="shrink-0 text-[#171717]">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="4 14 10 14 10 20" />
+            <polyline points="20 10 14 10 14 4" />
+            <line x1="14" y1="10" x2="21" y2="3" />
+            <line x1="3" y1="21" x2="10" y2="14" />
+          </svg>
+        </span>
+        {group.compressed ? "Decompress" : "Compress"}
+      </button>
+
+      <button
+        type="button"
+        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        onClick={handleAlwaysOnTop}
+        className="w-full flex items-center gap-3 px-3 py-2 text-[13px] font-semibold text-[#171717] rounded-[10px] transition-colors cursor-pointer border-none bg-transparent hover:bg-black/10 active:bg-black/15 text-left"
+      >
+        <span className="shrink-0 text-[#171717]">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="19" x2="12" y2="5" />
+            <polyline points="5 12 12 5 19 12" />
+          </svg>
+        </span>
+        {allSelectedAlwaysOnTop ? "Unpin from top" : "Always on top"}
+      </button>
+
+      <button
+        type="button"
+        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        onClick={handleBreakConnections}
+        className="w-full flex items-center gap-3 px-3 py-2 text-[13px] font-semibold text-[#171717] rounded-[10px] transition-colors cursor-pointer border-none bg-transparent hover:bg-black/10 active:bg-black/15 text-left"
+      >
+        <span className="shrink-0 text-[#171717]">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="6" cy="6" r="3" />
+            <circle cx="6" cy="18" r="3" />
+            <line x1="20" y1="4" x2="8.12" y2="15.88" />
+            <line x1="14.47" y1="14.47" x2="20" y2="20" />
+            <line x1="8.12" y1="8.12" x2="12" y2="12" />
+          </svg>
+        </span>
+        Break connection
+      </button>
+
+      <button
+        type="button"
+        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        onClick={handleDelete}
+        className="w-full flex items-center gap-3 px-3 py-2 text-[13px] font-semibold text-[#171717] rounded-[10px] transition-colors cursor-pointer border-none bg-transparent hover:bg-black/10 active:bg-black/15 text-left"
+      >
+        <span className="shrink-0 text-[#171717]">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </span>
+        Delete
+      </button>
+    </div>,
+    document.body
+  );
+}
+
 function SingleGroupItem({ group }: { group: WindowGroup }) {
   const windows = useWindows((s) => s.windows);
   const ungroup = useWindows((s) => s.ungroup);
@@ -322,7 +530,8 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
   // Live rAF bounds tracking for active window drag/resize
   useEffect(() => {
     let rafId = 0;
-    const PAD = 44;
+    const isCompressed = !!group.compressed;
+    const PAD = isCompressed ? 20 : 44;
 
     function updateLiveGroupBounds() {
       rafId = 0;
@@ -337,12 +546,25 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
       let maxY = -Infinity;
 
       for (const w of memberWins) {
-        const el = document.getElementById(`win-${w.id}`);
-        const b = readLiveWindowWorldBounds(el, w);
-        if (b.left < minX) minX = b.left;
-        if (b.top < minY) minY = b.top;
-        if (b.right > maxX) maxX = b.right;
-        if (b.bottom > maxY) maxY = b.bottom;
+        const wx = w.x ?? 80;
+        const wy = w.y ?? 80;
+        let ww = w.width ?? 750;
+        let wh = w.height ?? 550;
+
+        if (isCompressed) {
+          ww = w.contentType === "sticky" ? (w.isExcerptNote ? 140 : 180) : 200;
+          wh = w.contentType === "sticky" ? (w.isExcerptNote ? 54 : 120) : 140;
+        } else {
+          const el = document.getElementById(`win-${w.id}`);
+          const b = readLiveWindowWorldBounds(el, w);
+          ww = b.right - b.left;
+          wh = b.bottom - b.top;
+        }
+
+        if (wx < minX) minX = wx;
+        if (wy < minY) minY = wy;
+        if (wx + ww > maxX) maxX = wx + ww;
+        if (wy + wh > maxY) maxY = wy + wh;
       }
 
       if (minX !== Infinity) {
@@ -368,9 +590,12 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
       if (rafId) cancelAnimationFrame(rafId);
       window.removeEventListener("mousemove", onMouseMove, true);
     };
-  }, [group.id, memberWins]);
+  }, [group.id, group.compressed, memberWins]);
 
   if (memberWins.length === 0) return null;
+
+  const isCompressed = !!group.compressed;
+  const PAD = isCompressed ? 20 : 44;
 
   let minX = Infinity;
   let minY = Infinity;
@@ -378,15 +603,26 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
   let maxY = -Infinity;
 
   for (const w of memberWins) {
-    const b = getWindowWorldBounds(w);
-    if (b.left < minX) minX = b.left;
-    if (b.top < minY) minY = b.top;
-    if (b.right > maxX) maxX = b.right;
-    if (b.bottom > maxY) maxY = b.bottom;
+    const wx = w.x ?? 80;
+    const wy = w.y ?? 80;
+    let ww = w.width ?? 750;
+    let wh = w.height ?? 550;
+
+    if (isCompressed) {
+      ww = w.contentType === "sticky" ? (w.isExcerptNote ? 140 : 180) : 200;
+      wh = w.contentType === "sticky" ? (w.isExcerptNote ? 54 : 120) : 140;
+    } else {
+      const b = getWindowWorldBounds(w);
+      ww = b.right - b.left;
+      wh = b.bottom - b.top;
+    }
+
+    if (wx < minX) minX = wx;
+    if (wy < minY) minY = wy;
+    if (wx + ww > maxX) maxX = wx + ww;
+    if (wy + wh > maxY) maxY = wy + wh;
   }
 
-  // Spacing between member windows and the group border
-  const PAD = 44;
   const boxX = minX - PAD;
   const boxY = minY - PAD;
   const boxW = maxX - minX + PAD * 2;
@@ -428,7 +664,16 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
     const startMaxZ = state.maxZIndex;
     let curMaxZ = startMaxZ;
 
-    const sorted = [...allWinsToActivate].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+    const sorted = [...allWinsToActivate].sort((a, b) => {
+      if (group.compressed) {
+        const aIsSticky = a.contentType === "sticky";
+        const bIsSticky = b.contentType === "sticky";
+        if (aIsSticky !== bIsSticky) {
+          return aIsSticky ? -1 : 1;
+        }
+      }
+      return (a.zIndex ?? 0) - (b.zIndex ?? 0);
+    });
     const zMap = new Map<string, number>();
     for (const w of sorted) {
       curMaxZ += 1;
@@ -437,7 +682,7 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
 
     const containerEl = document.getElementById(`group-box-${group.id}`);
     const minZ = zMap.get(sorted[0]?.id || "") ?? curMaxZ;
-    const baseContainerZ = isPinned ? 50000 + minZ - 1 : Math.max(12, minZ - 1);
+    const baseContainerZ = isPinned ? 50000 + minZ - 1 : Math.max(0, minZ - 1);
 
     if (containerEl) {
       containerEl.style.zIndex = String(baseContainerZ);
@@ -474,18 +719,25 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
     const startY = e.clientY;
 
     const state = useWindows.getState();
-    const groupAndMemberIds = new Set([group.id, ...group.memberIds]);
 
     const activeMemberWins = state.windows.filter(
       (w) => group.memberIds.includes(w.id) && !w.stacked
     );
 
     const childNotes: WindowData[] = [];
-    for (const id of groupAndMemberIds) {
-      const descs = getDescendantNotes(id, state.windows);
-      for (const d of descs) {
-        if (!d.stacked && !childNotes.some((cn) => cn.id === d.id) && !group.memberIds.includes(d.id)) {
-          childNotes.push(d);
+    if (!group.compressed) {
+      for (const id of group.memberIds) {
+        const descs = getDescendantNotes(id, state.windows);
+        for (const d of descs) {
+          if (
+            !d.stacked &&
+            !childNotes.some((cn) => cn.id === d.id) &&
+            !group.memberIds.includes(d.id) &&
+            d.parentId !== group.id &&
+            !d.parentIds?.includes(group.id)
+          ) {
+            childNotes.push(d);
+          }
         }
       }
     }
@@ -650,69 +902,21 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
     e.preventDefault();
     e.stopPropagation();
 
-    if (memberWins.length === 0) {
-      setMenuOpen(false);
-      return;
+    const containerEl = document.getElementById(`group-box-${group.id}`);
+    if (containerEl) {
+      containerEl.classList.add("compress-transition");
+      setTimeout(() => containerEl.classList.remove("compress-transition"), 350);
     }
 
-    const GAP = 20;
-
-    let startX = Infinity;
-    let startY = Infinity;
-    for (const w of memberWins) {
-      const wx = w.x ?? 80;
-      const wy = w.y ?? 80;
-      if (wx < startX) startX = wx;
-      if (wy < startY) startY = wy;
+    for (const id of group.memberIds) {
+      const winEl = document.getElementById(`win-${id}`);
+      if (winEl) {
+        winEl.classList.add("compress-transition");
+        setTimeout(() => winEl.classList.remove("compress-transition"), 350);
+      }
     }
 
-    const N = memberWins.length;
-    const cols = Math.ceil(Math.sqrt(N));
-
-    const sortedWins = [...memberWins].sort((a, b) => {
-      const ay = a.y ?? 0, by = b.y ?? 0;
-      if (Math.abs(ay - by) > 60) return ay - by;
-      return (a.x ?? 0) - (b.x ?? 0);
-    });
-
-    const colWidths: number[] = new Array(cols).fill(0);
-    const rowHeights: number[] = new Array(Math.ceil(N / cols)).fill(0);
-
-    sortedWins.forEach((w, i) => {
-      const r = Math.floor(i / cols);
-      const c = i % cols;
-      const ww = w.width ?? 750;
-      const wh = w.height ?? 550;
-      if (ww > colWidths[c]) colWidths[c] = ww;
-      if (wh > rowHeights[r]) rowHeights[r] = wh;
-    });
-
-    const updates = new Map<string, { x: number; y: number }>();
-
-    sortedWins.forEach((w, i) => {
-      const r = Math.floor(i / cols);
-      const c = i % cols;
-
-      let x = startX;
-      for (let ci = 0; ci < c; ci++) {
-        x += colWidths[ci] + GAP;
-      }
-
-      let y = startY;
-      for (let ri = 0; ri < r; ri++) {
-        y += rowHeights[ri] + GAP;
-      }
-
-      updates.set(w.id, { x, y });
-    });
-
-    useWindows.setState((state) => ({
-      windows: state.windows.map((w) => {
-        const up = updates.get(w.id);
-        return up ? { ...w, ...up } : w;
-      }),
-    }));
-
+    useWindows.getState().toggleCompressGroup(group.id);
     setMenuOpen(false);
   };
 
@@ -805,7 +1009,7 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
           backgroundColor: group.color ? `${group.color}15` : "rgba(0, 0, 0, 0.03)",
           borderRadius: "28px",
           pointerEvents: "auto",
-          zIndex: Math.max(12, boxZIndex),
+          zIndex: boxZIndex,
         }}
       >
         {/* Dashed Border Overlay (drawn over stacked cards) */}
@@ -980,129 +1184,22 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
           }}
         />
 
-        {/* Top Group Context Menu */}
-        {menuOpen && (
-          <div
-            className="group-context-menu w-[185px] p-1.5 bg-white border-2 border-[#d0d0d0] rounded-[16px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] select-none flex flex-col gap-0.5"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            onPointerDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            style={{
-              position: "absolute",
-              left: `${boxW / 2}px`,
-              top: "-14px",
-              transform: "translate(-50%, -100%)",
-              pointerEvents: "auto",
-              zIndex: 99999,
-            }}
-          >
-            <button
-              type="button"
-              onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-              onClick={handleUngroup}
-              className="w-full flex items-center gap-3 px-3 py-2 text-[13px] font-semibold text-[#171717] rounded-[10px] transition-colors cursor-pointer border-none bg-transparent hover:bg-black/10 active:bg-black/15 text-left"
-            >
-              <span className="shrink-0 text-[#171717]">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M7 17l9.2-9.2M17 17V7H7" />
-                </svg>
-              </span>
-              Ungroup
-            </button>
-
-            <button
-              type="button"
-              onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-              onClick={handleStackObjects}
-              className="w-full flex items-center gap-3 px-3 py-2 text-[13px] font-semibold text-[#171717] rounded-[10px] transition-colors cursor-pointer border-none bg-transparent hover:bg-black/10 active:bg-black/15 text-left"
-            >
-              <span className="shrink-0 text-[#171717]">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="4" y="4" width="6" height="6" rx="1.5" />
-                  <circle cx="16" cy="7" r="1.5" />
-                  <circle cx="16" cy="16" r="1.5" />
-                  <circle cx="7" cy="16" r="1.5" />
-                </svg>
-              </span>
-              {areObjectsStacked ? "Unstack objects" : "Stack objects"}
-            </button>
-
-            <button
-              type="button"
-              onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-              onClick={handleCompress}
-              className="w-full flex items-center gap-3 px-3 py-2 text-[13px] font-semibold text-[#171717] rounded-[10px] transition-colors cursor-pointer border-none bg-transparent hover:bg-black/10 active:bg-black/15 text-left"
-            >
-              <span className="shrink-0 text-[#171717]">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="4 14 10 14 10 20" />
-                  <polyline points="20 10 14 10 14 4" />
-                  <line x1="14" y1="10" x2="21" y2="3" />
-                  <line x1="3" y1="21" x2="10" y2="14" />
-                </svg>
-              </span>
-              Compress
-            </button>
-
-            <button
-              type="button"
-              onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-              onClick={handleAlwaysOnTop}
-              className="w-full flex items-center gap-3 px-3 py-2 text-[13px] font-semibold text-[#171717] rounded-[10px] transition-colors cursor-pointer border-none bg-transparent hover:bg-black/10 active:bg-black/15 text-left"
-            >
-              <span className="shrink-0 text-[#171717]">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="19" x2="12" y2="5" />
-                  <polyline points="5 12 12 5 19 12" />
-                </svg>
-              </span>
-              {allSelectedAlwaysOnTop ? "Unpin from top" : "Always on top"}
-            </button>
-
-            <button
-              type="button"
-              onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-              onClick={handleBreakConnections}
-              className="w-full flex items-center gap-3 px-3 py-2 text-[13px] font-semibold text-[#171717] rounded-[10px] transition-colors cursor-pointer border-none bg-transparent hover:bg-black/10 active:bg-black/15 text-left"
-            >
-              <span className="shrink-0 text-[#171717]">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="6" cy="6" r="3" />
-                  <circle cx="6" cy="18" r="3" />
-                  <line x1="20" y1="4" x2="8.12" y2="15.88" />
-                  <line x1="14.47" y1="14.47" x2="20" y2="20" />
-                  <line x1="8.12" y1="8.12" x2="12" y2="12" />
-                </svg>
-              </span>
-              Break connection
-            </button>
-
-            <button
-              type="button"
-              onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-              onClick={handleDelete}
-              className="w-full flex items-center gap-3 px-3 py-2 text-[13px] font-semibold text-[#171717] rounded-[10px] transition-colors cursor-pointer border-none bg-transparent hover:bg-black/10 active:bg-black/15 text-left"
-            >
-              <span className="shrink-0 text-[#171717]">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </span>
-              Delete
-            </button>
-          </div>
-        )}
       </div>
+
+      {/* Top Group Context Menu Portal */}
+      <GroupContextMenuPortal
+        group={group}
+        isOpen={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        areObjectsStacked={areObjectsStacked}
+        allSelectedAlwaysOnTop={allSelectedAlwaysOnTop}
+        handleUngroup={handleUngroup}
+        handleStackObjects={handleStackObjects}
+        handleCompress={handleCompress}
+        handleAlwaysOnTop={handleAlwaysOnTop}
+        handleBreakConnections={handleBreakConnections}
+        handleDelete={handleDelete}
+      />
 
       {/* Bottom Color Palette Portal */}
       <GroupColorPickerPortal

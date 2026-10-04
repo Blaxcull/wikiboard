@@ -136,6 +136,14 @@
   animation: none !important;
 }
 
+.window-wrapper.compress-transition,
+.group-container.compress-transition {
+  transition: left 300ms cubic-bezier(0.16, 1, 0.3, 1),
+              top 300ms cubic-bezier(0.16, 1, 0.3, 1),
+              width 300ms cubic-bezier(0.16, 1, 0.3, 1),
+              height 300ms cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
 .window.active,
 .window.dragging,
 .window.resizing {

@@ -52,6 +52,8 @@ export type WindowData = {
   y?: number;
   width?: number;
   height?: number;
+  uncompressedX?: number;
+  uncompressedY?: number;
 };
 
 export type WindowGroup = {
@@ -62,6 +64,7 @@ export type WindowGroup = {
   parentId?: string;
   parentIds?: string[];
   side?: "TOP" | "RIGHT" | "BOTTOM" | "LEFT";
+  compressed?: boolean;
 };
 
 type WindowsStore = {
@@ -87,6 +90,7 @@ type WindowsStore = {
   removeGroup: (groupId: string) => void;
   updateGroup: (groupId: string, patch: Partial<Omit<WindowGroup, "id">>) => void;
   ungroup: (groupId: string) => void;
+  toggleCompressGroup: (groupId: string) => void;
 };
 
 export const DEFAULT_WIDTH = 750;
@@ -980,6 +984,90 @@ export const useWindows = create<WindowsStore>((set) => ({
           windows: state.windows.map((w) =>
             w.id === id ? { ...w, stacked: true, side, relX, relY } : w
           ),
+        };
+      }
+    }),
+
+  toggleCompressGroup: (groupId: string) =>
+    set((state) => {
+      const grp = state.groups.find((g) => g.id === groupId);
+      if (!grp) return state;
+
+      const isCompressing = !grp.compressed;
+      const memberWins = state.windows.filter((w) => grp.memberIds.includes(w.id));
+
+      if (memberWins.length === 0) {
+        return {
+          groups: state.groups.map((g) =>
+            g.id === groupId ? { ...g, compressed: isCompressing } : g
+          ),
+        };
+      }
+
+      if (isCompressing) {
+        let startX = Infinity;
+        let startY = Infinity;
+        for (const w of memberWins) {
+          const wx = w.x ?? 80;
+          const wy = w.y ?? 80;
+          if (wx < startX) startX = wx;
+          if (wy < startY) startY = wy;
+        }
+        if (startX === Infinity) startX = 80;
+        if (startY === Infinity) startY = 80;
+
+        let curMaxZ = state.maxZIndex;
+        const sorted = [...memberWins].sort((a, b) => {
+          const aIsSticky = a.contentType === "sticky";
+          const bIsSticky = b.contentType === "sticky";
+          if (aIsSticky !== bIsSticky) {
+            return aIsSticky ? -1 : 1;
+          }
+          return (a.zIndex ?? 0) - (b.zIndex ?? 0);
+        });
+
+        const DECK_OFFSET_X = 8;
+        const DECK_OFFSET_Y = 14;
+
+        const posMap = new Map<string, { x: number; y: number; uncompressedX: number; uncompressedY: number; zIndex: number }>();
+        sorted.forEach((w, i) => {
+          curMaxZ += 1;
+          posMap.set(w.id, {
+            x: startX + i * DECK_OFFSET_X,
+            y: startY + i * DECK_OFFSET_Y,
+            uncompressedX: w.uncompressedX ?? (w.x ?? 80),
+            uncompressedY: w.uncompressedY ?? (w.y ?? 80),
+            zIndex: curMaxZ,
+          });
+        });
+
+        return {
+          maxZIndex: curMaxZ,
+          groups: state.groups.map((g) =>
+            g.id === groupId ? { ...g, compressed: true } : g
+          ),
+          windows: state.windows.map((w) => {
+            const patch = posMap.get(w.id);
+            return patch ? { ...w, ...patch } : w;
+          }),
+        };
+      } else {
+        return {
+          groups: state.groups.map((g) =>
+            g.id === groupId ? { ...g, compressed: false } : g
+          ),
+          windows: state.windows.map((w) => {
+            if (grp.memberIds.includes(w.id)) {
+              return {
+                ...w,
+                x: w.uncompressedX ?? w.x,
+                y: w.uncompressedY ?? w.y,
+                uncompressedX: undefined,
+                uncompressedY: undefined,
+              };
+            }
+            return w;
+          }),
         };
       }
     }),

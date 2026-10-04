@@ -219,6 +219,20 @@
   box-shadow: 0 0 0 2px #888888, 0 6px 20px rgba(0, 0, 0, 0.16) !important;
 }
 
+.group-box {
+  transition: left 300ms cubic-bezier(0.16, 1, 0.3, 1),
+              top 300ms cubic-bezier(0.16, 1, 0.3, 1),
+              width 300ms cubic-bezier(0.16, 1, 0.3, 1),
+              height 300ms cubic-bezier(0.16, 1, 0.3, 1),
+              background-color 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.canvas-world.gesture-active .group-box,
+.group-box.dragging,
+.group-box.resizing {
+  transition: none !important;
+}
+
 .group-box.wire-target-hover {
   border-color: #888888 !important;
   box-shadow: 0 0 0 2px #888888, 0 6px 20px rgba(0, 0, 0, 0.16) !important;

@@ -576,7 +576,7 @@ body.gesture-active .window:not(.dragging):not(.resizing) .window-content {
 
 ## 14. Hybrid BM25 + Web Worker Vector Search (< 0.2s Response)
 
-**Files:** `src/workers/vectorWorker.ts`, `src/utils/vectorEngine.ts`, `src/components/semanticSearchBox.tsx`
+**Files:** `src/workers/vectorWorker.ts`, `src/utils/vectorEngine.ts`, `src/components/searchBox.tsx`, `src/components/staticPreview.tsx`
 
 ---
 
@@ -589,11 +589,42 @@ body.gesture-active .window:not(.dragging):not(.resizing) .window-content {
 2. **Stage 2 — Vector Embedding on Candidates Only (~0.1s)**: ONNX vector embeddings and Cosine Similarity are computed **ONLY for those Top 8 candidate paragraphs** on a separate background OS thread (`vectorWorker.ts`).
 
 - `vectorWorker.ts:98-106` — `bm25Score()` fast term frequency calculation
-- `vectorWorker.ts:167-195` — candidate selection & Stage 2 vector similarity match
-- `vectorEngine.ts:32-55` — Web Worker bridge delegating all processing off the main UI thread
+- `vectorWorker.ts:167-208` — candidate selection & Stage 2 vector similarity match
+- `vectorEngine.ts:18-42` — Web Worker bridge delegating all processing off the main UI thread
 
 ---
 
+### Background Model Pre-Warming on Spotlight Open (`Alt + Space`)
+
+**Problem:** Initializing the ONNX transformer model on the first search query introduces a 1–2 second cold-start initialization lag while the ONNX runtime loads into memory.
+
+**Solution:** Opening Spotlight (`Alt + Space`) immediately dispatches a `WARMUP` message to the background Web Worker via `warmupVectorEngine()`. The transformer model pipeline initializes off the main UI thread while the user is preparing to type, ensuring zero cold-start delay when searching.
+
+- `vectorEngine.ts:46-52` — `warmupVectorEngine()` sends `WARMUP` message to worker
+- `vectorWorker.ts:130-132` — worker handles `WARMUP` by pre-initializing pipeline
+
+---
+
+### Continuous Background Search as You Type
+
+**Problem:** Triggering vector searches only on `Enter` key submit created an artificial spinner delay.
+
+**Solution:** Input changes in `✨ SEARCH` mode run a 200ms debounced search off-thread. Matching open article titles update continuously in real-time. When the user hits `Enter`, navigation jumps instantly without spinner lag.
+
+- `searchBox.tsx:105-141` — debounced background vector search effect
+- `searchBox.tsx:150-180` — instant `navigateToVectorMatch` transition
+
+---
+
+### Camera-Invariant DOM `offsetTop` Hierarchy Scroll Positioning
+
+**Problem:** Using `getBoundingClientRect()` to compute scroll targets inside the article Shadow DOM failed or jumped to wrong positions while camera zoom/pan animations or window movements were actively running.
+
+**Solution:** The scroll position is calculated by walking the element's `offsetTop` parent hierarchy (`contentTop = sum(curr.offsetTop)`) relative to the host container. `targetScrollTop = Math.max(0, contentTop - hostHeight / 2 + elHeight / 2)` calculates the exact pixel scroll target **100% invariant** to camera pan, zoom level, or screen bounding rects.
+
+- `staticPreview.tsx:479-492` — layout `offsetTop` sum math & smooth scroll trigger
+
+---
 
 ## During the gesture (the critical path):
 1. **mousedown** — all setup done upfront (classes, cursor, z-index)
@@ -634,4 +665,5 @@ That's it. One DOM write per frame, on the GPU thread. The main thread is free.
 | 15 | Batch spawn | 100 state updates × 100 diffs = 10,000 ops | 1 state update × 100 diffs = 100 ops |
 | 16 | Prefetch bounded to 4 | 100 simultaneous fetches overwhelm connections | Worker pool, 4 concurrent, skip cached |
 | 17 | Frozen stubs | Full Shadow DOM for unseen windows | ~200 byte HTML stub, wake on hover |
-| 18 | Hybrid BM25 + Web Worker Vector Search | 60–90s vector search lag across 200+ chunks | BM25 filters to 8 candidates (<1ms), Worker embeds candidates (~0.15s total) |
+| 18 | Hybrid BM25 + Web Worker Vector Search | 60–90s vector search lag across 200+ chunks | BM25 filters to 8 candidates (<1ms), Worker embeds candidates (~0.15s total), pre-warmed on Spotlight open |
+

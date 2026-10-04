@@ -331,7 +331,7 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
 
     const containerEl = document.getElementById(`group-box-${group.id}`);
     const minZ = zMap.get(sorted[0]?.id || "") ?? curMaxZ;
-    const baseContainerZ = isPinned ? 50000 + minZ - 1 : Math.max(0, minZ - 1);
+    const baseContainerZ = isPinned ? 50000 + minZ - 1 : Math.max(12, minZ - 1);
 
     if (containerEl) {
       containerEl.style.zIndex = String(baseContainerZ);
@@ -674,7 +674,7 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
           backgroundColor: group.color ? `${group.color}15` : "rgba(0, 0, 0, 0.03)",
           borderRadius: "28px",
           pointerEvents: "auto",
-          zIndex: boxZIndex,
+          zIndex: Math.max(12, boxZIndex),
         }}
       >
         {/* Dashed Border Overlay (drawn over stacked cards) */}

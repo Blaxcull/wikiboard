@@ -201,6 +201,13 @@ export function findRootWindow(
   if (!current) return undefined;
 
   let currParentId = current.parentId ?? current.parentIds?.[0];
+  if (!currParentId && current.contentType === "sticky") {
+    const revParent = windows.find(
+      (w) => w.contentType !== "sticky" && (w.parentId === id || w.parentIds?.includes(id))
+    );
+    if (revParent) return revParent;
+  }
+
   const visited = new Set<string>([id]);
   let root: WindowData | undefined = undefined;
 
@@ -216,6 +223,34 @@ export function findRootWindow(
   }
 
   return root;
+}
+
+export function getConnectedChildNotes(
+  windowId: string,
+  windows: WindowData[],
+  groups: WindowGroup[] = []
+): WindowData[] {
+  const parentWin = windows.find((w) => w.id === windowId);
+  if (!parentWin) return [];
+
+  return windows.filter((w) => {
+    const isConnected =
+      w.parentId === windowId ||
+      w.parentIds?.includes(windowId) ||
+      (parentWin.contentType !== "sticky" &&
+        w.contentType === "sticky" &&
+        (parentWin.parentId === w.id || parentWin.parentIds?.includes(w.id)));
+
+    if (!isConnected) return false;
+
+    // Group Boundary Lock: If child note belongs to a group, and parent is NOT in that group, block stacking!
+    const childGroup = groups.find((g) => g.memberIds.includes(w.id));
+    if (childGroup && !childGroup.memberIds.includes(windowId)) {
+      return false;
+    }
+
+    return true;
+  });
 }
 
 export const useWindows = create<WindowsStore>((set) => ({
@@ -702,11 +737,10 @@ export const useWindows = create<WindowsStore>((set) => ({
       const parentWin = state.windows.find((w) => w.id === id);
       if (!parentWin) return state;
 
-      const childNotes = state.windows.filter(
-        (w) => w.parentId === id || w.parentIds?.includes(id)
-      );
+      const childNotes = getConnectedChildNotes(id, state.windows, state.groups);
       if (childNotes.length === 0) return state;
 
+      const childIds = new Set(childNotes.map((c) => c.id));
       const hasUnstacked = childNotes.some((w) => !w.stacked);
       const shouldStack = hasUnstacked;
 
@@ -719,8 +753,7 @@ export const useWindows = create<WindowsStore>((set) => ({
 
       return {
         windows: state.windows.map((w) => {
-          const isChildNote = w.parentId === id || w.parentIds?.includes(id);
-          if (!isChildNote) return w;
+          if (!childIds.has(w.id)) return w;
 
           if (shouldStack) {
             const relX = (w.x ?? 80) - parentX;
@@ -794,7 +827,12 @@ export const useWindows = create<WindowsStore>((set) => ({
 
       const rootWin = findRootWindow(id, state.windows);
       const parentId = target.parentId ?? target.parentIds?.[0];
-      const parentWin = parentId ? state.windows.find((w) => w.id === parentId) : undefined;
+      let parentWin = parentId ? state.windows.find((w) => w.id === parentId) : undefined;
+      if (!parentWin) {
+        parentWin = state.windows.find(
+          (w) => w.contentType !== "sticky" && (w.parentId === id || w.parentIds?.includes(id))
+        );
+      }
       const refWin = rootWin ?? parentWin;
 
       const px = refWin?.x ?? target.x ?? 80;
@@ -845,7 +883,12 @@ export const useWindows = create<WindowsStore>((set) => ({
       if (target.stacked) {
         const rootWin = findRootWindow(id, state.windows);
         const parentId = target.parentId ?? target.parentIds?.[0];
-        const parentWin = parentId ? state.windows.find((w) => w.id === parentId) : undefined;
+        let parentWin = parentId ? state.windows.find((w) => w.id === parentId) : undefined;
+        if (!parentWin) {
+          parentWin = state.windows.find(
+            (w) => w.contentType !== "sticky" && (w.parentId === id || w.parentIds?.includes(id))
+          );
+        }
         const refWin = rootWin ?? parentWin;
 
         const px = refWin?.x ?? target.x ?? 80;
@@ -888,12 +931,23 @@ export const useWindows = create<WindowsStore>((set) => ({
         };
       } else {
         const parentId = target.parentId ?? target.parentIds?.[0];
-        const parentWin = parentId ? state.windows.find((w) => w.id === parentId) : undefined;
+        let parentWin = parentId ? state.windows.find((w) => w.id === parentId) : undefined;
+        if (!parentWin) {
+          parentWin = state.windows.find(
+            (w) => w.contentType !== "sticky" && (w.parentId === id || w.parentIds?.includes(id))
+          );
+        }
 
         if (!parentWin) {
           return {
             windows: state.windows.map((w) => (w.id === id ? { ...w, stacked: true } : w)),
           };
+        }
+
+        // Group Boundary Lock: Block single note from stacking under an external parent window outside its group
+        const childGroup = state.groups.find((g) => g.memberIds.includes(target.id));
+        if (childGroup && !childGroup.memberIds.includes(parentWin.id)) {
+          return state;
         }
 
         const parentX = parentWin.x ?? 80;

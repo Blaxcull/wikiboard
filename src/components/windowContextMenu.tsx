@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useWindows } from "../store/windows";
+import { useWindows, getConnectedChildNotes } from "../store/windows";
 import { deleteScroll } from "../utils/scrollMemory";
 import { evictClosedWindowArticles } from "../utils/articleCache";
 import { stackWindowWithAnimation, stackSingleNoteWithAnimation } from "../utils/stackAnimation";
@@ -68,14 +68,13 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
   }, [pos, onClose]);
 
   const windows = useWindows((s) => s.windows);
+  const groups = useWindows((s) => s.groups);
   const targetWin = windows.find((w) => w.id === pos?.windowId);
   const isAlwaysOnTop = !!targetWin?.alwaysOnTop;
   const isSticky = targetWin?.contentType === "sticky";
   const isImage = !!(targetWin?.directImageUrl || targetWin?.title?.startsWith("File:"));
 
-  const childNotes = windows.filter(
-    (w) => (w.parentId === pos?.windowId || w.parentIds?.includes(pos?.windowId ?? ""))
-  );
+  const childNotes = pos?.windowId ? getConnectedChildNotes(pos.windowId, windows, groups) : [];
   const hasUnstackedNotes = childNotes.some((w) => !w.stacked);
 
   let stackLabel = "Stack notes";

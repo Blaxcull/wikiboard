@@ -8,7 +8,7 @@ import PdfViewer from './components/pdfViewer'
 import ImageViewer from './components/imageViewer'
 import StickyNote from './components/stickyNote'
 import WindowContextMenu, { type ContextMenuPosition } from './components/windowContextMenu'
-import { useWindows, type WindowData, nextCascadeOffset } from './store/windows'
+import { useWindows, getConnectedChildNotes, type WindowData, nextCascadeOffset } from './store/windows'
 import { deleteScroll } from './utils/scrollMemory'
 import { evictClosedWindowArticles } from './utils/articleCache'
 import { getCamera, subscribeCamera, screenToWorld } from './utils/camera'
@@ -334,12 +334,7 @@ const StackedNoteStubs = memo(function StackedNoteStubs({
   const windows = useWindows((s) => s.windows);
 
   const childNotes = useMemo(
-    () =>
-      windows.filter(
-        (w) =>
-          (w.parentId === parentWin.id || w.parentIds?.includes(parentWin.id)) &&
-          w.stacked
-      ),
+    () => getConnectedChildNotes(parentWin.id, windows).filter((w) => w.stacked),
     [windows, parentWin.id]
   );
 
@@ -907,11 +902,8 @@ const StackedNotesDrawer = memo(function StackedNotesDrawer({
 
   const childNotes = useMemo(
     () =>
-      windows.filter(
-        (w) =>
-          (w.parentId === parentWin.id || w.parentIds?.includes(parentWin.id)) &&
-          w.contentType === "sticky" &&
-          w.stacked
+      getConnectedChildNotes(parentWin.id, windows).filter(
+        (w) => w.contentType === "sticky" && w.stacked
       ),
     [windows, parentWin.id]
   );
@@ -1102,40 +1094,46 @@ useEffect(() => {
 
     if (wasStacked && !w.stacked && w.contentType === "sticky") {
       const el = document.getElementById(`win-${w.id}`);
-      const parentId = w.parentId ?? w.parentIds?.[0];
-      const parentEl = parentId ? document.getElementById(`win-${parentId}`) : null;
+      let parentWin = (w.parentId || w.parentIds?.[0])
+        ? useWindows.getState().windows.find((win) => win.id === (w.parentId || w.parentIds?.[0]))
+        : undefined;
 
-      if (el && parentEl) {
-        const parentWin = useWindows.getState().windows.find((win) => win.id === parentId);
+      if (!parentWin) {
+        parentWin = useWindows.getState().windows.find(
+          (win) => win.contentType !== "sticky" && (win.parentId === w.id || win.parentIds?.includes(w.id))
+        );
+      }
+
+      const parentEl = parentWin ? document.getElementById(`win-${parentWin.id}`) : null;
+
+      if (el && parentEl && parentWin) {
         const noteRect = el.getBoundingClientRect();
         const parentRect = parentEl.getBoundingClientRect();
 
         let fromX = (parentRect.left + parentRect.width / 2) - (noteRect.left + noteRect.width / 2);
         let fromY = (parentRect.top + parentRect.height / 2) - (noteRect.top + noteRect.height / 2);
 
-        if (parentWin && parentId) {
-          const allChildNotes = useWindows.getState().windows.filter(
-            (win) =>
-              (win.parentId === parentId || win.parentIds?.includes(parentId)) &&
-              win.contentType === "sticky"
-          );
-          const side = determineNoteSide(w, parentWin);
-          const sideNotes = allChildNotes.filter((win) => determineNoteSide(win, parentWin) === side);
-          const index = Math.max(0, sideNotes.findIndex((win) => win.id === w.id));
-          const total = sideNotes.length || 1;
-          const { stubW, stubH } = getStubDimensions(w);
+        const allChildNotes = getConnectedChildNotes(
+          parentWin.id,
+          useWindows.getState().windows,
+          useWindows.getState().groups
+        ).filter((win) => win.contentType === "sticky");
 
-          const offset = getStubTargetOffset(side, index, total, stubW, stubH, parentRect, noteRect);
-          fromX = offset.toX;
-          fromY = offset.toY;
+        const side = determineNoteSide(w, parentWin);
+        const sideNotes = allChildNotes.filter((win) => determineNoteSide(win, parentWin) === side);
+        const index = Math.max(0, sideNotes.findIndex((win) => win.id === w.id));
+        const total = sideNotes.length || 1;
+        const { stubW, stubH } = getStubDimensions(w);
 
-          const parentZ = parentWin.zIndex ?? 1;
-          el.style.zIndex = `${parentZ - 1}`;
-        }
+        const offset = getStubTargetOffset(side, index, total, stubW, stubH, parentRect, noteRect);
+        fromX = offset.toX;
+        fromY = offset.toY;
+
+        const parentZ = parentWin.zIndex ?? 1;
+        el.style.zIndex = `${parentZ - 1}`;
 
         markNoteUnstacking(w.id);
 
-        const { stubW, stubH } = getStubDimensions(w);
         const scaleX = stubW / Math.max(noteRect.width, 1);
         const scaleY = stubH / Math.max(noteRect.height, 1);
 

@@ -1,4 +1,4 @@
-import { useWindows } from "../store/windows";
+import { useWindows, getConnectedChildNotes } from "../store/windows";
 import { determineNoteSide } from "../App";
 
 const stackingWinIds = new Set<string>();
@@ -94,9 +94,7 @@ export function stackWindowWithAnimation(windowId: string) {
   const parentWin = state.windows.find((w) => w.id === windowId);
   if (!parentWin) return;
 
-  const childNotes = state.windows.filter(
-    (w) => w.parentId === windowId || w.parentIds?.includes(windowId)
-  );
+  const childNotes = getConnectedChildNotes(windowId, state.windows, state.groups);
 
   if (childNotes.length === 0) return;
 
@@ -190,8 +188,14 @@ export function stackSingleNoteWithAnimation(noteId: string) {
     return;
   }
 
-  const parentId = note.parentId ?? note.parentIds?.[0];
-  const parentWin = parentId ? state.windows.find((w) => w.id === parentId) : null;
+  let parentId = note.parentId ?? note.parentIds?.[0];
+  let parentWin = parentId ? state.windows.find((w) => w.id === parentId) : null;
+  if (!parentWin) {
+    parentWin = state.windows.find(
+      (w) => w.contentType !== "sticky" && (w.parentId === noteId || w.parentIds?.includes(noteId))
+    ) || null;
+  }
+
   if (!parentWin) {
     state.toggleStackSingleNote(noteId);
     return;

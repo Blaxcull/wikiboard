@@ -216,6 +216,8 @@ The system is designed for LRU-based resource management (not fully wired up yet
 | `src/utils/wiki.ts` | Wikipedia API layer: `extractTitle`, `fetchArticleSummary`, `fetchArticle`, `cleanArticleHtml`, `escapeHtml`. Exports `WIKI_STYLESHEET_URL`. |
 | `src/utils/articleCache.ts` | In-memory article cache: `getCachedArticle`, `setCachedArticle`, `evictClosedWindowArticles`, `prefetchArticles`. |
 | `src/utils/scrollMemory.ts` | Per-window scroll positions: `getScroll`, `setScroll`, `deleteScroll`. |
+| `src/utils/vectorEngine.ts` | Bridge layer for vector search: dispatches background window indexing & search queries to `vectorWorker.ts`. |
+| `src/workers/vectorWorker.ts` | Web Worker thread running `@xenova/transformers` (`all-MiniLM-L6-v2`) ONNX model & BM25 hybrid search. |
 | `src/utils/window/drag.ts` | Window drag via titlebar mousedown. Exports `isDraggingWindow` flag. |
 | `src/utils/window/resize.ts` | 8-directional window resize. Exports `isResizingWindow` flag. |
 | `src/utils/window/onEdge.ts` | Cursor changes near window edges (5px margin). |

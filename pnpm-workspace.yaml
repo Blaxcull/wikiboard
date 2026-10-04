@@ -1,2 +1,4 @@
 allowBuilds:
   canvas: true
+  protobufjs: true
+  sharp: true

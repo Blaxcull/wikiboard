@@ -1,8 +1,10 @@
 import { memo, useEffect, useRef } from "react";
-import { escapeHtml, extractTitle, isPdfUrl, isWaybackUrl, isOriginalRefLabel, WIKI_STYLESHEET_URL } from "../utils/wiki";
+import { escapeHtml, extractTitle, isPdfUrl, isWaybackUrl, isOriginalRefLabel, WIKI_STYLESHEET_URL, extractChunksFromHtml, extractFirstParagraph } from "../utils/wiki";
 import { prefetchArticles } from "../utils/articleCache";
 import { prefetchPdf } from "../utils/pdfCache";
 import { useWindows } from "../store/windows";
+import { registerWindowVectorData } from "../utils/vectorEngine";
+import { setScroll } from "../utils/scrollMemory";
 import ArticleSelectionToolbox from "./articleSelectionToolbox";
 
 // Fetch Wikipedia CSS once, share via adoptedStyleSheets across all shadow DOMs
@@ -57,8 +59,7 @@ const SHADOW_STYLES = `
   :host {
     display: block;
     height: 100%;
-    overflow: auto;
-    scrollbar-width: none;
+    overflow: visible;
     font-size: 18px;
     color: #202122;
     user-select: inherit;
@@ -190,11 +191,39 @@ const SHADOW_STYLES = `
 
   /* Article Highlights */
   mark.wiki-highlight {
-    background-color: rgba(254, 240, 138, 0.85);
-    color: inherit;
+    background-color: #fef08a !important;
+    color: #1c1917 !important;
     border-radius: 3px;
-    padding: 0 2px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    padding: 2px 4px;
+    box-shadow: 0 1px 4px rgba(234, 179, 8, 0.4);
+  }
+
+  @keyframes wikiHighlightPulse {
+    0% {
+      background-color: #fef08a !important;
+      box-shadow: 0 0 24px rgba(234, 179, 8, 0.9) !important;
+      outline: 3px solid #ca8a04 !important;
+    }
+    50% {
+      background-color: #fde047 !important;
+      box-shadow: 0 0 14px rgba(234, 179, 8, 0.7) !important;
+      outline: 2px solid #eab308 !important;
+    }
+    100% {
+      background-color: #fef9c3 !important;
+      box-shadow: 0 0 8px rgba(234, 179, 8, 0.4) !important;
+      outline: 2px solid #facc15 !important;
+    }
+  }
+
+  .wiki-highlight-pulse {
+    animation: wikiHighlightPulse 6s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+    border-radius: 6px !important;
+    border-left: 6px solid #ca8a04 !important;
+    padding: 6px 12px !important;
+    background-color: #fef08a !important;
+    color: #1c1917 !important;
+    transition: all 0.3s ease !important;
   }
 `;
 
@@ -234,6 +263,14 @@ const StaticPreview = memo(function StaticPreview({ winId, title, html, scrollTo
         <div class="mw-parser-output">${html}</div>
       </div>
     `;
+
+    // Register paragraph chunks & summary to Web Worker as soon as article loads
+    if (winId) {
+      const chunks = extractChunksFromHtml(html);
+      const cleanTitle = title.replace(/_/g, " ");
+      const summaryText = extractFirstParagraph(html) || cleanTitle;
+      registerWindowVectorData(winId, cleanTitle, summaryText, chunks);
+    }
 
     // Restore opened-link highlights for currently open child windows spawned by this parent window
     if (winId) {
@@ -413,8 +450,59 @@ const StaticPreview = memo(function StaticPreview({ winId, title, html, scrollTo
       });
     };
 
+    const handleVectorHighlight = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!winId || detail?.windowId !== winId) return;
+
+      let el: HTMLElement | null = null;
+      if (detail.chunkId) {
+        el = root.querySelector(`[data-chunk-id="${detail.chunkId}"]`) as HTMLElement | null;
+      }
+
+      // Fallback: search by snippet text if exact chunkId element is not found
+      if (!el && detail?.snippet) {
+        const snippetLower = (detail.snippet as string).toLowerCase().trim().slice(0, 30);
+        if (snippetLower) {
+          const candidates = Array.from(root.querySelectorAll("p, li, h1, h2, h3, h4, blockquote"));
+          for (const cand of candidates) {
+            if (cand.textContent?.toLowerCase().includes(snippetLower)) {
+              el = cand as HTMLElement;
+              break;
+            }
+          }
+        }
+      }
+
+      if (el && host) {
+        markUserInteraction();
+
+        // Calculate exact vertical offset of target paragraph relative to host container
+        let contentTop = 0;
+        let curr: HTMLElement | null = el;
+        while (curr && curr !== host) {
+          contentTop += curr.offsetTop;
+          const parent = curr.offsetParent as HTMLElement | null;
+          if (!parent || parent === host) break;
+          curr = parent;
+        }
+
+        const hostHeight = host.clientHeight || 500;
+        const elHeight = el.offsetHeight || 30;
+        const targetScrollTop = Math.max(0, Math.round(contentTop - hostHeight / 2 + elHeight / 2));
+
+        host.scrollTo({ top: targetScrollTop, behavior: "smooth" });
+        setScroll(winId, 0, targetScrollTop);
+        callbacksRef.current.onScrollChange?.(targetScrollTop);
+
+        root.querySelectorAll(".wiki-highlight-pulse").forEach((m) => m.classList.remove("wiki-highlight-pulse"));
+        el.classList.add("wiki-highlight-pulse");
+        setTimeout(() => el?.classList.remove("wiki-highlight-pulse"), 7000);
+      }
+    };
+
     window.addEventListener("wikiboard:link-closed", handleLinkClosed);
     window.addEventListener("wikiboard:note-closed", handleNoteClosed);
+    window.addEventListener("wikiboard:vector-highlight", handleVectorHighlight);
 
     root.addEventListener("click", handleClick);
     root.addEventListener("mouseover", handleHover);
@@ -451,6 +539,7 @@ const StaticPreview = memo(function StaticPreview({ winId, title, html, scrollTo
     return () => {
       window.removeEventListener("wikiboard:link-closed", handleLinkClosed);
       window.removeEventListener("wikiboard:note-closed", handleNoteClosed);
+      window.removeEventListener("wikiboard:vector-highlight", handleVectorHighlight);
       cancelAnimationFrame(raf);
       if (resizeObserver) resizeObserver.disconnect();
       images.forEach((img) => img.removeEventListener("load", onImgLoad));

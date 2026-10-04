@@ -131,6 +131,7 @@ export function cleanArticleHtml(html: string): string {
 
   doc.querySelectorAll("*").forEach((el) => {
     for (const attr of Array.from(el.attributes)) {
+      if (attr.name === "data-chunk-id") continue;
       // Preserve typeof on <figure> — Wikipedia's CSS uses figure[typeof~='mw:File/Thumb']
       if (attr.name === "typeof" && el.tagName === "FIGURE") continue;
       if (
@@ -143,6 +144,14 @@ export function cleanArticleHtml(html: string): string {
       ) {
         el.removeAttribute(attr.name);
       }
+    }
+  });
+
+  let chunkCounter = 0;
+  doc.querySelectorAll("p, li, h1, h2, h3, h4, blockquote").forEach((el) => {
+    const text = el.textContent?.trim();
+    if (text && text.length > 20) {
+      el.setAttribute("data-chunk-id", `chunk-${chunkCounter++}`);
     }
   });
 
@@ -240,4 +249,31 @@ export function escapeHtml(s: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+export function extractChunksFromHtml(html: string): Array<{ chunkId: string; text: string }> {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  let chunkNodes = doc.querySelectorAll("[data-chunk-id]");
+
+  // Fallback: If HTML wasn't tagged with data-chunk-id yet, tag it now
+  if (chunkNodes.length === 0) {
+    let chunkCounter = 0;
+    doc.querySelectorAll("p, li, h1, h2, h3, h4, blockquote").forEach((el) => {
+      const text = el.textContent?.trim();
+      if (text && text.length > 20) {
+        el.setAttribute("data-chunk-id", `chunk-${chunkCounter++}`);
+      }
+    });
+    chunkNodes = doc.querySelectorAll("[data-chunk-id]");
+  }
+
+  const chunks: Array<{ chunkId: string; text: string }> = [];
+  chunkNodes.forEach((el) => {
+    const chunkId = el.getAttribute("data-chunk-id");
+    const text = el.textContent?.trim();
+    if (chunkId && text) {
+      chunks.push({ chunkId, text });
+    }
+  });
+  return chunks;
 }

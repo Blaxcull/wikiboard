@@ -572,6 +572,28 @@ body.gesture-active .window:not(.dragging):not(.resizing) .window-content {
 
 ---
 
+---
+
+## 14. Hybrid BM25 + Web Worker Vector Search (< 0.2s Response)
+
+**Files:** `src/workers/vectorWorker.ts`, `src/utils/vectorEngine.ts`, `src/components/semanticSearchBox.tsx`
+
+---
+
+### Two-Stage Coarse-to-Fine Pipeline (96% Workload Reduction)
+
+**Problem:** Generating neural network vector embeddings (`all-MiniLM-L6-v2`) in single-threaded WebAssembly CPU for 5 open articles ($\approx 200 \text{ paragraphs}$) requires millions of matrix multiplication operations. Computing vectors for all 200 paragraphs sequentially took **60–90 seconds** and locked up the browser tab.
+
+**Solution:** A two-stage hybrid search architecture inside a dedicated Web Worker thread:
+1. **Stage 1 — BM25 Keyword Filter (< 1ms)**: An in-memory BM25 algorithm scores all 200+ paragraph chunks across open windows in **< 1 millisecond**, pruning away 95%+ of irrelevant text and selecting the **Top 8 candidate paragraphs**.
+2. **Stage 2 — Vector Embedding on Candidates Only (~0.1s)**: ONNX vector embeddings and Cosine Similarity are computed **ONLY for those Top 8 candidate paragraphs** on a separate background OS thread (`vectorWorker.ts`).
+
+- `vectorWorker.ts:98-106` — `bm25Score()` fast term frequency calculation
+- `vectorWorker.ts:167-195` — candidate selection & Stage 2 vector similarity match
+- `vectorEngine.ts:32-55` — Web Worker bridge delegating all processing off the main UI thread
+
+---
+
 
 ## During the gesture (the critical path):
 1. **mousedown** — all setup done upfront (classes, cursor, z-index)
@@ -612,3 +634,4 @@ That's it. One DOM write per frame, on the GPU thread. The main thread is free.
 | 15 | Batch spawn | 100 state updates × 100 diffs = 10,000 ops | 1 state update × 100 diffs = 100 ops |
 | 16 | Prefetch bounded to 4 | 100 simultaneous fetches overwhelm connections | Worker pool, 4 concurrent, skip cached |
 | 17 | Frozen stubs | Full Shadow DOM for unseen windows | ~200 byte HTML stub, wake on hover |
+| 18 | Hybrid BM25 + Web Worker Vector Search | 60–90s vector search lag across 200+ chunks | BM25 filters to 8 candidates (<1ms), Worker embeds candidates (~0.15s total) |

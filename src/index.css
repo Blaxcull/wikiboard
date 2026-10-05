@@ -535,3 +535,43 @@
   flex-direction: column;
   overflow: visible;
 }
+
+
+/* ── Compressed Group Card Styling ───────────────────────── */
+
+.window.is-compressed {
+  overflow: hidden !important;
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
+.window.is-compressed .titlebar {
+  border-radius: 12px 12px 0 0 !important;
+  user-select: none !important;
+}
+
+.window.is-compressed .titlebar > div:first-child {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.window.is-compressed .window-content {
+  overflow: hidden !important;
+  pointer-events: none !important;
+  user-select: none !important;
+  scrollbar-width: none !important;
+}
+
+.window.is-compressed .window-content::-webkit-scrollbar {
+  display: none !important;
+}
+
+.window.is-compressed .connection-point {
+  display: none !important;
+}
+
+.window.is-compressed.sticky-window {
+  overflow: hidden !important;
+  font-size: 11px !important;
+}

@@ -542,7 +542,7 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
   useEffect(() => {
     let rafId = 0;
     const isCompressed = !!group.compressed;
-    const PAD = isCompressed ? 20 : 44;
+    const PAD = isCompressed ? 24 : 44;
 
     function updateLiveGroupBounds() {
       rafId = 0;
@@ -563,8 +563,8 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
         let wh = w.height ?? 550;
 
         if (isCompressed) {
-          ww = w.contentType === "sticky" ? (w.isExcerptNote ? 140 : 180) : 200;
-          wh = w.contentType === "sticky" ? (w.isExcerptNote ? 54 : 120) : 140;
+          ww = w.contentType === "sticky" ? (w.isExcerptNote ? 110 : 150) : 220;
+          wh = w.contentType === "sticky" ? (w.isExcerptNote ? 48 : 95) : 140;
         } else {
           const el = document.getElementById(`win-${w.id}`);
           const b = readLiveWindowWorldBounds(el, w);
@@ -616,7 +616,7 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
   if (memberWins.length === 0) return null;
 
   const isCompressed = !!group.compressed;
-  const PAD = isCompressed ? 20 : 44;
+  const PAD = isCompressed ? 24 : 44;
 
   let minX = Infinity;
   let minY = Infinity;
@@ -630,8 +630,8 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
     let wh = w.height ?? 550;
 
     if (isCompressed) {
-      ww = w.contentType === "sticky" ? (w.isExcerptNote ? 140 : 180) : 200;
-      wh = w.contentType === "sticky" ? (w.isExcerptNote ? 54 : 120) : 140;
+      ww = w.contentType === "sticky" ? (w.isExcerptNote ? 110 : 150) : 220;
+      wh = w.contentType === "sticky" ? (w.isExcerptNote ? 48 : 95) : 140;
     } else {
       const b = getWindowWorldBounds(w);
       ww = b.right - b.left;

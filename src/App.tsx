@@ -1337,8 +1337,8 @@ useEffect(() => {
 
   if (w.contentType === "sticky") {
     const isExcerpt = w.isExcerptNote;
-    const itemW = isCompressedGroupMember ? (isExcerpt ? 140 : 180) : (w.width ?? 260);
-    const itemH = isCompressedGroupMember ? (isExcerpt ? 54 : 120) : (w.height ?? (isExcerpt ? 64 : 200));
+    const itemW = isCompressedGroupMember ? (isExcerpt ? 110 : 150) : (w.width ?? 260);
+    const itemH = isCompressedGroupMember ? (isExcerpt ? 48 : 95) : (w.height ?? (isExcerpt ? 64 : 200));
 
     return (
       <div
@@ -1360,9 +1360,9 @@ useEffect(() => {
           }
         }}
       >
-        <StackedNoteStubs parentWin={w} />
+        {!isCompressedGroupMember && <StackedNoteStubs parentWin={w} />}
         <div
-          className={`window sticky-window ${isExcerpt ? "excerpt-note-window" : ""} ${w.active ? "active" : "inactive"} w-full h-full relative`}
+          className={`window sticky-window ${isExcerpt ? "excerpt-note-window" : ""} ${w.active ? "active" : "inactive"} ${isCompressedGroupMember ? "is-compressed" : ""} w-full h-full relative`}
           style={{
             ...(isExcerpt
               ? {
@@ -1415,7 +1415,7 @@ useEffect(() => {
   }
 
   if (w.contentType === "pdf") {
-    const itemW = isCompressedGroupMember ? 200 : (w.width ?? 620);
+    const itemW = isCompressedGroupMember ? 220 : (w.width ?? 620);
     const itemH = isCompressedGroupMember ? 140 : (w.height ?? 945);
 
     return (
@@ -1445,7 +1445,7 @@ useEffect(() => {
           w.pdfMaximized ? "maximized" : ""
         } ${
           w.pdfMaximized && !w.pdfAnimating ? "maximized-done" : ""
-        } ${w.active ? "active" : "inactive"} ${w.pdfAnimating ? "no-transition" : ""}`}
+        } ${w.active ? "active" : "inactive"} ${isCompressedGroupMember ? "is-compressed" : ""} ${w.pdfAnimating ? "no-transition" : ""}`}
         style={zIndexStyle}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -1460,7 +1460,7 @@ useEffect(() => {
           Resize(e, (rect) => handlePositionChange(rect));
         }}
       >
-        <StackedNoteStubs parentWin={w} />
+        {!isCompressedGroupMember && <StackedNoteStubs parentWin={w} />}
         <div className="pdf-window-animation-layer">
           <PdfViewer win={w} onAddSticky={handleAddSticky} />
         </div>
@@ -1497,13 +1497,13 @@ useEffect(() => {
   }
 
   if (w.directImageUrl || w.title.startsWith("File:")) {
-    const itemW = isCompressedGroupMember ? 200 : (w.width ?? 250);
+    const itemW = isCompressedGroupMember ? 220 : (w.width ?? 250);
     const itemH = isCompressedGroupMember ? 140 : (w.height ?? 190);
 
     return (
       <div
         id={`win-${w.id}`}
-        className={`window image-window ${w.active ? "active" : "inactive"}`}
+        className={`window image-window ${w.active ? "active" : "inactive"} ${isCompressedGroupMember ? "is-compressed" : ""}`}
         style={{
           ...zIndexStyle,
           left: `${w.x ?? 80}px`,
@@ -1522,7 +1522,7 @@ useEffect(() => {
           Resize(e, (rect) => handlePositionChange(rect));
         }}
       >
-        <StackedNoteStubs parentWin={w} />
+        {!isCompressedGroupMember && <StackedNoteStubs parentWin={w} />}
         <ImageViewer
           win={w}
           onClose={handleClose}
@@ -1561,15 +1561,15 @@ useEffect(() => {
     );
   }
 
-  const itemW = isCompressedGroupMember ? 200 : w.width;
+  const itemW = isCompressedGroupMember ? 220 : w.width;
   const itemH = isCompressedGroupMember ? 140 : w.height;
 
   return (
     <Window
       id={`win-${w.id}`}
-      className={w.active ? "active" : "inactive"}
+      className={`${w.active ? "active" : "inactive"} ${isCompressedGroupMember ? "is-compressed" : ""}`}
       style={zIndexStyle}
-      stubs={<StackedNoteStubs parentWin={w} />}
+      stubs={isCompressedGroupMember ? null : <StackedNoteStubs parentWin={w} />}
       titleBarContent={<span>{w.title}</span>}
       x={w.x}
       y={w.y}
@@ -1586,7 +1586,7 @@ useEffect(() => {
       }}
     >
       {w.url ? <ArticleView win={w} /> : <LinkEditor win={w} />}
-      <StackedNotesDrawer parentWin={w} />
+      {!isCompressedGroupMember && <StackedNotesDrawer parentWin={w} />}
     </Window>
   );
 })

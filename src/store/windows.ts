@@ -1075,8 +1075,8 @@ export const useWindows = create<WindowsStore>((set) => ({
           return (a.zIndex ?? 0) - (b.zIndex ?? 0);
         });
 
-        const DECK_OFFSET_X = 8;
-        const DECK_OFFSET_Y = 14;
+        const DECK_OFFSET_X = 14;
+        const DECK_OFFSET_Y = 34;
 
         const posMap = new Map<string, { x: number; y: number; uncompressedX: number; uncompressedY: number; zIndex: number }>();
         sorted.forEach((w, i) => {

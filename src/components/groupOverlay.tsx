@@ -65,6 +65,7 @@ const GroupStackedStubItem = memo(function GroupStackedStubItem({
   colorBg,
   isImage,
   imgUrl,
+  side,
   onUnstack,
 }: {
   note: WindowData;
@@ -74,6 +75,7 @@ const GroupStackedStubItem = memo(function GroupStackedStubItem({
   colorBg: string;
   isImage: boolean;
   imgUrl?: string;
+  side: "RIGHT" | "LEFT" | "TOP" | "BOTTOM";
   onUnstack: () => void;
 }) {
   const elRef = useRef<HTMLDivElement | null>(null);
@@ -113,11 +115,20 @@ const GroupStackedStubItem = memo(function GroupStackedStubItem({
     onUnstack();
   };
 
+  const hoverClass =
+    side === "RIGHT"
+      ? "hover:translate-x-[4px]"
+      : side === "LEFT"
+      ? "hover:-translate-x-[4px]"
+      : side === "TOP"
+      ? "hover:-translate-y-[4px]"
+      : "hover:translate-y-[4px]";
+
   return (
     <div
       ref={elRef}
       id={`stub-${note.id}`}
-      className="absolute pointer-events-auto cursor-pointer transition-transform duration-150 hover:scale-[1.02] rounded-[10px] border border-black/20 shadow-md overflow-hidden"
+      className={`absolute pointer-events-auto cursor-pointer transition-transform duration-150 ${hoverClass} rounded-[10px] border border-black/20 shadow-md overflow-hidden`}
       style={{
         width: `${stubW}px`,
         height: `${stubH}px`,
@@ -546,8 +557,8 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
       let maxY = -Infinity;
 
       for (const w of memberWins) {
-        const wx = w.x ?? 80;
-        const wy = w.y ?? 80;
+        let wx = w.x ?? 80;
+        let wy = w.y ?? 80;
         let ww = w.width ?? 750;
         let wh = w.height ?? 550;
 
@@ -557,6 +568,8 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
         } else {
           const el = document.getElementById(`win-${w.id}`);
           const b = readLiveWindowWorldBounds(el, w);
+          wx = b.left;
+          wy = b.top;
           ww = b.right - b.left;
           wh = b.bottom - b.top;
         }
@@ -585,10 +598,18 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
       }
     }
 
+    function onMouseDown() {
+      if (!isDraggingGroupRef.current && !rafId) {
+        rafId = requestAnimationFrame(updateLiveGroupBounds);
+      }
+    }
+
     window.addEventListener("mousemove", onMouseMove, true);
+    window.addEventListener("mousedown", onMouseDown, true);
     return () => {
       if (rafId) cancelAnimationFrame(rafId);
       window.removeEventListener("mousemove", onMouseMove, true);
+      window.removeEventListener("mousedown", onMouseDown, true);
     };
   }, [group.id, group.compressed, memberWins]);
 
@@ -724,25 +745,7 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
       (w) => group.memberIds.includes(w.id) && !w.stacked
     );
 
-    const childNotes: WindowData[] = [];
-    if (!group.compressed) {
-      for (const id of group.memberIds) {
-        const descs = getDescendantNotes(id, state.windows);
-        for (const d of descs) {
-          if (
-            !d.stacked &&
-            !childNotes.some((cn) => cn.id === d.id) &&
-            !group.memberIds.includes(d.id) &&
-            d.parentId !== group.id &&
-            !d.parentIds?.includes(group.id)
-          ) {
-            childNotes.push(d);
-          }
-        }
-      }
-    }
-
-    const allWinsToDrag = [...activeMemberWins, ...childNotes];
+    const allWinsToDrag = activeMemberWins;
 
     const groupTargets = allWinsToDrag
       .map((w) => {
@@ -865,6 +868,7 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
 
     const groupDirectNotes = state.windows.filter(
       (w) =>
+        w.contentType === "sticky" &&
         !group.memberIds.includes(w.id) &&
         (w.parentId === group.id || w.parentIds?.includes(group.id))
     );
@@ -972,6 +976,7 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
 
   const groupDirectNotes = windows.filter(
     (w) =>
+      w.contentType === "sticky" &&
       !group.memberIds.includes(w.id) &&
       (w.parentId === group.id || w.parentIds?.includes(group.id))
   );
@@ -980,7 +985,7 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
     groupDirectNotes.length > 0 ? groupDirectNotes.every((w) => w.stacked) : false;
 
   const stackedGroupNotes = windows.filter(
-    (w) => w.stacked && (w.parentId === group.id || w.parentIds?.includes(group.id))
+    (w) => w.contentType === "sticky" && w.stacked && (w.parentId === group.id || w.parentIds?.includes(group.id))
   );
 
   const borderColor = group.color || "#333333";
@@ -1048,21 +1053,21 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
                         left: `calc(100% - ${stubW - 22}px)`,
                         top: `calc(50% + ${spreadY - stubH / 2}px)`,
                         zIndex,
-                        clipPath: "inset(0 0 0 calc(100% - 22px))",
+                        clipPath: "inset(0 0 0 calc(100% - 70px))",
                       };
                     } else if (side === "LEFT") {
                       posStyle = {
                         left: `calc(-22px)`,
                         top: `calc(50% + ${spreadY - stubH / 2}px)`,
                         zIndex,
-                        clipPath: "inset(0 calc(100% - 22px) 0 0)",
+                        clipPath: "inset(0 calc(100% - 70px) 0 0)",
                       };
                     } else if (side === "TOP") {
                       posStyle = {
                         top: `calc(-${peek}px)`,
                         left: `calc(50% + ${spreadX - stubW / 2}px)`,
                         zIndex,
-                        clipPath: `inset(0 0 calc(100% - ${peek}px) 0)`,
+                        clipPath: `inset(0 0 calc(100% - ${peek + 50}px) 0)`,
                       };
                     } else {
                       // BOTTOM
@@ -1071,7 +1076,7 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
                         top: `calc(100% - ${stubH - botPeek}px)`,
                         left: `calc(50% + ${spreadX - stubW / 2}px)`,
                         zIndex,
-                        clipPath: `inset(calc(100% - ${botPeek}px) 0 0 0)`,
+                        clipPath: `inset(calc(100% - ${botPeek + 50}px) 0 0 0)`,
                       };
                     }
 
@@ -1088,6 +1093,7 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
                         colorBg={colorBg}
                         isImage={isImage}
                         imgUrl={note.directImageUrl}
+                        side={side}
                         onUnstack={() => useWindows.getState().unstackNote(note.id)}
                       />
                     );

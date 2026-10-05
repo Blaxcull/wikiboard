@@ -268,7 +268,7 @@ function getCardOffsetStyle(
       left: `calc(100% - ${w - 22}px)`,
       top: `calc(50% + ${spreadY - h / 2}px)`,
       zIndex,
-      clipPath: "inset(0 0 0 calc(100% - 22px))",
+      clipPath: "inset(0 0 0 calc(100% - 70px))",
     };
   }
 
@@ -277,7 +277,7 @@ function getCardOffsetStyle(
       left: `calc(-22px)`,
       top: `calc(50% + ${spreadY - h / 2}px)`,
       zIndex,
-      clipPath: "inset(0 calc(100% - 22px) 0 0)",
+      clipPath: "inset(0 calc(100% - 70px) 0 0)",
     };
   }
 
@@ -286,7 +286,7 @@ function getCardOffsetStyle(
       top: `calc(-${peek}px)`,
       left: `calc(50% + ${spreadX - w / 2}px)`,
       zIndex,
-      clipPath: `inset(0 0 calc(100% - ${peek}px) 0)`,
+      clipPath: `inset(0 0 calc(100% - ${peek + 50}px) 0)`,
     };
   }
 
@@ -296,7 +296,7 @@ function getCardOffsetStyle(
     top: `calc(100% - ${h - botPeek}px)`,
     left: `calc(50% + ${spreadX - w / 2}px)`,
     zIndex,
-    clipPath: `inset(calc(100% - ${botPeek}px) 0 0 0)`,
+    clipPath: `inset(calc(100% - ${botPeek + 50}px) 0 0 0)`,
   };
 }
 
@@ -341,6 +341,7 @@ const StackedNoteStubItem = memo(function StackedNoteStubItem({
   colorBg,
   isImage,
   imgUrl,
+  side,
   onUnstack,
 }: {
   note: WindowData;
@@ -350,6 +351,7 @@ const StackedNoteStubItem = memo(function StackedNoteStubItem({
   colorBg: string;
   isImage: boolean;
   imgUrl?: string;
+  side: "RIGHT" | "LEFT" | "TOP" | "BOTTOM";
   onUnstack: () => void;
 }) {
   const elRef = useRef<HTMLDivElement | null>(null);
@@ -389,11 +391,20 @@ const StackedNoteStubItem = memo(function StackedNoteStubItem({
     onUnstack();
   };
 
+  const hoverClass =
+    side === "RIGHT"
+      ? "hover:translate-x-[4px]"
+      : side === "LEFT"
+      ? "hover:-translate-x-[4px]"
+      : side === "TOP"
+      ? "hover:-translate-y-[4px]"
+      : "hover:translate-y-[4px]";
+
   return (
     <div
       ref={elRef}
       id={`stub-${note.id}`}
-      className="absolute pointer-events-auto cursor-pointer transition-transform duration-150 hover:scale-[1.02] rounded-[6px] border border-black/20 shadow-md overflow-hidden"
+      className={`absolute pointer-events-auto cursor-pointer transition-transform duration-150 ${hoverClass} rounded-[6px] border border-black/20 shadow-md overflow-hidden`}
       style={{
         width: `${stubW}px`,
         height: `${stubH}px`,
@@ -422,7 +433,10 @@ const StackedNoteStubs = memo(function StackedNoteStubs({
   const windows = useWindows((s) => s.windows);
 
   const childNotes = useMemo(
-    () => getConnectedChildNotes(parentWin.id, windows).filter((w) => w.stacked),
+    () =>
+      getConnectedChildNotes(parentWin.id, windows).filter(
+        (w) => w.stacked && (!w.stackedParentId || w.stackedParentId === parentWin.id)
+      ),
     [windows, parentWin.id]
   );
 
@@ -475,6 +489,7 @@ const StackedNoteStubs = memo(function StackedNoteStubs({
                   colorBg={colorBg}
                   isImage={isImage}
                   imgUrl={note.directImageUrl}
+                  side={side}
                   onUnstack={() => useWindows.getState().unstackNote(note.id)}
                 />
               );

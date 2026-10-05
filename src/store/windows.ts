@@ -45,6 +45,7 @@ export type WindowData = {
   pdfAnimating?: boolean;
   alwaysOnTop?: boolean;
   stacked?: boolean;
+  stackedParentId?: string;
   relX?: number;
   relY?: number;
   zIndex?: number;
@@ -204,7 +205,7 @@ export function findRootWindow(
   const current = windows.find((w) => w.id === id);
   if (!current) return undefined;
 
-  let currParentId = current.parentId ?? current.parentIds?.[0];
+  let currParentId = current.stackedParentId ?? current.parentId ?? current.parentIds?.[0];
   if (!currParentId && current.contentType === "sticky") {
     const revParent = windows.find(
       (w) => w.contentType !== "sticky" && (w.parentId === id || w.parentIds?.includes(id))
@@ -238,11 +239,12 @@ export function getConnectedChildNotes(
   if (!parentWin) return [];
 
   return windows.filter((w) => {
+    if (w.contentType !== "sticky") return false;
+
     const isConnected =
       w.parentId === windowId ||
       w.parentIds?.includes(windowId) ||
       (parentWin.contentType !== "sticky" &&
-        w.contentType === "sticky" &&
         (parentWin.parentId === w.id || parentWin.parentIds?.includes(w.id)));
 
     return isConnected;
@@ -732,10 +734,56 @@ export const useWindows = create<WindowsStore>((set) => ({
         return false;
       };
 
-      if (isAncestor(sourceId, targetId)) return state;
-
       let newWindows = [...state.windows];
       let newGroups = [...state.groups];
+
+      const createsCycle = isAncestor(sourceId, targetId);
+
+      if (createsCycle) {
+        const removeParentRelationship = (childId: string, parentToRemove: string) => {
+          newWindows = newWindows.map((w) => {
+            if (w.id === childId) {
+              const pSet = new Set(getParents(w));
+              pSet.delete(parentToRemove);
+              const newPList = Array.from(pSet);
+              return { ...w, parentIds: newPList, parentId: newPList[0] };
+            }
+            return w;
+          });
+          newGroups = newGroups.map((g) => {
+            if (g.id === childId) {
+              const pSet = new Set(getParents(g));
+              pSet.delete(parentToRemove);
+              const newPList = Array.from(pSet);
+              return { ...g, parentIds: newPList, parentId: newPList[0] };
+            }
+            return g;
+          });
+        };
+
+        const findAndBreakLink = (currId: string, visited = new Set<string>()): boolean => {
+          if (visited.has(currId)) return false;
+          visited.add(currId);
+
+          const win = newWindows.find((w) => w.id === currId);
+          const grp = newGroups.find((g) => g.id === currId);
+          const entity = win || grp;
+          if (!entity) return false;
+
+          const parents = getParents(entity);
+          if (parents.includes(targetId)) {
+            removeParentRelationship(currId, targetId);
+            return true;
+          }
+
+          for (const pId of parents) {
+            if (findAndBreakLink(pId, visited)) return true;
+          }
+          return false;
+        };
+
+        findAndBreakLink(sourceId);
+      }
 
       if (targetWin) {
         newWindows = newWindows.map((w) => {
@@ -787,7 +835,7 @@ export const useWindows = create<WindowsStore>((set) => ({
       if (childNotes.length === 0) return state;
 
       const childIds = new Set(childNotes.map((c) => c.id));
-      const hasUnstacked = childNotes.some((w) => !w.stacked);
+      const hasUnstacked = childNotes.some((w) => !w.stacked || w.stackedParentId !== id);
       const shouldStack = hasUnstacked;
 
       const parentX = parentWin.x ?? 80;
@@ -822,7 +870,7 @@ export const useWindows = create<WindowsStore>((set) => ({
               side = normY >= 0 ? "BOTTOM" : "TOP";
             }
 
-            return { ...w, stacked: true, side, relX, relY };
+            return { ...w, stacked: true, stackedParentId: id, side, relX, relY };
           } else {
             const side = w.side ?? "RIGHT";
             const idx = unstackCount++;
@@ -849,6 +897,7 @@ export const useWindows = create<WindowsStore>((set) => ({
             return {
               ...w,
               stacked: false,
+              stackedParentId: undefined,
               x: finalX,
               y: finalY,
             };
@@ -862,7 +911,7 @@ export const useWindows = create<WindowsStore>((set) => ({
       const target = state.windows.find((w) => w.id === id);
       if (!target || !target.stacked) return state;
 
-      const parentId = target.parentId ?? target.parentIds?.[0];
+      const parentId = target.stackedParentId ?? target.parentId ?? target.parentIds?.[0];
       const parentGeo = getParentEntityGeometry(parentId, state.windows, state.groups);
 
       const px = parentGeo?.px ?? target.x ?? 80;
@@ -891,7 +940,7 @@ export const useWindows = create<WindowsStore>((set) => ({
 
       return {
         windows: state.windows.map((w) =>
-          w.id === id ? { ...w, stacked: false, x: finalX, y: finalY } : w
+          w.id === id ? { ...w, stacked: false, stackedParentId: undefined, x: finalX, y: finalY } : w
         ),
       };
     }),
@@ -899,10 +948,10 @@ export const useWindows = create<WindowsStore>((set) => ({
   toggleStackSingleNote: (id: string) =>
     set((state) => {
       const target = state.windows.find((w) => w.id === id);
-      if (!target) return state;
+      if (!target || target.contentType !== "sticky") return state;
 
       if (target.stacked) {
-        const parentId = target.parentId ?? target.parentIds?.[0];
+        const parentId = target.stackedParentId ?? target.parentId ?? target.parentIds?.[0];
         const parentGeo = getParentEntityGeometry(parentId, state.windows, state.groups);
 
         const px = parentGeo?.px ?? target.x ?? 80;
@@ -931,11 +980,11 @@ export const useWindows = create<WindowsStore>((set) => ({
 
         return {
           windows: state.windows.map((w) =>
-            w.id === id ? { ...w, stacked: false, x: finalX, y: finalY } : w
+            w.id === id ? { ...w, stacked: false, stackedParentId: undefined, x: finalX, y: finalY } : w
           ),
         };
       } else {
-        const parentId = target.parentId ?? target.parentIds?.[0];
+        const parentId = target.stackedParentId ?? target.parentId ?? target.parentIds?.[0];
         const pGeom = getParentEntityGeometry(parentId, state.windows, state.groups);
 
         let parentX = 80;
@@ -982,7 +1031,7 @@ export const useWindows = create<WindowsStore>((set) => ({
 
         return {
           windows: state.windows.map((w) =>
-            w.id === id ? { ...w, stacked: true, side, relX, relY } : w
+            w.id === id ? { ...w, stacked: true, stackedParentId: parentId, side, relX, relY } : w
           ),
         };
       }

@@ -80,14 +80,21 @@ export default function SemanticSearchBox() {
     }
 
     // 3. Scroll Shadow DOM & highlight matching paragraph position
-    window.dispatchEvent(
-      new CustomEvent("wikiboard:vector-highlight", {
-        detail: {
-          windowId: match.windowId,
-          chunkId: match.topChunkId,
-        },
-      })
-    );
+    const dispatchHighlight = () => {
+      window.dispatchEvent(
+        new CustomEvent("wikiboard:vector-highlight", {
+          detail: {
+            windowId: match.windowId,
+            chunkId: match.topChunkId,
+            snippet: match.topSnippet,
+          },
+        })
+      );
+    };
+
+    dispatchHighlight();
+    setTimeout(dispatchHighlight, 60);
+    setTimeout(dispatchHighlight, 250);
   };
 
   /**
@@ -178,9 +185,11 @@ export default function SemanticSearchBox() {
         <button
           type="submit"
           title="Search open pages (Alt+P)"
-          className="absolute left-3 text-amber-500 text-sm select-none cursor-pointer hover:scale-110 transition-transform"
+          className="absolute left-3 text-amber-500 flex items-center justify-center select-none cursor-pointer hover:scale-110 transition-transform"
         >
-          ✨
+          <svg className="w-3.5 h-3.5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
         </button>
         <input
           ref={inputRef}

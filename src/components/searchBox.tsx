@@ -330,10 +330,8 @@ export default function SearchBox() {
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-          ) : mode === "vector" ? (
-            <span className="text-amber-500 text-lg mr-3.5 flex-shrink-0 select-none">✨</span>
           ) : (
-            <svg className="w-5 h-5 text-gray-400 mr-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+            <svg className={`w-5 h-5 ${mode === "vector" ? "text-amber-500" : "text-gray-400"} mr-3.5 flex-shrink-0`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           )}
@@ -367,7 +365,7 @@ export default function SearchBox() {
           >
             {mode === "vector" ? (
               <span className="px-2.5 py-1 text-xs font-bold text-amber-900 bg-amber-400 rounded-md border border-amber-500 shadow-sm tracking-wider flex items-center gap-1">
-                <span>✨</span> SEARCH
+                SEARCH
               </span>
             ) : (
               <span className="px-2.5 py-1 text-xs font-semibold text-gray-400 bg-black/5 rounded border border-black/5 uppercase tracking-wider hover:bg-black/10 transition-colors">

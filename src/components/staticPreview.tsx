@@ -191,8 +191,8 @@ const SHADOW_STYLES = `
 
   /* Article Highlights */
   mark.wiki-highlight {
-    background-color: #fef08a !important;
-    color: #1c1917 !important;
+    background-color: #fef08a;
+    color: #1c1917;
     border-radius: 3px;
     padding: 2px 4px;
     box-shadow: 0 1px 4px rgba(234, 179, 8, 0.4);
@@ -450,6 +450,19 @@ const StaticPreview = memo(function StaticPreview({ winId, title, html, scrollTo
       });
     };
 
+    const scrollToElementStart = (targetEl: HTMLElement, smooth = true) => {
+      if (!host || !targetEl.isConnected) return;
+      const hostRect = host.getBoundingClientRect();
+      const elRect = targetEl.getBoundingClientRect();
+      const contentTop = elRect.top - hostRect.top + host.scrollTop;
+      const TOP_MARGIN = 16;
+      const targetScrollTop = Math.max(0, Math.round(contentTop - TOP_MARGIN));
+
+      host.scrollTo({ top: targetScrollTop, behavior: smooth ? "smooth" : "auto" });
+      if (winId) setScroll(winId, 0, targetScrollTop);
+      callbacksRef.current.onScrollChange?.(targetScrollTop);
+    };
+
     const handleVectorHighlight = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (!winId || detail?.windowId !== winId) return;
@@ -476,27 +489,29 @@ const StaticPreview = memo(function StaticPreview({ winId, title, html, scrollTo
       if (el && host) {
         markUserInteraction();
 
-        // Calculate exact vertical offset of target paragraph relative to host container
-        let contentTop = 0;
-        let curr: HTMLElement | null = el;
-        while (curr && curr !== host) {
-          contentTop += curr.offsetTop;
-          const parent = curr.offsetParent as HTMLElement | null;
-          if (!parent || parent === host) break;
-          curr = parent;
-        }
+        // 1. Scroll immediately to the top starting position of the element
+        scrollToElementStart(el, true);
 
-        const hostHeight = host.clientHeight || 500;
-        const elHeight = el.offsetHeight || 30;
-        const targetScrollTop = Math.max(0, Math.round(contentTop - hostHeight / 2 + elHeight / 2));
+        // 2. Multi-stage re-alignment as layout and images settle on first load
+        const targetElement = el;
+        [50, 150, 350, 700, 1200].forEach((delay) => {
+          setTimeout(() => {
+            scrollToElementStart(targetElement, true);
+          }, delay);
+        });
 
-        host.scrollTo({ top: targetScrollTop, behavior: "smooth" });
-        setScroll(winId, 0, targetScrollTop);
-        callbacksRef.current.onScrollChange?.(targetScrollTop);
+        // 3. Re-align whenever an image in the Shadow DOM finishes loading
+        const imgs = root.querySelectorAll("img");
+        const onImageSettle = () => scrollToElementStart(targetElement, true);
+        imgs.forEach((img) => img.addEventListener("load", onImageSettle, { once: true }));
+
+        setTimeout(() => {
+          imgs.forEach((img) => img.removeEventListener("load", onImageSettle));
+        }, 1500);
 
         root.querySelectorAll(".wiki-highlight-pulse").forEach((m) => m.classList.remove("wiki-highlight-pulse"));
         el.classList.add("wiki-highlight-pulse");
-        setTimeout(() => el?.classList.remove("wiki-highlight-pulse"), 7000);
+        setTimeout(() => targetElement?.classList.remove("wiki-highlight-pulse"), 7000);
       }
     };
 

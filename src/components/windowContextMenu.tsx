@@ -75,7 +75,7 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
   const isImage = !!(targetWin?.directImageUrl || targetWin?.title?.startsWith("File:"));
 
   const childNotes = pos?.windowId ? getConnectedChildNotes(pos.windowId, windows, groups) : [];
-  const hasUnstackedNotes = childNotes.some((w) => !w.stacked);
+  const hasUnstackedNotes = childNotes.some((w) => !w.stacked || w.stackedParentId !== pos?.windowId);
 
   let stackLabel = "Stack notes";
   if (isImage) {

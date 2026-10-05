@@ -222,8 +222,8 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange,
     const isDark = win.noteColor === "dark";
 
     const updateMark = (mark: HTMLElement) => {
-      mark.style.backgroundColor = color;
-      mark.style.color = isDark ? "#ffffff" : "inherit";
+      mark.style.setProperty("background-color", color, "important");
+      mark.style.setProperty("color", isDark ? "#ffffff" : "inherit", "important");
     };
 
     const hosts = document.querySelectorAll(".static-preview");

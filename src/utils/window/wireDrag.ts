@@ -131,18 +131,13 @@ export function isAlreadyConnected(sourceId: string, targetId: string): boolean 
   if (targetGroup && sourceId === targetGroup.id) return true;
 
   const targetEntity = windows.find((w) => w.id === targetId) || groups.find((g) => g.id === targetId);
-  const sourceEntity = windows.find((w) => w.id === sourceId) || groups.find((g) => g.id === sourceId);
-  if (!targetEntity || !sourceEntity) return false;
+  if (!targetEntity) return false;
 
   const targetParents = new Set<string>();
   if (targetEntity.parentIds) for (const p of targetEntity.parentIds) targetParents.add(p);
   if (targetEntity.parentId) targetParents.add(targetEntity.parentId);
 
-  const sourceParents = new Set<string>();
-  if (sourceEntity.parentIds) for (const p of sourceEntity.parentIds) sourceParents.add(p);
-  if (sourceEntity.parentId) sourceParents.add(sourceEntity.parentId);
-
-  return targetParents.has(sourceId) || sourceParents.has(targetId);
+  return targetParents.has(sourceId);
 }
 
 export function startWireDrag(

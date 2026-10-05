@@ -154,6 +154,18 @@ export function startWireDrag(
   const startScreenX = e.clientX;
   const startScreenY = e.clientY;
 
+  // Calculate the exact initial world coordinates of the clicked connection point element
+  const clickedTarget = e.currentTarget as HTMLElement | null;
+  let originWorldPoint: { x: number; y: number } | null = null;
+  if (clickedTarget && clickedTarget.getBoundingClientRect) {
+    const rect = clickedTarget.getBoundingClientRect();
+    const cam = getCamera();
+    originWorldPoint = {
+      x: (rect.left + rect.width / 2 - cam.panX) / cam.zoom,
+      y: (rect.top + rect.height / 2 - cam.panY) / cam.zoom,
+    };
+  }
+
   const targetElemId = customElementId || `win-${sourceId}`;
   const parentEl = document.getElementById(targetElemId);
   if (!parentEl) return;
@@ -216,7 +228,9 @@ export function startWireDrag(
       }
     }
 
-    const currentDot = sidePoint(bestSide, px + ptx, py + pty, pw, ph);
+    const currentDot = (originWorldPoint && bestSide === side)
+      ? originWorldPoint
+      : sidePoint(bestSide, px + ptx, py + pty, pw, ph);
 
     notifyWire({
       sx: currentDot.x,

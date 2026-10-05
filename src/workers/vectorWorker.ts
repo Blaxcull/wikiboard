@@ -33,6 +33,7 @@ function normalizeQueryText(text: string): string {
   let s = text.toLowerCase().trim();
   s = s.replace(/\bww1\b|\bwwi\b/gi, "world war 1 world war i first world war");
   s = s.replace(/\bww2\b|\bwwii\b/gi, "world war 2 world war ii second world war");
+  s = s.replace(/\bgt6\b|\bgta6\b|\bgta vi\b|\bgta 6\b/gi, "grand theft auto vi grand theft auto 6 gta 6 gta vi gta6 gt6");
   return s;
 }
 

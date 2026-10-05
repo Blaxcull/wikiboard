@@ -476,7 +476,10 @@ const StaticPreview = memo(function StaticPreview({ winId, title, html, scrollTo
       if (!el && detail?.snippet) {
         const snippetLower = (detail.snippet as string).toLowerCase().trim().slice(0, 30);
         if (snippetLower) {
-          const candidates = Array.from(root.querySelectorAll("p, li, h1, h2, h3, h4, blockquote"));
+          const IGNORED_SELECTOR = ".references, .reflist, .mw-references-wrap, .refbegin, .navbox, .catlinks, #catlinks, .toc, #References, #External_links, #See_also, #Notes, .sisterproject, footer, .mw-footer";
+          const candidates = Array.from(root.querySelectorAll("p, li, h1, h2, h3, h4, blockquote")).filter(
+            (cand) => !cand.closest(IGNORED_SELECTOR)
+          );
           for (const cand of candidates) {
             if (cand.textContent?.toLowerCase().includes(snippetLower)) {
               el = cand as HTMLElement;

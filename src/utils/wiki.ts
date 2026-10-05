@@ -148,7 +148,10 @@ export function cleanArticleHtml(html: string): string {
   });
 
   let chunkCounter = 0;
+  const IGNORED_SELECTOR = ".references, .reflist, .mw-references-wrap, .refbegin, .navbox, .catlinks, #catlinks, .toc, #References, #External_links, #See_also, #Notes, .sisterproject, footer, .mw-footer";
+
   doc.querySelectorAll("p, li, h1, h2, h3, h4, blockquote").forEach((el) => {
+    if (el.closest(IGNORED_SELECTOR)) return;
     const text = el.textContent?.trim();
     if (text && text.length > 20) {
       el.setAttribute("data-chunk-id", `chunk-${chunkCounter++}`);
@@ -253,12 +256,17 @@ export function escapeHtml(s: string): string {
 
 export function extractChunksFromHtml(html: string): Array<{ chunkId: string; text: string }> {
   const doc = new DOMParser().parseFromString(html, "text/html");
+  const IGNORED_SELECTOR = ".references, .reflist, .mw-references-wrap, .refbegin, .navbox, .catlinks, #catlinks, .toc, #References, #External_links, #See_also, #Notes, .sisterproject, footer, .mw-footer";
+
+  doc.querySelectorAll(IGNORED_SELECTOR).forEach((el) => el.remove());
+
   let chunkNodes = doc.querySelectorAll("[data-chunk-id]");
 
   // Fallback: If HTML wasn't tagged with data-chunk-id yet, tag it now
   if (chunkNodes.length === 0) {
     let chunkCounter = 0;
     doc.querySelectorAll("p, li, h1, h2, h3, h4, blockquote").forEach((el) => {
+      if (el.closest(IGNORED_SELECTOR)) return;
       const text = el.textContent?.trim();
       if (text && text.length > 20) {
         el.setAttribute("data-chunk-id", `chunk-${chunkCounter++}`);

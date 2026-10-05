@@ -5,7 +5,8 @@ import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import type { WindowData } from "../store/windows";
 import { useWindows } from "../store/windows";
 import { getCamera, subscribeCamera } from "../utils/camera";
-import { setDraggingWindow } from "../utils/window/drag";
+import startDrag from "../utils/window/drag";
+import { startWireDrag } from "../utils/window/wireDrag";
 import PdfSelectionToolbox from "./pdfSelectionToolbox";
 
 GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
@@ -17,6 +18,8 @@ const MAX_PDF_ZOOM = 5;
 type Props = {
   win: WindowData;
   onAddSticky?: (side: "TOP" | "RIGHT" | "BOTTOM" | "LEFT") => void;
+  onPositionChange?: (pos: { x?: number; y?: number; width?: number; height?: number }) => void;
+  onActivate?: () => void;
 };
 
 function copyCanvas(source: HTMLCanvasElement, target: HTMLCanvasElement) {
@@ -33,7 +36,7 @@ const TOOLBAR_BTN =
 
 import { fetchPdfBuffer } from "../utils/pdfCache";
 
-export default function PdfViewer({ win, onAddSticky }: Props) {
+export default function PdfViewer({ win, onAddSticky, onPositionChange, onActivate }: Props) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const docRef = useRef<PDFDocumentProxy | null>(null);
   const [currentPage, setCurrentPage] = useState(win.pdfCurrentPage ?? 1);
@@ -52,15 +55,17 @@ export default function PdfViewer({ win, onAddSticky }: Props) {
   const visiblePagesRef = useRef<Set<number>>(new Set());
   const targetPageRef = useRef<number>(currentPage);
 
-  const isMaximized = !!win.pdfMaximized;
+  const isPdfMaximized = !!win.pdfMaximized;
   const isAnimating = !!win.pdfAnimating;
+  const renderAsMaximized = isPdfMaximized || isAnimating;
+  const isMaximized = isPdfMaximized;
   const prevMaximizedRef = useRef(isMaximized);
   const prevWindowRef = useRef<{ winX: number; winY: number } | null>(null);
 
   const pdfZoomRef = useRef(1);
   const pagesContainerRef = useRef<HTMLDivElement>(null);
   const cameraZoom = useSyncExternalStore(subscribeCamera, () => getCamera().zoom, () => 1);
-  const camZoom = isMaximized ? cameraZoom : 1;
+  const camZoom = renderAsMaximized ? cameraZoom : 1;
   const winRef = useRef(win);
   useEffect(() => {
     winRef.current = win;
@@ -147,13 +152,13 @@ export default function PdfViewer({ win, onAddSticky }: Props) {
 
   // --- Match window height to actual page width and aspect ratio when unmaximized ---
   useEffect(() => {
-    if (loading || isMaximized || !pageAspectRatio) return;
+    if (loading || isMaximized || isAnimating || !pageAspectRatio) return;
     const currentW = win.width ?? 620;
     const expectedH = Math.round(currentW * pageAspectRatio + 96);
     if (Math.abs((win.height ?? 0) - expectedH) > 2) {
       updateWindow(win.id, { height: expectedH });
     }
-  }, [win.width, win.height, pageAspectRatio, isMaximized, loading, win.id, updateWindow]);
+  }, [win.width, win.height, pageAspectRatio, isMaximized, isAnimating, loading, win.id, updateWindow]);
 
   // --- Render single page ---
   const renderPage = useCallback(async (pageNum: number, availWidth: number) => {
@@ -161,7 +166,7 @@ export default function PdfViewer({ win, onAddSticky }: Props) {
     const canvas = canvasRefs.current.get(pageNum);
     if (!doc || !canvas || availWidth <= 0 || pageNum < 1 || pageNum > doc.numPages) return;
 
-    const renderWidth = isMaximized ? Math.min(availWidth, Math.min(window.innerWidth, window.innerHeight / pageAspectRatio)) : availWidth;
+    const renderWidth = renderAsMaximized ? Math.min(availWidth, Math.min(window.innerWidth, window.innerHeight / pageAspectRatio)) : availWidth;
 
     if (renderedWidthsRef.current.get(pageNum) === renderWidth) return;
 
@@ -211,7 +216,7 @@ export default function PdfViewer({ win, onAddSticky }: Props) {
       renderedWidthsRef.current.set(pageNum, renderWidth);
 
       // Render text layer on top for text selection (only when maximized)
-      if (isMaximized) {
+      if (renderAsMaximized) {
         const textLayerEl = textLayerRefs.current.get(pageNum);
         if (textLayerEl) {
           textLayerEl.innerHTML = "";
@@ -237,21 +242,21 @@ export default function PdfViewer({ win, onAddSticky }: Props) {
       }
       console.error(`Page ${pageNum} render error:`, err);
     }
-  }, [isMaximized, pageAspectRatio]);
+  }, [renderAsMaximized, pageAspectRatio]);
 
   // --- Cancel text layer tasks when unmaximizing ---
   useEffect(() => {
-    if (!isMaximized) {
+    if (!renderAsMaximized) {
       for (const tl of textLayerTasksRef.current.values()) {
         try { tl.cancel(); } catch { /* ignore */ }
       }
       textLayerTasksRef.current.clear();
     }
-  }, [isMaximized]);
+  }, [renderAsMaximized]);
 
   // --- Render current page and pre-render adjacent/all pages in zoomed-out mode ---
   useEffect(() => {
-    if (loading || !docRef.current || isMaximized) return;
+    if (loading || !docRef.current || renderAsMaximized || isAnimating) return;
     let isCancelled = false;
 
     const container = scrollContainerRef.current;
@@ -284,7 +289,7 @@ export default function PdfViewer({ win, onAddSticky }: Props) {
         }
 
         for (const p of priority) {
-          if (isCancelled || isMaximized) break;
+          if (isCancelled || renderAsMaximized || isAnimating) break;
           await renderPage(p, w);
         }
       };
@@ -295,13 +300,13 @@ export default function PdfViewer({ win, onAddSticky }: Props) {
     return () => {
       isCancelled = true;
     };
-  }, [currentPage, isMaximized, loading, totalPages, renderPage]);
+  }, [currentPage, renderAsMaximized, isAnimating, loading, totalPages, renderPage]);
 
 
 
   // --- Intersection observer for lazy rendering of visible pages in zoomed-in mode ---
   useEffect(() => {
-    if (loading || !docRef.current || !scrollContainerRef.current || !isMaximized) return;
+    if (loading || !docRef.current || !scrollContainerRef.current || !renderAsMaximized || isAnimating) return;
     const container = scrollContainerRef.current;
 
     const observer = new IntersectionObserver(
@@ -343,11 +348,11 @@ export default function PdfViewer({ win, onAddSticky }: Props) {
     }
 
     return () => observer.disconnect();
-  }, [loading, totalPages, isMaximized, renderPage]);
+  }, [loading, totalPages, renderAsMaximized, isAnimating, renderPage]);
 
   // --- Resize observer to re-render visible pages when width changes ---
   useEffect(() => {
-    if (loading || !docRef.current || !scrollContainerRef.current) return;
+    if (loading || !docRef.current || !scrollContainerRef.current || isAnimating) return;
     const container = scrollContainerRef.current;
     let resizeTimer: number | undefined;
 
@@ -355,7 +360,7 @@ export default function PdfViewer({ win, onAddSticky }: Props) {
       clearTimeout(resizeTimer);
       resizeTimer = window.setTimeout(() => {
         renderedWidthsRef.current.clear();
-        if (isMaximized) {
+        if (renderAsMaximized) {
           for (const p of visiblePagesRef.current) {
             const el = pageRefs.current.get(p);
             const w = el?.clientWidth || 0;
@@ -374,7 +379,7 @@ export default function PdfViewer({ win, onAddSticky }: Props) {
       clearTimeout(resizeTimer);
       observer.disconnect();
     };
-  }, [loading, isMaximized, renderPage]);
+  }, [loading, renderAsMaximized, isAnimating, renderPage]);
 
   // --- Track current active page on scroll (only when zoomed in) ---
   const handleScroll = useCallback(() => {
@@ -431,7 +436,7 @@ export default function PdfViewer({ win, onAddSticky }: Props) {
 
 
   const toggleMaximize = useCallback(() => {
-    if (!isMaximized) {
+    if (!win.pdfMaximized) {
       prevWindowRef.current = {
         winX: win.x ?? 80,
         winY: win.y ?? 80,
@@ -455,15 +460,20 @@ export default function PdfViewer({ win, onAddSticky }: Props) {
         pagesContainerRef.current.style.zoom = "";
       }
 
+      const currentW = win.width ?? 620;
+      const ratio = pageAspectRatio || 1.414;
+      const expectedH = Math.round(currentW * ratio + 96);
+
       updateWindow(win.id, {
         x: prev?.winX ?? win.x ?? 80,
         y: prev?.winY ?? win.y ?? 80,
+        height: expectedH,
         pdfMaximized: false,
       });
 
       prevWindowRef.current = null;
     }
-  }, [isMaximized, win.id, win.x, win.y, updateWindow]);
+  }, [win.pdfMaximized, win.id, win.x, win.y, updateWindow]);
 
 
   // --- Synchronously position scroll when toggling maximize ---
@@ -485,8 +495,6 @@ export default function PdfViewer({ win, onAddSticky }: Props) {
         } else {
           container.scrollTop = 0;
         }
-      } else {
-        container.scrollTop = 0;
       }
     }
   }, [isMaximized, pageAspectRatio]);
@@ -605,24 +613,24 @@ export default function PdfViewer({ win, onAddSticky }: Props) {
   }
 
   const pagesArray = Array.from({ length: totalPages }, (_, i) => i + 1);
-  const showUnmaximizedStyle = !isMaximized && !isAnimating;
+  const showUnmaximizedStyle = !isMaximized;
 
   return (
     <>
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className={`flex-1 min-h-0 relative ${isMaximized ? "overflow-y-auto" : "overflow-visible"}`}
-        style={{ backgroundColor: "transparent", scrollbarWidth: "none", cursor: isMaximized ? "default" : undefined }}
+        className={`flex-1 min-h-0 relative ${renderAsMaximized ? (isAnimating ? "overflow-hidden" : "overflow-y-auto") : "overflow-visible"}`}
+        style={{ backgroundColor: "transparent", scrollbarWidth: "none", cursor: renderAsMaximized ? "default" : undefined }}
       >
-        <div ref={pagesContainerRef} className={`flex flex-col gap-6 w-full items-center ${isMaximized ? "pt-0 pb-3" : "py-6"}`} style={{ backgroundColor: "transparent" }}>
+        <div ref={pagesContainerRef} className={`flex flex-col gap-6 w-full items-center ${renderAsMaximized ? "pt-0 pb-3" : "py-6"}`} style={{ backgroundColor: "transparent" }}>
           {pagesArray.map((p) => {
-            const isVisible = isMaximized || p === currentPage;
+            const isVisible = renderAsMaximized || p === currentPage;
 
             const pageStyle: CSSProperties = {
               display: isVisible ? "block" : "none",
             };
-            if (isMaximized) {
+            if (renderAsMaximized) {
               const cam = getCamera();
               const fitScreenPx = Math.min(window.innerWidth, window.innerHeight / pageAspectRatio);
               pageStyle.maxWidth = `${fitScreenPx / cam.zoom}px`;
@@ -663,41 +671,25 @@ export default function PdfViewer({ win, onAddSticky }: Props) {
                       type="button"
                       className="connection-point point-top"
                       title="Add sticky note"
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAddSticky?.("TOP");
-                      }}
+                      onMouseDown={(e) => startWireDrag(e, win.id, "TOP", (side) => onAddSticky?.(side))}
                     />
                     <button
                       type="button"
                       className="connection-point point-right"
                       title="Add sticky note"
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAddSticky?.("RIGHT");
-                      }}
+                      onMouseDown={(e) => startWireDrag(e, win.id, "RIGHT", (side) => onAddSticky?.(side))}
                     />
                     <button
                       type="button"
                       className="connection-point point-bottom"
                       title="Add sticky note"
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAddSticky?.("BOTTOM");
-                      }}
+                      onMouseDown={(e) => startWireDrag(e, win.id, "BOTTOM", (side) => onAddSticky?.(side))}
                     />
                     <button
                       type="button"
                       className="connection-point point-left"
                       title="Add sticky note"
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAddSticky?.("LEFT");
-                      }}
+                      onMouseDown={(e) => startWireDrag(e, win.id, "LEFT", (side) => onAddSticky?.(side))}
                     />
                   </>
                 )}
@@ -709,7 +701,6 @@ export default function PdfViewer({ win, onAddSticky }: Props) {
       <div
         className="pdf-toolbar flex justify-center items-center gap-1 py-1 px-2 bg-white/90 backdrop-blur-[12px] border border-black/15 shadow-[0_8px_30px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.06)] rounded-full mx-auto"
         style={{
-          opacity: isAnimating ? 0 : 1,
           pointerEvents: isAnimating ? "none" : "auto",
           transition: "opacity 0.2s ease",
           ...(isMaximized
@@ -737,95 +728,13 @@ export default function PdfViewer({ win, onAddSticky }: Props) {
             title="Move"
             onMouseDown={(e) => {
               if (isMaximized) return;
-              useWindows.getState().setActive(win.id);
-              const targetEl = (e.target as HTMLElement).closest(".pdf-window");
-              if (!targetEl || !(targetEl instanceof HTMLElement)) return;
-              const winEl: HTMLElement = targetEl;
-
-              winEl.getAnimations().forEach((anim) => anim.cancel());
-
-              setDraggingWindow(true);
-              winEl.classList.add("dragging");
-              winEl.classList.add("no-transition");
-              winEl.closest(".canvas-world")?.classList.add("gesture-active");
-              document.body.style.cursor = "move";
-
-              const startX = e.clientX;
-              const startY = e.clientY;
-              const baseLeft = parseFloat(winEl.style.left) || winEl.offsetLeft || 0;
-              const baseTop = parseFloat(winEl.style.top) || winEl.offsetTop || 0;
-              const cam = getCamera();
-              const startWorldMouseX = (startX - cam.panX) / cam.zoom;
-              const startWorldMouseY = (startY - cam.panY) / cam.zoom;
-              const worldShiftX = startWorldMouseX - baseLeft;
-              const worldShiftY = startWorldMouseY - baseTop;
-
-              const nextZ = useWindows.getState().maxZIndex + 1;
-              winEl.style.zIndex = String(nextZ);
-
-              let framePending = false;
-              let mouseX = startX;
-              let mouseY = startY;
-
-              function updatePosition() {
-                framePending = false;
-                applyGestureSetup();
-                const curCam = getCamera();
-                const curWorldMouseX = (mouseX - curCam.panX) / curCam.zoom;
-                const curWorldMouseY = (mouseY - curCam.panY) / curCam.zoom;
-                const newWorldLeft = curWorldMouseX - worldShiftX;
-                const newWorldTop = curWorldMouseY - worldShiftY;
-                const rdx = Math.round(newWorldLeft - baseLeft);
-                const rdy = Math.round(newWorldTop - baseTop);
-                winEl.style.transform = `translate3d(${rdx}px, ${rdy}px, 0)`;
-              }
-
-              function onMouseMove(ev: MouseEvent) {
-                mouseX = ev.clientX;
-                mouseY = ev.clientY;
-                if (!framePending) {
-                  framePending = true;
-                  requestAnimationFrame(updatePosition);
-                }
-              }
-
-              let setupDone = false;
-              function applyGestureSetup() {
-                if (setupDone) return;
-                setupDone = true;
-                setDraggingWindow(true);
-                winEl.classList.add("dragging");
-                winEl.classList.add("no-transition");
-                winEl.closest(".canvas-world")?.classList.add("gesture-active");
-                document.body.style.cursor = "move";
-              }
-
-              function onMouseUp() {
-                applyGestureSetup();
-                const curCam = getCamera();
-                const curWorldMouseX = (mouseX - curCam.panX) / curCam.zoom;
-                const curWorldMouseY = (mouseY - curCam.panY) / curCam.zoom;
-                const newLeft = Math.round(curWorldMouseX - worldShiftX);
-                const newTop = Math.round(curWorldMouseY - worldShiftY);
-                winEl.style.left = `${newLeft}px`;
-                winEl.style.top = `${newTop}px`;
-                winEl.style.transform = "";
-                useWindows.setState({ maxZIndex: nextZ });
-                updateWindow(win.id, { x: newLeft, y: newTop });
-                setDraggingWindow(false);
-                winEl.classList.remove("dragging");
-                winEl.closest(".canvas-world")?.classList.remove("gesture-active");
-                requestAnimationFrame(() => {
-                  winEl.classList.remove("no-transition");
-                  document.body.style.cursor = "";
-                });
-                document.removeEventListener("mousemove", onMouseMove);
-                document.removeEventListener("mouseup", onMouseUp);
-              }
-
-              document.addEventListener("mousemove", onMouseMove);
-              document.addEventListener("mouseup", onMouseUp);
-              e.preventDefault();
+              e.stopPropagation();
+              onActivate?.();
+              startDrag(
+                e as unknown as React.MouseEvent<HTMLDivElement>,
+                (pos) => onPositionChange?.(pos),
+                onActivate,
+              );
             }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

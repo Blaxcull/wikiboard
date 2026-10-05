@@ -652,6 +652,19 @@ const ConnectionArrows = memo(function ConnectionArrows({
       const parentId = parts[0];
       const childId = parts[1];
 
+      const pWin = byId.get(parentId);
+      const cWin = byId.get(childId);
+      const pGrpEntity = groupsById.get(parentId);
+      const cGrpEntity = groupsById.get(childId);
+      const pGrpHasMax = pGrpEntity && windows.some((w) => pGrpEntity.memberIds.includes(w.id) && w.pdfMaximized);
+      const cGrpHasMax = cGrpEntity && windows.some((w) => cGrpEntity.memberIds.includes(w.id) && w.pdfMaximized);
+
+      if (pWin?.pdfMaximized || cWin?.pdfMaximized || pGrpHasMax || cGrpHasMax) {
+        path.style.display = 'none';
+        poly.style.display = 'none';
+        continue;
+      }
+
       const parentPos = getEntityPos(parentId);
       const childPos = getEntityPos(childId);
       if (!parentPos || !childPos) {
@@ -935,62 +948,7 @@ function Fps() {
 //
 //
 
-const animatePdfMaximize = (
-  el: HTMLElement,
-  target: {
-    left: number
-    top: number
-    width: number
-    height: number
-  },
-  duration = 360,
-  onDone?: () => void
-) => {
-  const firstLeft = parseFloat(el.style.left) || 0
-  const firstTop = parseFloat(el.style.top) || 0
-  const firstW = parseFloat(el.style.width) || target.width
-  const firstH = parseFloat(el.style.height) || target.height
 
-  // Proportional center-to-center uniform zoom (no aspect stretching)
-  const firstCenterX = firstLeft + firstW / 2
-  const firstCenterY = firstTop + firstH / 2
-  const targetCenterX = target.left + target.width / 2
-  const targetCenterY = target.top + target.height / 2
-
-  const translateX = firstCenterX - targetCenterX
-  const translateY = firstCenterY - targetCenterY
-  const scale = target.width > 0 ? firstW / target.width : 1
-
-  // Apply target layout position to DOM once
-  el.style.left = `${target.left}px`
-  el.style.top = `${target.top}px`
-  el.style.width = `${target.width}px`
-  el.style.height = `${target.height}px`
-
-  // Animate smooth uniform GPU scale + translate from center
-  const animation = el.animate(
-    [
-      {
-        transform: `translate3d(${translateX}px, ${translateY}px, 0) scale(${scale})`,
-        transformOrigin: "center center",
-      },
-      {
-        transform: "translate3d(0px, 0px, 0) scale(1)",
-        transformOrigin: "center center",
-      },
-    ],
-    {
-      duration,
-      easing: "cubic-bezier(0.16, 1, 0.3, 1)",
-      fill: "forwards",
-    }
-  )
-
-  animation.onfinish = () => {
-    el.style.transform = ""
-    onDone?.()
-  }
-}
 
 
 
@@ -1143,67 +1101,40 @@ const WindowItem = memo(function WindowItem({
 
   const pdfRef = useRef<HTMLDivElement | null>(null)
 
-  const prevPdfMaximizedRef = useRef(!!w.pdfMaximized)
-
-useEffect(() => {
+useLayoutEffect(() => {
   const el = pdfRef.current
 
   if (!el || w.contentType !== "pdf") return
 
-  const wasMaximized = prevPdfMaximizedRef.current
+  if (isDraggingWindow && activeDraggedWindowId === w.id) return
+
   const isMaximized = !!w.pdfMaximized
-
-  prevPdfMaximizedRef.current = isMaximized
-
   const cam = getCamera()
 
-  const normalBounds = {
-    left: w.x ?? 80,
-    top: w.y ?? 80,
-    width: w.width ?? 620,
-    height: w.height ?? 908,
-  }
-
-  const maximizedBounds = {
-    left: -cam.panX / cam.zoom,
-    top: -cam.panY / cam.zoom,
-    width: window.innerWidth / cam.zoom,
-    height: window.innerHeight / cam.zoom,
-  }
-
-  // MAXIMIZE / RESTORE
-  if (wasMaximized !== isMaximized) {
-    useWindows.getState().updateWindow(w.id, { pdfAnimating: true })
-    animatePdfMaximize(
-      el,
-      isMaximized ? maximizedBounds : normalBounds,
-      300,
-      () => useWindows.getState().updateWindow(w.id, { pdfAnimating: false })
-    )
-  } else if (!isMaximized) {
-    // Normal window movement/resizing should NOT animate.
-    el.style.left = `${normalBounds.left}px`
-    el.style.top = `${normalBounds.top}px`
-    el.style.width = `${normalBounds.width}px`
-    el.style.height = `${normalBounds.height}px`
-  }
-
-  // While maximized, keep it covering the viewport.
   if (isMaximized) {
-    const handleResize = () => {
-      const cam = getCamera()
+    el.style.left = `${-cam.panX / cam.zoom}px`
+    el.style.top = `${-cam.panY / cam.zoom}px`
+    el.style.width = `${window.innerWidth / cam.zoom}px`
+    el.style.height = `${window.innerHeight / cam.zoom}px`
 
-      el.style.left = `${-cam.panX / cam.zoom}px`
-      el.style.top = `${-cam.panY / cam.zoom}px`
-      el.style.width = `${window.innerWidth / cam.zoom}px`
-      el.style.height = `${window.innerHeight / cam.zoom}px`
+    const handleResize = () => {
+      const c = getCamera()
+      el.style.left = `${-c.panX / c.zoom}px`
+      el.style.top = `${-c.panY / c.zoom}px`
+      el.style.width = `${window.innerWidth / c.zoom}px`
+      el.style.height = `${window.innerHeight / c.zoom}px`
     }
 
     window.addEventListener("resize", handleResize)
-
-    return () => {
-      window.removeEventListener("resize", handleResize)
-    }
+    return () => window.removeEventListener("resize", handleResize)
+  } else {
+    const normalW = isCompressedGroupMember ? 220 : (w.width ?? 620)
+    const expectedH = Math.round(normalW * 1.414 + 96)
+    const normalH = isCompressedGroupMember ? 140 : (w.height ?? expectedH)
+    if (w.x !== undefined) el.style.left = `${w.x}px`
+    if (w.y !== undefined) el.style.top = `${w.y}px`
+    el.style.width = `${normalW}px`
+    el.style.height = `${normalH}px`
   }
 }, [
   w.id,
@@ -1213,6 +1144,7 @@ useEffect(() => {
   w.y,
   w.width,
   w.height,
+  isCompressedGroupMember,
 ])
 
   const prevStackedRef = useRef(w.stacked);
@@ -1438,6 +1370,10 @@ useEffect(() => {
             el.style.top = `${top}px`;
             el.style.width = `${itemW}px`;
             el.style.height = `${itemH}px`;
+
+            if (w.x === undefined || w.y === undefined) {
+              updateWindow(w.id, { x: left, y: top });
+            }
           }
         }}
         id={`win-${w.id}`}
@@ -1462,36 +1398,13 @@ useEffect(() => {
       >
         {!isCompressedGroupMember && <StackedNoteStubs parentWin={w} />}
         <div className="pdf-window-animation-layer">
-          <PdfViewer win={w} onAddSticky={handleAddSticky} />
+          <PdfViewer
+            win={w}
+            onAddSticky={handleAddSticky}
+            onPositionChange={handlePositionChange}
+            onActivate={handleActivate}
+          />
         </div>
-        {!w.pdfMaximized && !isCompressedGroupMember && (
-          <>
-            <button
-              type="button"
-              className="connection-point point-top"
-              title="Add sticky note"
-              onMouseDown={(e) => startWireDrag(e, w.id, "TOP", handleAddSticky)}
-            />
-            <button
-              type="button"
-              className="connection-point point-right"
-              title="Add sticky note"
-              onMouseDown={(e) => startWireDrag(e, w.id, "RIGHT", handleAddSticky)}
-            />
-            <button
-              type="button"
-              className="connection-point point-bottom"
-              title="Add sticky note"
-              onMouseDown={(e) => startWireDrag(e, w.id, "BOTTOM", handleAddSticky)}
-            />
-            <button
-              type="button"
-              className="connection-point point-left"
-              title="Add sticky note"
-              onMouseDown={(e) => startWireDrag(e, w.id, "LEFT", handleAddSticky)}
-            />
-          </>
-        )}
       </div>
     );
   }

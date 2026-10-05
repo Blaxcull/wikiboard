@@ -257,13 +257,14 @@
   overflow: visible;
   padding: 0;
   margin: 0;
-  will-change: transform;
+  animation: none !important;
 }
 
 .pdf-window.dragging,
 .pdf-window.resizing,
 .pdf-window.no-transition {
   transition: none !important;
+  animation: none !important;
 }
 
 .image-window,
@@ -567,6 +568,11 @@
   display: none !important;
 }
 
+.window.is-compressed .pdf-toolbar,
+.window.is-compressed .pdf-selection-toolbox,
+.window.is-compressed .article-selection-toolbox,
+.window.is-compressed .titlebar button,
+.window.is-compressed .window-titlebar button,
 .window.is-compressed .connection-point {
   display: none !important;
 }

@@ -557,14 +557,21 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
       let maxY = -Infinity;
 
       for (const w of memberWins) {
-        let wx = w.x ?? 80;
-        let wy = w.y ?? 80;
-        let ww = w.width ?? 750;
-        let wh = w.height ?? 550;
+        let wx: number;
+        let wy: number;
+        let ww: number;
+        let wh: number;
 
         if (isCompressed) {
+          wx = w.x ?? 80;
+          wy = w.y ?? 80;
           ww = w.contentType === "sticky" ? (w.isExcerptNote ? 110 : 150) : 220;
           wh = w.contentType === "sticky" ? (w.isExcerptNote ? 48 : 95) : 140;
+        } else if (w.pdfMaximized) {
+          wx = w.x ?? 80;
+          wy = w.y ?? 80;
+          ww = w.width ?? 620;
+          wh = w.height ?? Math.round(ww * 1.414 + 96);
         } else {
           const el = document.getElementById(`win-${w.id}`);
           const b = readLiveWindowWorldBounds(el, w);
@@ -615,6 +622,7 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
 
   if (memberWins.length === 0) return null;
 
+  const hasMaximizedMember = memberWins.some((w) => w.pdfMaximized);
   const isCompressed = !!group.compressed;
   const PAD = isCompressed ? 24 : 44;
 
@@ -624,16 +632,25 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
   let maxY = -Infinity;
 
   for (const w of memberWins) {
-    const wx = w.x ?? 80;
-    const wy = w.y ?? 80;
-    let ww = w.width ?? 750;
-    let wh = w.height ?? 550;
+    let wx: number;
+    let wy: number;
+    let ww: number;
+    let wh: number;
 
     if (isCompressed) {
+      wx = w.x ?? 80;
+      wy = w.y ?? 80;
       ww = w.contentType === "sticky" ? (w.isExcerptNote ? 110 : 150) : 220;
       wh = w.contentType === "sticky" ? (w.isExcerptNote ? 48 : 95) : 140;
+    } else if (w.pdfMaximized) {
+      wx = w.x ?? 80;
+      wy = w.y ?? 80;
+      ww = w.width ?? 620;
+      wh = w.height ?? Math.round(ww * 1.414 + 96);
     } else {
       const b = getWindowWorldBounds(w);
+      wx = b.left;
+      wy = b.top;
       ww = b.right - b.left;
       wh = b.bottom - b.top;
     }
@@ -1013,7 +1030,8 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
           height: `${boxH}px`,
           backgroundColor: group.color ? `${group.color}15` : "rgba(0, 0, 0, 0.03)",
           borderRadius: "28px",
-          pointerEvents: "auto",
+          pointerEvents: hasMaximizedMember ? "none" : "auto",
+          display: hasMaximizedMember ? "none" : "block",
           zIndex: boxZIndex,
         }}
       >
@@ -1193,27 +1211,31 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
       </div>
 
       {/* Top Group Context Menu Portal */}
-      <GroupContextMenuPortal
-        group={group}
-        isOpen={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        areObjectsStacked={areObjectsStacked}
-        allSelectedAlwaysOnTop={allSelectedAlwaysOnTop}
-        handleUngroup={handleUngroup}
-        handleStackObjects={handleStackObjects}
-        handleCompress={handleCompress}
-        handleAlwaysOnTop={handleAlwaysOnTop}
-        handleBreakConnections={handleBreakConnections}
-        handleDelete={handleDelete}
-      />
+      {!hasMaximizedMember && (
+        <GroupContextMenuPortal
+          group={group}
+          isOpen={menuOpen}
+          onClose={() => setMenuOpen(false)}
+          areObjectsStacked={areObjectsStacked}
+          allSelectedAlwaysOnTop={allSelectedAlwaysOnTop}
+          handleUngroup={handleUngroup}
+          handleStackObjects={handleStackObjects}
+          handleCompress={handleCompress}
+          handleAlwaysOnTop={handleAlwaysOnTop}
+          handleBreakConnections={handleBreakConnections}
+          handleDelete={handleDelete}
+        />
+      )}
 
       {/* Bottom Color Palette Portal */}
-      <GroupColorPickerPortal
-        groupId={group.id}
-        currentColor={group.color}
-        isOpen={menuOpen}
-        onClose={() => setMenuOpen(false)}
-      />
+      {!hasMaximizedMember && (
+        <GroupColorPickerPortal
+          groupId={group.id}
+          currentColor={group.color}
+          isOpen={menuOpen}
+          onClose={() => setMenuOpen(false)}
+        />
+      )}
     </>
   );
 }

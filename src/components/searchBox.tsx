@@ -33,6 +33,7 @@ export default function SearchBox() {
   const inputRef = useRef<HTMLInputElement>(null);
   const mouseMovedRef = useRef(false);
   const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
+  const lastSearchedQueryRef = useRef("");
 
   const openWindowIds = useMemo(() => {
     return windows.filter((w) => w.url && !w.stacked).map((w) => w.id);
@@ -132,6 +133,7 @@ export default function SearchBox() {
     const timer = setTimeout(async () => {
       try {
         const rawResults = await searchVectorQuery(q, openWindowIds, 8);
+        if (q !== query.trim()) return;
         const map = new Map<string, VectorArticleMatch>();
         for (const res of rawResults) {
           const existing = map.get(res.windowId);
@@ -146,6 +148,7 @@ export default function SearchBox() {
           }
         }
         const grouped = Array.from(map.values()).sort((a, b) => b.topScore - a.topScore);
+        lastSearchedQueryRef.current = q;
         setVectorMatches(grouped);
         setSelectedIndex(0);
       } catch (err) {
@@ -232,8 +235,13 @@ export default function SearchBox() {
       const formattedTitle = q.replace(/ /g, "_");
       openArticle(q, `https://en.wikipedia.org/wiki/${encodeURIComponent(formattedTitle)}`);
     } else {
-      // Vector Search mode on Submit
-      if (vectorMatches.length > 0 && selectedIndex >= 0 && selectedIndex < vectorMatches.length) {
+      // Vector Search mode on Submit: only reuse vectorMatches if it matches the current query
+      if (
+        vectorMatches.length > 0 &&
+        lastSearchedQueryRef.current === q &&
+        selectedIndex >= 0 &&
+        selectedIndex < vectorMatches.length
+      ) {
         navigateToVectorMatch(vectorMatches[selectedIndex]);
         return;
       }
@@ -255,6 +263,7 @@ export default function SearchBox() {
           }
         }
         const grouped = Array.from(map.values()).sort((a, b) => b.topScore - a.topScore);
+        lastSearchedQueryRef.current = q;
         setVectorMatches(grouped);
         setSelectedIndex(0);
 

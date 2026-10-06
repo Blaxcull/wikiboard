@@ -35,6 +35,8 @@ export type WindowData = {
   side?: "TOP" | "RIGHT" | "BOTTOM" | "LEFT";
   /** URL or blob URL for PDF file */
   pdfUrl?: string;
+  /** Page number where this note was created in a PDF */
+  pdfPage?: number;
   /** Current page number (1-indexed) */
   pdfCurrentPage?: number;
   /** Total pages in PDF */
@@ -43,6 +45,13 @@ export type WindowData = {
   pdfMaximized?: boolean;
   /** True while the maximize/minimize animation is running */
   pdfAnimating?: boolean;
+  /** Saved position and dimensions before maximizing */
+  pdfPreMaximizedBounds?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
   alwaysOnTop?: boolean;
   stacked?: boolean;
   stackedParentId?: string;
@@ -360,10 +369,10 @@ export const useWindows = create<WindowsStore>((set) => ({
         if (parentWindow || parentGroup) {
           let px = parentWindow ? (parentWindow.x ?? 0) : 0;
           let py = parentWindow ? (parentWindow.y ?? 0) : 0;
-          let pw = parentWindow ? (parentWindow.width ?? DEFAULT_WIDTH) : 400;
-          let ph = parentWindow ? (parentWindow.height ?? DEFAULT_HEIGHT) : 300;
+          let pw = parentWindow ? (parentWindow.width ?? (parentWindow.contentType === "pdf" ? 620 : DEFAULT_WIDTH)) : 400;
+          let ph = parentWindow ? (parentWindow.height ?? (parentWindow.contentType === "pdf" ? Math.round(pw * 1.414 + 96) : DEFAULT_HEIGHT)) : 300;
 
-          if (parentEl) {
+          if (parentEl && !parentWindow?.pdfMaximized) {
             const styleLeft = parseFloat(parentEl.style.left) || parentEl.offsetLeft || px;
             const styleTop = parseFloat(parentEl.style.top) || parentEl.offsetTop || py;
             const t = parentEl.style.transform;

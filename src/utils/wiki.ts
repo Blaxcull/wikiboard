@@ -148,7 +148,7 @@ export function cleanArticleHtml(html: string): string {
   });
 
   let chunkCounter = 0;
-  const IGNORED_SELECTOR = ".references, .reflist, .mw-references-wrap, .refbegin, .navbox, .catlinks, #catlinks, .toc, #References, #External_links, #See_also, #Notes, .sisterproject, footer, .mw-footer";
+  const IGNORED_SELECTOR = ".references, .reflist, .mw-references-wrap, .refbegin, .navbox, .catlinks, #catlinks, .toc, #References, #External_links, #See_also, #Notes, .sisterproject, footer, .mw-footer, .infobox, .sidebar, .hatnote";
 
   doc.querySelectorAll("p, li, h1, h2, h3, h4, blockquote").forEach((el) => {
     if (el.closest(IGNORED_SELECTOR)) return;
@@ -256,7 +256,7 @@ export function escapeHtml(s: string): string {
 
 export function extractChunksFromHtml(html: string): Array<{ chunkId: string; text: string }> {
   const doc = new DOMParser().parseFromString(html, "text/html");
-  const IGNORED_SELECTOR = ".references, .reflist, .mw-references-wrap, .refbegin, .navbox, .catlinks, #catlinks, .toc, #References, #External_links, #See_also, #Notes, .sisterproject, footer, .mw-footer";
+  const IGNORED_SELECTOR = ".references, .reflist, .mw-references-wrap, .refbegin, .navbox, .catlinks, #catlinks, .toc, #References, #External_links, #See_also, #Notes, .sisterproject, footer, .mw-footer, .infobox, .sidebar, .hatnote";
 
   doc.querySelectorAll(IGNORED_SELECTOR).forEach((el) => el.remove());
 

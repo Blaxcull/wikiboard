@@ -187,16 +187,20 @@ function parseTransformTranslate(el: HTMLElement): { tx: number; ty: number } {
 function readWindowPos(el: HTMLElement): { x: number; y: number; w: number; h: number; zIndex: number } {
   const x = parseFloat(el.style.left) || 0;
   const y = parseFloat(el.style.top) || 0;
-  const w = parseFloat(el.style.width) || el.offsetWidth || 750;
-  let h = parseFloat(el.style.height) || el.offsetHeight || 550;
   const zIndex = parseInt(el.style.zIndex, 10) || 0;
 
   const { tx, ty } = parseTransformTranslate(el);
 
-  if (el.classList.contains("pdf-window") && !el.classList.contains("maximized")) {
-    const canvas = el.querySelector("canvas");
+  const winEl = el.matches(".window") ? el : (el.querySelector<HTMLElement>(".window") || el);
+  const w = winEl.offsetWidth || parseFloat(el.style.width) || el.offsetWidth || 750;
+  let h = winEl.offsetHeight || parseFloat(el.style.height) || el.offsetHeight || 550;
+  const offsetX = winEl !== el ? winEl.offsetLeft : 0;
+  const offsetY = winEl !== el ? winEl.offsetTop : 0;
+
+  if (winEl.classList.contains("pdf-window") && !winEl.classList.contains("maximized")) {
+    const canvas = winEl.querySelector("canvas");
     if (canvas) {
-      const windowRect = el.getBoundingClientRect();
+      const windowRect = winEl.getBoundingClientRect();
       const canvasRect = canvas.getBoundingClientRect();
       const cam = getCamera();
       if (cam.zoom > 0) {
@@ -205,19 +209,19 @@ function readWindowPos(el: HTMLElement): { x: number; y: number; w: number; h: n
         const canvasWidth = (canvasRect.right - canvasRect.left) / cam.zoom;
         const canvasHeight = (canvasRect.bottom - canvasRect.top) / cam.zoom;
         return {
-          x: x + tx + leftOffset,
-          y: y + ty + topOffset,
+          x: x + tx + offsetX + leftOffset,
+          y: y + ty + offsetY + topOffset,
           w: Math.max(50, canvasWidth),
           h: Math.max(50, canvasHeight),
           zIndex,
         };
       }
-    } else if (el.querySelector(".pdf-toolbar")) {
+    } else if (winEl.querySelector(".pdf-toolbar")) {
       h = Math.max(100, h - 68);
     }
   }
 
-  return { x: x + tx, y: y + ty, w, h, zIndex };
+  return { x: x + tx + offsetX, y: y + ty + offsetY, w, h, zIndex };
 }
 
 
@@ -432,13 +436,28 @@ const StackedNoteStubs = memo(function StackedNoteStubs({
 }) {
   const windows = useWindows((s) => s.windows);
 
-  const childNotes = useMemo(
-    () =>
-      getConnectedChildNotes(parentWin.id, windows).filter(
-        (w) => w.stacked && (!w.stackedParentId || w.stackedParentId === parentWin.id)
-      ),
-    [windows, parentWin.id]
-  );
+  const childNotes = useMemo(() => {
+    if (parentWin.pdfMaximized) return [];
+    return getConnectedChildNotes(parentWin.id, windows).filter((w) => {
+      if (!w.stacked) return false;
+      if (w.stackedParentId && w.stackedParentId !== parentWin.id) return false;
+      if (
+        parentWin.contentType === "pdf" &&
+        w.pdfPage != null &&
+        parentWin.pdfCurrentPage != null &&
+        w.pdfPage !== parentWin.pdfCurrentPage
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [
+    windows,
+    parentWin.id,
+    parentWin.pdfMaximized,
+    parentWin.contentType,
+    parentWin.pdfCurrentPage,
+  ]);
 
   if (childNotes.length === 0) return null;
 
@@ -572,6 +591,7 @@ const ConnectionArrows = memo(function ConnectionArrows({
         path.setAttribute('fill', 'none');
         path.setAttribute('stroke', '#a0a0a0');
         path.setAttribute('stroke-width', '3');
+        path.setAttribute('stroke-linecap', 'round');
 
         const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
         poly.setAttribute('fill', '#a0a0a0');
@@ -659,7 +679,34 @@ const ConnectionArrows = memo(function ConnectionArrows({
       const pGrpHasMax = pGrpEntity && windows.some((w) => pGrpEntity.memberIds.includes(w.id) && w.pdfMaximized);
       const cGrpHasMax = cGrpEntity && windows.some((w) => cGrpEntity.memberIds.includes(w.id) && w.pdfMaximized);
 
-      if (pWin?.pdfMaximized || cWin?.pdfMaximized || pGrpHasMax || cGrpHasMax) {
+      const isPdfParentAndWrongPage =
+        pWin?.contentType === "pdf" &&
+        cWin?.pdfPage != null &&
+        pWin.pdfCurrentPage != null &&
+        cWin.pdfPage !== pWin.pdfCurrentPage;
+      const isPdfChildAndWrongPage =
+        cWin?.contentType === "pdf" &&
+        pWin?.pdfPage != null &&
+        cWin.pdfCurrentPage != null &&
+        pWin.pdfPage !== cWin.pdfCurrentPage;
+
+      const pEl = document.getElementById(`win-${parentId}`);
+      const cEl = document.getElementById(`win-${childId}`);
+      const isParentHidden = pEl && pEl.style.display === "none";
+      const isChildHidden = cEl && cEl.style.display === "none";
+
+      if (
+        pWin?.pdfMaximized ||
+        cWin?.pdfMaximized ||
+        pWin?.pdfAnimating ||
+        cWin?.pdfAnimating ||
+        pGrpHasMax ||
+        cGrpHasMax ||
+        isPdfParentAndWrongPage ||
+        isPdfChildAndWrongPage ||
+        isParentHidden ||
+        isChildHidden
+      ) {
         path.style.display = 'none';
         poly.style.display = 'none';
         continue;
@@ -696,13 +743,30 @@ const ConnectionArrows = memo(function ConnectionArrows({
 
       path.style.display = '';
       const childWin = byId.get(childId);
-      if (childWin?.isExcerptNote) {
-        path.setAttribute('d', `M${a.sx},${a.sy} C${a.c1x},${a.c1y} ${a.c2x},${a.c2y} ${a.ex},${a.ey}`);
-        path.setAttribute('stroke-dasharray', '6 4');
+      if (childWin?.isExcerptNote || childWin?.contentType === 'sticky') {
+        let ex = a.ex;
+        let ey = a.ey;
+        if (cEl) {
+          const dotEl = cEl.querySelector<HTMLElement>(`.connection-point.point-${a.childSide.toLowerCase()}`);
+          if (dotEl) {
+            const r = dotEl.getBoundingClientRect();
+            if (r.width > 0 && r.height > 0) {
+              const pt = screenToWorld(r.left + r.width / 2, r.top + r.height / 2);
+              ex = pt.x;
+              ey = pt.y;
+            }
+          }
+        }
+        const ctrlDist = Math.hypot(ex - a.sx, ey - a.sy) * ARROW_CTRL;
+        const c2 = controlOffset(a.childSide, { x: ex, y: ey }, ctrlDist);
+        path.setAttribute('d', `M${a.sx},${a.sy} C${a.c1x},${a.c1y} ${c2.x},${c2.y} ${ex},${ey}`);
+        path.setAttribute('stroke-dasharray', '2 7');
+        path.setAttribute('stroke-linecap', 'round');
         poly.style.display = 'none';
       } else {
         path.setAttribute('d', `M${a.sx},${a.sy} C${a.c1x},${a.c1y} ${a.c2x},${a.c2y} ${a.bcx},${a.bcy}`);
         path.removeAttribute('stroke-dasharray');
+        path.setAttribute('stroke-linecap', 'butt');
         poly.setAttribute('points', `${a.tipX},${a.tipY} ${a.b1x},${a.b1y} ${a.b2x},${a.b2y}`);
         poly.style.display = '';
       }
@@ -1057,7 +1121,7 @@ const WindowItem = memo(function WindowItem({
 
   const zIndexStyle = useMemo(
     () => {
-      let effZ = w.pdfMaximized ? 100000 : (w.alwaysOnTop ? 50000 + (w.zIndex ?? 0) : (w.zIndex ?? 0));
+      let effZ = (w.pdfMaximized || w.pdfAnimating) ? 100000 : (w.alwaysOnTop ? 50000 + (w.zIndex ?? 0) : (w.zIndex ?? 0));
       if (connectedCompressedGroup) {
         const groupMembers = windows.filter((win) => connectedCompressedGroup.memberIds.includes(win.id));
         const minZ = groupMembers.reduce((min, win) => Math.min(min, win.zIndex ?? 0), Infinity);
@@ -1070,7 +1134,7 @@ const WindowItem = memo(function WindowItem({
         ...(isCompressedGroupMember ? { pointerEvents: "none" as const } : {}),
       };
     },
-    [w.zIndex, w.pdfMaximized, w.alwaysOnTop, isCompressedGroupMember, connectedCompressedGroup, windows],
+    [w.zIndex, w.pdfMaximized, w.pdfAnimating, w.alwaysOnTop, isCompressedGroupMember, connectedCompressedGroup, windows],
   )
 
   const handleActivate = useCallback(() => setActive(w.id), [w.id, setActive])
@@ -1091,61 +1155,174 @@ const WindowItem = memo(function WindowItem({
         contentType: "sticky",
         title: `Note (${w.title.replace(/^File:/i, "").replace(/_/g, " ")})`,
         parentId: w.id,
+        pdfPage: w.contentType === "pdf" ? w.pdfCurrentPage ?? 1 : undefined,
         width: 260,
         height: 200,
         side,
       });
     },
-    [w.id, w.title, addWindow],
+    [w.id, w.title, w.contentType, w.pdfCurrentPage, addWindow],
   );
 
-  const pdfRef = useRef<HTMLDivElement | null>(null)
+  const pdfRef = useRef<HTMLDivElement | null>(null);
+  const prevPdfMaximizedRef = useRef(w.pdfMaximized);
+  const activeAnimRef = useRef<Animation | null>(null);
 
-useLayoutEffect(() => {
-  const el = pdfRef.current
+  useLayoutEffect(() => {
+    const el = pdfRef.current;
 
-  if (!el || w.contentType !== "pdf") return
+    if (!el || w.contentType !== "pdf") return;
 
-  if (isDraggingWindow && activeDraggedWindowId === w.id) return
+    if (isDraggingWindow && activeDraggedWindowId === w.id) return;
 
-  const isMaximized = !!w.pdfMaximized
-  const cam = getCamera()
+    const wasMaximized = !!prevPdfMaximizedRef.current;
+    const isMaximized = !!w.pdfMaximized;
+    prevPdfMaximizedRef.current = isMaximized;
 
-  if (isMaximized) {
-    el.style.left = `${-cam.panX / cam.zoom}px`
-    el.style.top = `${-cam.panY / cam.zoom}px`
-    el.style.width = `${window.innerWidth / cam.zoom}px`
-    el.style.height = `${window.innerHeight / cam.zoom}px`
+    const cam = getCamera();
+    const maximizedBounds = {
+      left: -cam.panX / cam.zoom,
+      top: -cam.panY / cam.zoom,
+      width: window.innerWidth / cam.zoom,
+      height: window.innerHeight / cam.zoom,
+    };
 
-    const handleResize = () => {
-      const c = getCamera()
-      el.style.left = `${-c.panX / c.zoom}px`
-      el.style.top = `${-c.panY / c.zoom}px`
-      el.style.width = `${window.innerWidth / c.zoom}px`
-      el.style.height = `${window.innerHeight / c.zoom}px`
+    const normalW = isCompressedGroupMember ? 220 : (w.width ?? 620);
+    const expectedH = Math.round(normalW * 1.414 + 96);
+    const normalH = isCompressedGroupMember ? 140 : (w.height ?? expectedH);
+    const normalBounds = {
+      left: w.x ?? 80,
+      top: w.y ?? 80,
+      width: normalW,
+      height: normalH,
+    };
+
+    if (wasMaximized !== isMaximized) {
+      let curLeft = parseFloat(el.style.left);
+      let curTop = parseFloat(el.style.top);
+      let curWidth = parseFloat(el.style.width);
+      let curHeight = parseFloat(el.style.height);
+
+      if (activeAnimRef.current) {
+        const cs = window.getComputedStyle(el);
+        curLeft = parseFloat(cs.left) || curLeft;
+        curTop = parseFloat(cs.top) || curTop;
+        curWidth = parseFloat(cs.width) || curWidth;
+        curHeight = parseFloat(cs.height) || curHeight;
+        try {
+          activeAnimRef.current.cancel();
+        } catch {
+          /* ignore */
+        }
+        activeAnimRef.current = null;
+      }
+
+      let startBounds: { left: number; top: number; width: number; height: number };
+      let endBounds: { left: number; top: number; width: number; height: number };
+
+      if (isMaximized) {
+        startBounds = {
+          left: !isNaN(curLeft) ? curLeft : normalBounds.left,
+          top: !isNaN(curTop) ? curTop : normalBounds.top,
+          width: !isNaN(curWidth) ? curWidth : normalBounds.width,
+          height: !isNaN(curHeight) ? curHeight : normalBounds.height,
+        };
+        endBounds = maximizedBounds;
+      } else {
+        startBounds = {
+          left: !isNaN(curLeft) ? curLeft : maximizedBounds.left,
+          top: !isNaN(curTop) ? curTop : maximizedBounds.top,
+          width: !isNaN(curWidth) ? curWidth : maximizedBounds.width,
+          height: !isNaN(curHeight) ? curHeight : maximizedBounds.height,
+        };
+        endBounds = normalBounds;
+      }
+
+      el.style.left = `${endBounds.left}px`;
+      el.style.top = `${endBounds.top}px`;
+      el.style.width = `${endBounds.width}px`;
+      el.style.height = `${endBounds.height}px`;
+
+      useWindows.getState().updateWindow(w.id, { pdfAnimating: true });
+
+      const anim = el.animate(
+        [
+          {
+            left: `${startBounds.left}px`,
+            top: `${startBounds.top}px`,
+            width: `${startBounds.width}px`,
+            height: `${startBounds.height}px`,
+          },
+          {
+            left: `${endBounds.left}px`,
+            top: `${endBounds.top}px`,
+            width: `${endBounds.width}px`,
+            height: `${endBounds.height}px`,
+          },
+        ],
+        {
+          duration: 320,
+          easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+          fill: "backwards",
+        }
+      );
+      activeAnimRef.current = anim;
+
+      const handleDone = () => {
+        if (activeAnimRef.current === anim) {
+          activeAnimRef.current = null;
+          useWindows.getState().updateWindow(w.id, { pdfAnimating: false });
+        }
+      };
+      anim.onfinish = handleDone;
+      anim.oncancel = handleDone;
+    } else if (!activeAnimRef.current) {
+      if (isMaximized) {
+        el.style.left = `${maximizedBounds.left}px`;
+        el.style.top = `${maximizedBounds.top}px`;
+        el.style.width = `${maximizedBounds.width}px`;
+        el.style.height = `${maximizedBounds.height}px`;
+      } else {
+        if (w.x !== undefined) el.style.left = `${w.x}px`;
+        if (w.y !== undefined) el.style.top = `${w.y}px`;
+        el.style.width = `${normalBounds.width}px`;
+        el.style.height = `${normalBounds.height}px`;
+      }
     }
 
-    window.addEventListener("resize", handleResize)
-    return () => window.removeEventListener("resize", handleResize)
-  } else {
-    const normalW = isCompressedGroupMember ? 220 : (w.width ?? 620)
-    const expectedH = Math.round(normalW * 1.414 + 96)
-    const normalH = isCompressedGroupMember ? 140 : (w.height ?? expectedH)
-    if (w.x !== undefined) el.style.left = `${w.x}px`
-    if (w.y !== undefined) el.style.top = `${w.y}px`
-    el.style.width = `${normalW}px`
-    el.style.height = `${normalH}px`
-  }
-}, [
-  w.id,
-  w.pdfMaximized,
-  w.contentType,
-  w.x,
-  w.y,
-  w.width,
-  w.height,
-  isCompressedGroupMember,
-])
+    const handleResize = () => {
+      const c = getCamera();
+      el.style.left = `${-c.panX / c.zoom}px`;
+      el.style.top = `${-c.panY / c.zoom}px`;
+      el.style.width = `${window.innerWidth / c.zoom}px`;
+      el.style.height = `${window.innerHeight / c.zoom}px`;
+    };
+
+    if (isMaximized) {
+      window.addEventListener("resize", handleResize);
+    }
+
+    return () => {
+      if (activeAnimRef.current) {
+        try {
+          activeAnimRef.current.cancel();
+        } catch {
+          /* ignore */
+        }
+        activeAnimRef.current = null;
+      }
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [
+    w.id,
+    w.pdfMaximized,
+    w.contentType,
+    w.x,
+    w.y,
+    w.width,
+    w.height,
+    isCompressedGroupMember,
+  ]);
 
   const prevStackedRef = useRef(w.stacked);
 
@@ -1272,6 +1449,25 @@ useLayoutEffect(() => {
     const itemW = isCompressedGroupMember ? (isExcerpt ? 110 : 150) : (w.width ?? 260);
     const itemH = isCompressedGroupMember ? (isExcerpt ? 48 : 95) : (w.height ?? (isExcerpt ? 64 : 200));
 
+    const attachedPdf = windows.find(
+      (p) =>
+        p.contentType === "pdf" &&
+        (p.id === w.parentId ||
+          w.parentIds?.includes(p.id) ||
+          p.id === w.stackedParentId ||
+          p.parentId === w.id ||
+          p.parentIds?.includes(w.id)),
+    );
+
+    const isAttachedPdfMaximized = !!attachedPdf?.pdfMaximized;
+    const isWrongPdfPage =
+      !!attachedPdf &&
+      w.pdfPage != null &&
+      attachedPdf.pdfCurrentPage != null &&
+      w.pdfPage !== attachedPdf.pdfCurrentPage;
+
+    const shouldHideSticky = isAttachedPdfMaximized || isWrongPdfPage;
+
     return (
       <div
         id={`win-${w.id}`}
@@ -1282,6 +1478,7 @@ useLayoutEffect(() => {
           top: `${w.y ?? 80}px`,
           width: `${itemW}px`,
           height: `${itemH}px`,
+          display: shouldHideSticky ? "none" : undefined,
         }}
         onMouseDown={(e) => {
           if (isCompressedGroupMember) return;
@@ -1381,7 +1578,7 @@ useLayoutEffect(() => {
           w.pdfMaximized ? "maximized" : ""
         } ${
           w.pdfMaximized && !w.pdfAnimating ? "maximized-done" : ""
-        } ${w.active ? "active" : "inactive"} ${isCompressedGroupMember ? "is-compressed" : ""} ${w.pdfAnimating ? "no-transition" : ""}`}
+        } ${w.active ? "active" : "inactive"} ${isCompressedGroupMember ? "is-compressed" : ""} ${w.pdfAnimating ? "animating no-transition" : ""}`}
         style={zIndexStyle}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -1396,7 +1593,7 @@ useLayoutEffect(() => {
           Resize(e, (rect) => handlePositionChange(rect));
         }}
       >
-        {!isCompressedGroupMember && <StackedNoteStubs parentWin={w} />}
+        {!isCompressedGroupMember && !w.pdfMaximized && !w.pdfAnimating && <StackedNoteStubs parentWin={w} />}
         <div className="pdf-window-animation-layer">
           <PdfViewer
             win={w}

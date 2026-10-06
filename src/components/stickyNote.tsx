@@ -239,10 +239,31 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange,
     marks.forEach((mark) => updateMark(mark as HTMLElement));
   }, [win.id, win.noteColor, win.isExcerptNote]);
 
+  useLayoutEffect(() => {
+    if (!win.isExcerptNote || !textRef.current) return;
+    const scrollH = textRef.current.scrollHeight;
+    if (scrollH > 0) {
+      const neededH = Math.max(64, Math.min(500, scrollH + 42));
+      if (neededH > (win.height ?? 64)) {
+        updateWindow(win.id, { height: neededH });
+      }
+    }
+  }, [win.id, win.isExcerptNote, win.stickyText, win.height, updateWindow]);
+
+  const handleActivate = () => {
+    onActivate();
+    if (win.isExcerptNote && win.pdfPage && win.parentId) {
+      const parent = useWindows.getState().windows.find((w) => w.id === win.parentId);
+      if (parent?.contentType === "pdf") {
+        updateWindow(win.parentId, { pdfCurrentPage: win.pdfPage });
+      }
+    }
+  };
+
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    onActivate();
+    handleActivate();
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("wikiboard:close-menus", { detail: { exceptWindowId: win.id } }));
     }
@@ -266,15 +287,15 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange,
         }}
         onMouseDown={(e) => {
           e.stopPropagation();
-          onActivate();
+          handleActivate();
 
           const rect = e.currentTarget.getBoundingClientRect();
           const isBottomRight = e.clientX >= rect.right - 36 && e.clientY >= rect.bottom - 36;
 
           if (isBottomRight) {
-            Resize(e, (pos) => onPositionChange(pos), onActivate);
+            Resize(e, (pos) => onPositionChange(pos), handleActivate);
           } else {
-            startDrag(e, (pos) => onPositionChange(pos), onActivate);
+            startDrag(e, (pos) => onPositionChange(pos), handleActivate);
           }
         }}
       >
@@ -298,8 +319,8 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange,
           className="absolute bottom-0 right-0 w-9 h-9 cursor-se-resize z-30 flex items-end justify-end p-1.5 group/handle"
           onMouseDown={(e) => {
             e.stopPropagation();
-            onActivate();
-            Resize(e, (pos) => onPositionChange(pos), onActivate);
+            handleActivate();
+            Resize(e, (pos) => onPositionChange(pos), handleActivate);
           }}
           title="Drag to resize note"
         >
@@ -331,8 +352,8 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange,
         const isBottomRight = e.clientX >= rect.right - 36 && e.clientY >= rect.bottom - 36;
         if (isBottomRight) {
           e.stopPropagation();
-          onActivate();
-          Resize(e, (pos) => onPositionChange(pos), onActivate);
+          handleActivate();
+          Resize(e, (pos) => onPositionChange(pos), handleActivate);
         }
       }}
     >
@@ -345,8 +366,8 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange,
             return;
           }
           e.stopPropagation();
-          onActivate();
-          startDrag(e, (pos) => onPositionChange(pos), onActivate);
+          handleActivate();
+          startDrag(e, (pos) => onPositionChange(pos), handleActivate);
         }}
       >
         <button
@@ -388,13 +409,13 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange,
             const rect = rawTarget.getBoundingClientRect();
             if (e.clientX >= rect.right - 36 && e.clientY >= rect.bottom - 36) {
               e.stopPropagation();
-              onActivate();
-              Resize(e, (pos) => onPositionChange(pos), onActivate);
+              handleActivate();
+              Resize(e, (pos) => onPositionChange(pos), handleActivate);
               return;
             }
           }
           e.stopPropagation();
-          onActivate();
+          handleActivate();
         }}
         autoFocus
       />
@@ -412,8 +433,8 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange,
         className="absolute bottom-0 right-0 w-9 h-9 cursor-se-resize z-30 flex items-end justify-end p-1.5 group/handle"
         onMouseDown={(e) => {
           e.stopPropagation();
-          onActivate();
-          Resize(e, (pos) => onPositionChange(pos), onActivate);
+          handleActivate();
+          Resize(e, (pos) => onPositionChange(pos), handleActivate);
         }}
         title="Drag to resize note"
       >

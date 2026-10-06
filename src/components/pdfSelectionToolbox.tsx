@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useWindows } from "../store/windows";
-import { getCamera } from "../utils/camera";
+import { getHighlightBgColor } from "../App";
 
 type Props = {
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   isMaximized: boolean;
   windowId: string;
+  pdfTitle?: string;
 };
 
-export default function PdfSelectionToolbox({ scrollContainerRef, isMaximized, windowId }: Props) {
+export default function PdfSelectionToolbox({ scrollContainerRef, isMaximized, windowId, pdfTitle }: Props) {
   const addWindow = useWindows((s) => s.addWindow);
   const updateWindow = useWindows((s) => s.updateWindow);
   const [visible, setVisible] = useState(false);
@@ -96,39 +97,65 @@ export default function PdfSelectionToolbox({ scrollContainerRef, isMaximized, w
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || !sel.rangeCount) return;
 
+    const text = selectedTextRef.current || sel.toString().trim();
+    if (!text) return;
+
     const range = sel.getRangeAt(0);
     const clientRects = range.getClientRects();
 
     // Find the page container (positioned ancestor of the text layer)
     const node = range.commonAncestorContainer;
-    const el = node.nodeType === Node.ELEMENT_NODE ? node as HTMLElement : node.parentElement;
+    const el = node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node.parentElement;
     const pageContainer = el?.closest("[data-page]") as HTMLElement | null;
+
+    const noteId = crypto.randomUUID();
+    const color = getHighlightBgColor("yellow");
 
     if (pageContainer) {
       const containerRect = pageContainer.getBoundingClientRect();
-      const { zoom } = getCamera();
-      const containerW = pageContainer.clientWidth;
-      const containerH = pageContainer.clientHeight;
-      if (containerW > 0 && containerH > 0) {
+      if (containerRect.width > 0 && containerRect.height > 0) {
         for (const rect of clientRects) {
+          if (rect.width === 0 || rect.height === 0) continue;
           const highlight = document.createElement("div");
           highlight.className = "pdf-highlight";
+          highlight.dataset.noteId = noteId;
           highlight.style.position = "absolute";
-          highlight.style.left = `${((rect.left - containerRect.left) / zoom / containerW) * 100}%`;
-          highlight.style.top = `${((rect.top - containerRect.top) / zoom / containerH) * 100}%`;
-          highlight.style.width = `${(rect.width / zoom / containerW) * 100}%`;
-          highlight.style.height = `${(rect.height / zoom / containerH) * 100}%`;
-          highlight.style.backgroundColor = "rgba(255, 255, 0, 0.4)";
+          highlight.style.left = `${((rect.left - containerRect.left) / containerRect.width) * 100}%`;
+          highlight.style.top = `${((rect.top - containerRect.top) / containerRect.height) * 100}%`;
+          highlight.style.width = `${(rect.width / containerRect.width) * 100}%`;
+          highlight.style.height = `${(rect.height / containerRect.height) * 100}%`;
+          highlight.style.backgroundColor = color;
           highlight.style.pointerEvents = "none";
-          highlight.style.zIndex = "0";
+          highlight.style.zIndex = "1";
           pageContainer.appendChild(highlight);
         }
       }
     }
 
+    const approxLines = Math.max(1, Math.ceil(text.length / 26));
+    const initHeight = Math.max(64, Math.min(450, 42 + approxLines * 25));
+
+    const pageAttr = pageContainer?.getAttribute("data-page");
+    const pageNum = pageAttr ? parseInt(pageAttr, 10) : undefined;
+
+    const cleanTitle = (pdfTitle || "PDF").replace(/^File:/i, "").replace(/_/g, " ");
+
+    addWindow({
+      id: noteId,
+      contentType: "sticky",
+      isExcerptNote: true,
+      title: `Note (${cleanTitle})`,
+      stickyText: text,
+      parentId: windowId,
+      pdfPage: pageNum,
+      width: 260,
+      height: initHeight,
+      noteColor: "yellow",
+    });
+
     sel.removeAllRanges();
     setVisible(false);
-  }, []);
+  }, [addWindow, pdfTitle, windowId]);
 
   const handleSearchWikipedia = useCallback(async () => {
     const text = selectedTextRef.current;
@@ -151,7 +178,19 @@ export default function PdfSelectionToolbox({ scrollContainerRef, isMaximized, w
       /* fetch failed */
     }
 
-    updateWindow(windowId, { pdfMaximized: false });
+    const targetWin = useWindows.getState().windows.find((w) => w.id === windowId);
+    if (targetWin?.pdfPreMaximizedBounds) {
+      const pre = targetWin.pdfPreMaximizedBounds;
+      updateWindow(windowId, {
+        x: pre.x,
+        y: pre.y,
+        width: pre.width,
+        height: pre.height,
+        pdfMaximized: false,
+      });
+    } else {
+      updateWindow(windowId, { pdfMaximized: false });
+    }
     setVisible(false);
   }, [addWindow, updateWindow, windowId]);
 

@@ -57,10 +57,10 @@ export default function PdfViewer({ win, onAddSticky, onPositionChange, onActiva
 
   const isPdfMaximized = !!win.pdfMaximized;
   const isAnimating = !!win.pdfAnimating;
-  const renderAsMaximized = isPdfMaximized || isAnimating;
+  const renderAsMaximized = isPdfMaximized;
   const isMaximized = isPdfMaximized;
   const prevMaximizedRef = useRef(isMaximized);
-  const prevWindowRef = useRef<{ winX: number; winY: number } | null>(null);
+  const prevWindowRef = useRef<{ winX: number; winY: number; winWidth: number; winHeight: number } | null>(null);
 
   const pdfZoomRef = useRef(1);
   const pagesContainerRef = useRef<HTMLDivElement>(null);
@@ -434,13 +434,44 @@ export default function PdfViewer({ win, onAddSticky, onPositionChange, onActiva
   const prevPage = useCallback(() => goToPage(targetPageRef.current - 1), [goToPage]);
   const nextPage = useCallback(() => goToPage(targetPageRef.current + 1), [goToPage]);
 
+  // Sync external page changes (e.g. clicking an excerpt sticky note)
+  useEffect(() => {
+    if (win.pdfCurrentPage && win.pdfCurrentPage !== targetPageRef.current) {
+      goToPage(win.pdfCurrentPage);
+    }
+  }, [win.pdfCurrentPage, goToPage]);
+
+  // Remove highlights when their associated sticky note is closed
+  useEffect(() => {
+    const handleNoteClosed = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail?.noteId) return;
+      const marks = scrollContainerRef.current?.querySelectorAll(
+        `.pdf-highlight[data-note-id="${detail.noteId}"]`
+      );
+      marks?.forEach((mark) => mark.remove());
+    };
+    window.addEventListener("wikiboard:note-closed", handleNoteClosed);
+    return () => window.removeEventListener("wikiboard:note-closed", handleNoteClosed);
+  }, []);
+
 
   const toggleMaximize = useCallback(() => {
     if (!win.pdfMaximized) {
-      prevWindowRef.current = {
-        winX: win.x ?? 80,
-        winY: win.y ?? 80,
+      const el = document.getElementById(`win-${win.id}`);
+      const curX = el ? (parseFloat(el.style.left) || el.offsetLeft) : (win.x ?? 80);
+      const curY = el ? (parseFloat(el.style.top) || el.offsetTop) : (win.y ?? 80);
+      const curW = el ? (parseFloat(el.style.width) || el.offsetWidth) : (win.width ?? 620);
+      const ratio = pageAspectRatio || 1.414;
+      const curH = el ? (parseFloat(el.style.height) || el.offsetHeight) : (win.height ?? Math.round(curW * ratio + 96));
+
+      const preBounds = {
+        winX: curX,
+        winY: curY,
+        winWidth: curW,
+        winHeight: curH,
       };
+      prevWindowRef.current = preBounds;
 
       pdfZoomRef.current = 1;
 
@@ -449,10 +480,21 @@ export default function PdfViewer({ win, onAddSticky, onPositionChange, onActiva
       }
 
       updateWindow(win.id, {
+        pdfPreMaximizedBounds: {
+          x: curX,
+          y: curY,
+          width: curW,
+          height: curH,
+        },
         pdfMaximized: true,
       });
     } else {
-      const prev = prevWindowRef.current;
+      const prev = prevWindowRef.current ?? (win.pdfPreMaximizedBounds ? {
+        winX: win.pdfPreMaximizedBounds.x,
+        winY: win.pdfPreMaximizedBounds.y,
+        winWidth: win.pdfPreMaximizedBounds.width,
+        winHeight: win.pdfPreMaximizedBounds.height,
+      } : null);
 
       pdfZoomRef.current = 1;
 
@@ -460,20 +502,21 @@ export default function PdfViewer({ win, onAddSticky, onPositionChange, onActiva
         pagesContainerRef.current.style.zoom = "";
       }
 
-      const currentW = win.width ?? 620;
+      const currentW = prev?.winWidth ?? win.width ?? 620;
       const ratio = pageAspectRatio || 1.414;
-      const expectedH = Math.round(currentW * ratio + 96);
+      const expectedH = prev?.winHeight ?? Math.round(currentW * ratio + 96);
 
       updateWindow(win.id, {
         x: prev?.winX ?? win.x ?? 80,
         y: prev?.winY ?? win.y ?? 80,
+        width: currentW,
         height: expectedH,
         pdfMaximized: false,
       });
 
       prevWindowRef.current = null;
     }
-  }, [win.pdfMaximized, win.id, win.x, win.y, updateWindow]);
+  }, [win.pdfMaximized, win.id, win.x, win.y, win.width, win.height, win.pdfPreMaximizedBounds, pageAspectRatio, updateWindow]);
 
 
   // --- Synchronously position scroll when toggling maximize ---
@@ -495,6 +538,8 @@ export default function PdfViewer({ win, onAddSticky, onPositionChange, onActiva
         } else {
           container.scrollTop = 0;
         }
+      } else {
+        container.scrollTop = 0;
       }
     }
   }, [isMaximized, pageAspectRatio]);
@@ -647,14 +692,14 @@ export default function PdfViewer({ win, onAddSticky, onPositionChange, onActiva
                 }}
                 data-page={p}
                 style={pageStyle}
-                className={`relative p-0 mx-auto bg-white ${showUnmaximizedStyle ? "rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.25)]" : (isMaximized ? "rounded-none shadow-[-12px_0_25px_-4px_rgba(0,0,0,0.25),12px_0_25px_-4px_rgba(0,0,0,0.25)]" : "rounded-none shadow-none")} ${isMaximized ? "" : "max-w-[850px] w-full h-fit"}`}
+                className={`relative p-0 mx-auto bg-white transition-[border-radius,box-shadow] duration-300 ease-out ${showUnmaximizedStyle ? "rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.25)]" : (isMaximized ? "rounded-none shadow-[-12px_0_25px_-4px_rgba(0,0,0,0.25),12px_0_25px_-4px_rgba(0,0,0,0.25)]" : "rounded-none shadow-none")} ${isMaximized ? "" : "max-w-[850px] w-full h-fit"}`}
               >
                 <canvas
                   ref={(el) => {
                     if (el) canvasRefs.current.set(p, el);
                     else canvasRefs.current.delete(p);
                   }}
-                  className={`block w-full h-auto ${showUnmaximizedStyle ? "rounded-2xl" : "rounded-none"}`}
+                  className={`block w-full h-auto transition-[border-radius] duration-300 ease-out ${showUnmaximizedStyle ? "rounded-2xl" : "rounded-none"}`}
                 />
                 {isMaximized && (
                   <div
@@ -794,6 +839,7 @@ export default function PdfViewer({ win, onAddSticky, onPositionChange, onActiva
         scrollContainerRef={scrollContainerRef}
         isMaximized={isMaximized}
         windowId={win.id}
+        pdfTitle={win.title}
       />
     </>
   );

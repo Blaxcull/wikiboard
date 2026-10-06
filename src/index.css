@@ -55,6 +55,8 @@
 
 .window.sticky-window {
   will-change: transform, opacity;
+  min-height: 48px !important;
+  min-width: 80px !important;
 }
 
 .window.sticky-window:not(.excerpt-note-window) {
@@ -291,6 +293,7 @@
   content-visibility: visible !important;
 }
 
+.pdf-window.animating,
 .pdf-window.maximized {
   background: transparent !important;
   border-radius: 0 !important;
@@ -299,6 +302,10 @@
   outline: none !important;
   box-shadow: none !important;
   cursor: default !important;
+}
+
+.pdf-window.animating {
+  pointer-events: none !important;
 }
 
 .pdf-window.maximized::before {
@@ -351,6 +358,15 @@
 
 .pdf-text-layer ::selection {
   background: rgba(0, 100, 200, 0.3);
+}
+
+.pdf-highlight {
+  position: absolute;
+  pointer-events: none;
+  z-index: 1;
+  mix-blend-mode: multiply;
+  border-radius: 2px;
+  transition: background-color 0.2s ease;
 }
 
 /* ── PDF selection toolbox ────────────────────────────────── */

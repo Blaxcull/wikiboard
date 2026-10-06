@@ -173,8 +173,8 @@ export default function ArticleSelectionToolbox({ hostRef, winId, articleTitle }
     const text = selectedTextRef.current;
     if (!text) return;
 
-    const approxLines = Math.max(1, Math.ceil(text.length / 28));
-    const initHeight = Math.max(64, Math.min(450, 32 + approxLines * 22));
+    const approxLines = Math.max(1, Math.ceil(text.length / 26));
+    const initHeight = Math.max(64, Math.min(450, 42 + approxLines * 25));
 
     const noteId = crypto.randomUUID();
 

@@ -295,7 +295,7 @@
 
 .pdf-window.animating,
 .pdf-window.maximized {
-  background: transparent !important;
+  background: #e8e8e8 !important;
   border-radius: 0 !important;
   z-index: 10000 !important;
   border: none !important;

@@ -666,9 +666,9 @@ export default function PdfViewer({ win, onAddSticky, onPositionChange, onActiva
         ref={scrollContainerRef}
         onScroll={handleScroll}
         className={`flex-1 min-h-0 relative ${renderAsMaximized ? (isAnimating ? "overflow-hidden" : "overflow-y-auto") : "overflow-visible"}`}
-        style={{ backgroundColor: "transparent", scrollbarWidth: "none", cursor: renderAsMaximized ? "default" : undefined }}
+        style={{ backgroundColor: renderAsMaximized ? "#e8e8e8" : "transparent", scrollbarWidth: "none", cursor: renderAsMaximized ? "default" : undefined }}
       >
-        <div ref={pagesContainerRef} className={`flex flex-col gap-6 w-full items-center ${renderAsMaximized ? "pt-0 pb-3" : "py-6"}`} style={{ backgroundColor: "transparent" }}>
+        <div ref={pagesContainerRef} className={`flex flex-col gap-6 w-full items-center ${renderAsMaximized ? "pt-0 pb-3" : "py-6"}`} style={{ backgroundColor: renderAsMaximized ? "#e8e8e8" : "transparent" }}>
           {pagesArray.map((p) => {
             const isVisible = renderAsMaximized || p === currentPage;
 
@@ -692,7 +692,7 @@ export default function PdfViewer({ win, onAddSticky, onPositionChange, onActiva
                 }}
                 data-page={p}
                 style={pageStyle}
-                className={`relative p-0 mx-auto bg-white transition-[border-radius,box-shadow] duration-300 ease-out ${showUnmaximizedStyle ? "rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.25)]" : (isMaximized ? "rounded-none shadow-[-12px_0_25px_-4px_rgba(0,0,0,0.25),12px_0_25px_-4px_rgba(0,0,0,0.25)]" : "rounded-none shadow-none")} ${isMaximized ? "" : "max-w-[850px] w-full h-fit"}`}
+                className={`relative p-0 mx-auto bg-white transition-[border-radius,box-shadow] duration-300 ease-out ${showUnmaximizedStyle ? "rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.25)]" : "rounded-none shadow-none"} ${isMaximized ? "" : "max-w-[850px] w-full h-fit"}`}
               >
                 <canvas
                   ref={(el) => {

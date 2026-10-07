@@ -185,11 +185,21 @@ function parseTransformTranslate(el: HTMLElement): { tx: number; ty: number } {
 }
 
 function readWindowPos(el: HTMLElement): { x: number; y: number; w: number; h: number; zIndex: number } {
-  const x = parseFloat(el.style.left) || 0;
-  const y = parseFloat(el.style.top) || 0;
+  let x = parseFloat(el.style.left) || 0;
+  let y = parseFloat(el.style.top) || 0;
   const zIndex = parseInt(el.style.zIndex, 10) || 0;
 
   const { tx, ty } = parseTransformTranslate(el);
+
+  if (el.classList.contains("compress-transition") || el.classList.contains("unstacking")) {
+    const rect = el.getBoundingClientRect();
+    const cam = getCamera();
+    if (cam.zoom > 0) {
+      const pt = screenToWorld(rect.left, rect.top);
+      x = pt.x - tx;
+      y = pt.y - ty;
+    }
+  }
 
   const winEl = el.matches(".window") ? el : (el.querySelector<HTMLElement>(".window") || el);
   const w = winEl.offsetWidth || parseFloat(el.style.width) || el.offsetWidth || 750;
@@ -743,7 +753,7 @@ const ConnectionArrows = memo(function ConnectionArrows({
 
       path.style.display = '';
       const childWin = byId.get(childId);
-      if (childWin?.isExcerptNote || childWin?.contentType === 'sticky') {
+      if (childWin?.isExcerptNote) {
         let ex = a.ex;
         let ey = a.ey;
         if (cEl) {
@@ -795,16 +805,24 @@ const ConnectionArrows = memo(function ConnectionArrows({
     return subscribeAnimation(() => updatePaths());
   }, [updatePaths]);
 
-  // Initial render + store updates (deferred to ensure newly spawned window elements exist in DOM)
+  // Initial render + store updates (run rAF loop for 420ms to cover 300ms-350ms CSS compress/unstack transitions)
   useEffect(() => {
-    updatePaths();
-    const raf = requestAnimationFrame(() => updatePaths());
-    const timer = setTimeout(() => updatePaths(), 60);
+    let rafId = 0;
+    const start = performance.now();
+
+    function loop() {
+      updatePaths();
+      if (performance.now() - start < 420) {
+        rafId = requestAnimationFrame(loop);
+      }
+    }
+
+    loop();
+
     return () => {
-      cancelAnimationFrame(raf);
-      clearTimeout(timer);
+      if (rafId) cancelAnimationFrame(rafId);
     };
-  }, [windows, updatePaths]);
+  }, [windows, groups, updatePaths]);
 
   // rAF loop for live drag/resize tracking — imperative, no React state
   useEffect(() => {
@@ -1466,7 +1484,12 @@ const WindowItem = memo(function WindowItem({
       attachedPdf.pdfCurrentPage != null &&
       w.pdfPage !== attachedPdf.pdfCurrentPage;
 
-    const shouldHideSticky = isAttachedPdfMaximized || isWrongPdfPage;
+    const groupMembers = parentGroup ? windows.filter((win) => parentGroup.memberIds.includes(win.id)) : [];
+    const hasNonStickyMember = groupMembers.some((win) => win.contentType !== "sticky");
+    const isFirstStickyInGroup = !hasNonStickyMember && groupMembers.filter((win) => win.contentType === "sticky")[0]?.id === w.id;
+    const isHiddenInCompressedGroup = isCompressedGroupMember && !isFirstStickyInGroup;
+
+    const shouldHideSticky = isAttachedPdfMaximized || isWrongPdfPage || isHiddenInCompressedGroup;
 
     return (
       <div

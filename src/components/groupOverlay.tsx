@@ -556,7 +556,12 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
       let maxX = -Infinity;
       let maxY = -Infinity;
 
-      for (const w of memberWins) {
+      const nonStickyWins = memberWins.filter((win) => win.contentType !== "sticky");
+      const visibleWins = isCompressed
+        ? (nonStickyWins.length > 0 ? nonStickyWins : memberWins.slice(0, 1))
+        : memberWins;
+
+      for (const w of visibleWins) {
         let wx: number;
         let wy: number;
         let ww: number;
@@ -631,7 +636,12 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
   let maxX = -Infinity;
   let maxY = -Infinity;
 
-  for (const w of memberWins) {
+  const nonStickyWins = memberWins.filter((win) => win.contentType !== "sticky");
+  const visibleWins = isCompressed
+    ? (nonStickyWins.length > 0 ? nonStickyWins : memberWins.slice(0, 1))
+    : memberWins;
+
+  for (const w of visibleWins) {
     let wx: number;
     let wy: number;
     let ww: number;

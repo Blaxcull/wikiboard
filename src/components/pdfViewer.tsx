@@ -32,7 +32,7 @@ function copyCanvas(source: HTMLCanvasElement, target: HTMLCanvasElement) {
 }
 
 const TOOLBAR_BTN =
-  "flex items-center justify-center w-8 h-8 p-0 border-0 rounded-lg bg-transparent text-[#333] cursor-pointer hover:bg-black/10 hover:text-black active:bg-black/15 disabled:opacity-30 disabled:cursor-not-allowed transition-colors";
+  "flex items-center justify-center w-8 h-8 p-0 border-0 rounded-lg bg-transparent text-[#333] cursor-pointer hover:bg-black/10 hover:text-black active:bg-black/15 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 ease-out hover:scale-110 active:scale-95 select-none";
 
 import { fetchPdfBuffer } from "../utils/pdfCache";
 
@@ -45,6 +45,7 @@ export default function PdfViewer({ win, onAddSticky, onPositionChange, onActiva
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const updateWindow = useWindows((s) => s.updateWindow);
+  const isCompressedGroupMember = useWindows((s) => s.groups.some((g) => g.compressed && g.memberIds.includes(win.id)));
 
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const canvasRefs = useRef<Map<number, HTMLCanvasElement>>(new Map());
@@ -153,6 +154,8 @@ export default function PdfViewer({ win, onAddSticky, onPositionChange, onActiva
   // --- Match window height to actual page width and aspect ratio when unmaximized ---
   useEffect(() => {
     if (loading || isMaximized || isAnimating || !pageAspectRatio) return;
+    const parentGroup = useWindows.getState().groups.find((g) => g.memberIds.includes(win.id));
+    if (parentGroup?.compressed) return;
     const currentW = win.width ?? 620;
     const expectedH = Math.round(currentW * pageAspectRatio + 96);
     if (Math.abs((win.height ?? 0) - expectedH) > 2) {
@@ -487,6 +490,7 @@ export default function PdfViewer({ win, onAddSticky, onPositionChange, onActiva
           height: curH,
         },
         pdfMaximized: true,
+        pdfAnimating: true,
       });
     } else {
       const prev = prevWindowRef.current ?? (win.pdfPreMaximizedBounds ? {
@@ -512,6 +516,7 @@ export default function PdfViewer({ win, onAddSticky, onPositionChange, onActiva
         width: currentW,
         height: expectedH,
         pdfMaximized: false,
+        pdfAnimating: true,
       });
 
       prevWindowRef.current = null;
@@ -666,14 +671,24 @@ export default function PdfViewer({ win, onAddSticky, onPositionChange, onActiva
         ref={scrollContainerRef}
         onScroll={handleScroll}
         className={`flex-1 min-h-0 relative ${renderAsMaximized ? (isAnimating ? "overflow-hidden" : "overflow-y-auto") : "overflow-visible"}`}
-        style={{ backgroundColor: renderAsMaximized ? "#e8e8e8" : "transparent", scrollbarWidth: "none", cursor: renderAsMaximized ? "default" : undefined }}
+        style={{ backgroundColor: "transparent", scrollbarWidth: "none", cursor: renderAsMaximized ? "default" : undefined }}
       >
-        <div ref={pagesContainerRef} className={`flex flex-col gap-6 w-full items-center ${renderAsMaximized ? "pt-0 pb-3" : "py-6"}`} style={{ backgroundColor: renderAsMaximized ? "#e8e8e8" : "transparent" }}>
+        <div
+          ref={pagesContainerRef}
+          className="flex flex-col gap-6 w-full items-center"
+          style={{
+            backgroundColor: "transparent",
+            paddingTop: isCompressedGroupMember ? "0px" : "8px",
+            paddingBottom: isCompressedGroupMember ? "0px" : "16px",
+            transition: "padding 320ms cubic-bezier(0.16, 1, 0.3, 1)",
+          }}
+        >
           {pagesArray.map((p) => {
             const isVisible = renderAsMaximized || p === currentPage;
 
             const pageStyle: CSSProperties = {
               display: isVisible ? "block" : "none",
+              transition: "max-width 320ms cubic-bezier(0.16, 1, 0.3, 1), width 320ms cubic-bezier(0.16, 1, 0.3, 1)",
             };
             if (renderAsMaximized) {
               const cam = getCamera();
@@ -692,14 +707,14 @@ export default function PdfViewer({ win, onAddSticky, onPositionChange, onActiva
                 }}
                 data-page={p}
                 style={pageStyle}
-                className={`relative p-0 mx-auto bg-white transition-[border-radius,box-shadow] duration-300 ease-out ${showUnmaximizedStyle ? "rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.25)]" : "rounded-none shadow-none"} ${isMaximized ? "" : "max-w-[850px] w-full h-fit"}`}
+                className={`relative p-0 mx-auto bg-white transition-[border-radius,box-shadow] duration-300 ease-out ${isCompressedGroupMember ? "rounded-2xl shadow-none" : (showUnmaximizedStyle ? "rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.25)]" : (isMaximized ? "rounded-none shadow-[-12px_0_25px_-4px_rgba(0,0,0,0.25),12px_0_25px_-4px_rgba(0,0,0,0.25)]" : "rounded-none shadow-none"))} ${isMaximized ? "" : "max-w-[850px] w-full h-fit"}`}
               >
                 <canvas
                   ref={(el) => {
                     if (el) canvasRefs.current.set(p, el);
                     else canvasRefs.current.delete(p);
                   }}
-                  className={`block w-full h-auto transition-[border-radius] duration-300 ease-out ${showUnmaximizedStyle ? "rounded-2xl" : "rounded-none"}`}
+                  className={`block w-full h-auto transition-[border-radius] duration-300 ease-out ${showUnmaximizedStyle || isCompressedGroupMember ? "rounded-2xl" : "rounded-none"}`}
                 />
                 {isMaximized && (
                   <div
@@ -747,17 +762,13 @@ export default function PdfViewer({ win, onAddSticky, onPositionChange, onActiva
         className="pdf-toolbar flex justify-center items-center gap-1 py-1 px-2 bg-white/90 backdrop-blur-[12px] border border-black/15 shadow-[0_8px_30px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.06)] rounded-full mx-auto"
         style={{
           pointerEvents: isAnimating ? "none" : "auto",
-          transition: "opacity 0.2s ease",
-          ...(isMaximized
-            ? {
-                position: "absolute",
-                bottom: `${12 / camZoom}px`,
-                left: "50%",
-                transform: `translateX(-50%) scale(${1 / camZoom})`,
-                transformOrigin: "bottom center",
-                zIndex: 10,
-              }
-            : { marginBottom: "16px", marginTop: "16px", width: "fit-content" }),
+          position: "absolute",
+          bottom: isMaximized ? `${12 / camZoom}px` : "14px",
+          left: "50%",
+          transform: isMaximized ? `translateX(-50%) scale(${1 / camZoom})` : "translateX(-50%) scale(1)",
+          transformOrigin: "bottom center",
+          zIndex: 10,
+          transition: "all 320ms cubic-bezier(0.16, 1, 0.3, 1)",
         }}
       >
         {/* Action button (Move / Bookmark) */}
@@ -823,7 +834,15 @@ export default function PdfViewer({ win, onAddSticky, onPositionChange, onActiva
         <div className="h-4 w-[1px] bg-black/10 mx-0.5" />
 
         {/* View Mode button */}
-        <button className={TOOLBAR_BTN} onClick={toggleMaximize} title={isMaximized ? "Exit fullscreen" : "Fullscreen"}>
+        <button
+          className={TOOLBAR_BTN}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleMaximize();
+          }}
+          title={isMaximized ? "Exit fullscreen" : "Fullscreen"}
+        >
           {isMaximized ? (
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />

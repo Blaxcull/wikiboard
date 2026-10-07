@@ -295,7 +295,7 @@
 
 .pdf-window.animating,
 .pdf-window.maximized {
-  background: #e8e8e8 !important;
+  background: transparent !important;
   border-radius: 0 !important;
   z-index: 10000 !important;
   border: none !important;
@@ -556,10 +556,19 @@
 
 /* ── Compressed Group Card Styling ───────────────────────── */
 
-.window.is-compressed {
+.window.is-compressed,
+.window.is-compressed * {
   overflow: hidden !important;
   pointer-events: none !important;
   user-select: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  filter: none !important;
+  border-radius: 16px !important;
+}
+
+.window.is-compressed {
+  border-radius: 16px !important;
 }
 
 .window.is-compressed .titlebar {

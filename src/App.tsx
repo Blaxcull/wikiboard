@@ -207,7 +207,7 @@ function readWindowPos(el: HTMLElement): { x: number; y: number; w: number; h: n
   const offsetX = winEl !== el ? winEl.offsetLeft : 0;
   const offsetY = winEl !== el ? winEl.offsetTop : 0;
 
-  if (winEl.classList.contains("pdf-window") && !winEl.classList.contains("maximized")) {
+  if (winEl.classList.contains("pdf-window") && !winEl.classList.contains("maximized") && !winEl.classList.contains("is-compressed")) {
     const canvas = winEl.querySelector("canvas");
     if (canvas) {
       const windowRect = winEl.getBoundingClientRect();
@@ -1281,7 +1281,7 @@ const WindowItem = memo(function WindowItem({
         {
           duration: 320,
           easing: "cubic-bezier(0.16, 1, 0.3, 1)",
-          fill: "backwards",
+          fill: "both",
         }
       );
       activeAnimRef.current = anim;
@@ -1301,8 +1301,8 @@ const WindowItem = memo(function WindowItem({
         el.style.width = `${maximizedBounds.width}px`;
         el.style.height = `${maximizedBounds.height}px`;
       } else {
-        if (w.x !== undefined) el.style.left = `${w.x}px`;
-        if (w.y !== undefined) el.style.top = `${w.y}px`;
+        el.style.left = `${w.x ?? 80}px`;
+        el.style.top = `${w.y ?? 80}px`;
         el.style.width = `${normalBounds.width}px`;
         el.style.height = `${normalBounds.height}px`;
       }
@@ -1521,7 +1521,7 @@ const WindowItem = memo(function WindowItem({
                   borderRadius: "22px",
                   background: "#f0e5d8",
                   border: "1px solid #e4d5c3",
-                  boxShadow: "0 4px 14px rgba(0, 0, 0, 0.08)",
+                  boxShadow: isCompressedGroupMember ? "none" : "0 4px 14px rgba(0, 0, 0, 0.08)",
                 }
               : {}),
           }}
@@ -1602,7 +1602,17 @@ const WindowItem = memo(function WindowItem({
         } ${
           w.pdfMaximized && !w.pdfAnimating ? "maximized-done" : ""
         } ${w.active ? "active" : "inactive"} ${isCompressedGroupMember ? "is-compressed" : ""} ${w.pdfAnimating ? "animating no-transition" : ""}`}
-        style={zIndexStyle}
+        style={{
+          ...zIndexStyle,
+          ...(!w.pdfMaximized && !w.pdfAnimating
+            ? {
+                left: `${w.x ?? 80}px`,
+                top: `${w.y ?? 80}px`,
+                width: `${itemW}px`,
+                height: `${itemH}px`,
+              }
+            : {}),
+        }}
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();

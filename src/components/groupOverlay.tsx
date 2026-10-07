@@ -542,7 +542,8 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
   useEffect(() => {
     let rafId = 0;
     const isCompressed = !!group.compressed;
-    const PAD = isCompressed ? 24 : 44;
+    const PAD_X = isCompressed ? 32 : 36;
+    const PAD_Y = isCompressed ? 12 : 28;
 
     function updateLiveGroupBounds() {
       rafId = 0;
@@ -593,10 +594,10 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
       }
 
       if (minX !== Infinity) {
-        containerEl.style.left = `${minX - PAD}px`;
-        containerEl.style.top = `${minY - PAD}px`;
-        containerEl.style.width = `${maxX - minX + PAD * 2}px`;
-        containerEl.style.height = `${maxY - minY + PAD * 2}px`;
+        containerEl.style.left = `${minX - PAD_X}px`;
+        containerEl.style.top = `${minY - PAD_Y}px`;
+        containerEl.style.width = `${maxX - minX + PAD_X * 2}px`;
+        containerEl.style.height = `${maxY - minY + PAD_Y * 2}px`;
       }
 
       if (isDraggingWindow || isResizingWindow) {
@@ -629,7 +630,8 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
 
   const hasMaximizedMember = memberWins.some((w) => w.pdfMaximized);
   const isCompressed = !!group.compressed;
-  const PAD = isCompressed ? 24 : 44;
+  const PAD_X = isCompressed ? 32 : 36;
+  const PAD_Y = isCompressed ? 12 : 28;
 
   let minX = Infinity;
   let minY = Infinity;
@@ -671,10 +673,10 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
     if (wy + wh > maxY) maxY = wy + wh;
   }
 
-  const boxX = minX - PAD;
-  const boxY = minY - PAD;
-  const boxW = maxX - minX + PAD * 2;
-  const boxH = maxY - minY + PAD * 2;
+  const boxX = minX - PAD_X;
+  const boxY = minY - PAD_Y;
+  const boxW = maxX - minX + PAD_X * 2;
+  const boxH = maxY - minY + PAD_Y * 2;
 
   let minMemberZ = Infinity;
   for (const w of memberWins) {

@@ -97,11 +97,12 @@ const SelectionOverlay = memo(function SelectionOverlay({ marquee }: SelectionOv
       if (b.bottom > maxY) maxY = b.bottom;
     }
 
-    const PAD = 14;
-    const boxX = minX - PAD;
-    const boxY = minY - PAD;
-    const boxW = maxX - minX + PAD * 2;
-    const boxH = maxY - minY + PAD * 2;
+    const PAD_X = 36;
+    const PAD_Y = 28;
+    const boxX = minX - PAD_X;
+    const boxY = minY - PAD_Y;
+    const boxW = maxX - minX + PAD_X * 2;
+    const boxH = maxY - minY + PAD_Y * 2;
 
     groupBoundingBox = { boxX, boxY, boxW, boxH };
   }
@@ -149,7 +150,7 @@ const SelectionOverlay = memo(function SelectionOverlay({ marquee }: SelectionOv
               height: `${groupBoundingBox.boxH}px`,
               border: "1.5px dashed #ea580c",
               backgroundColor: "rgba(249, 115, 22, 0.10)",
-              borderRadius: "16px",
+              borderRadius: "28px",
               pointerEvents: "none",
               zIndex: 99998,
             }}

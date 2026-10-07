@@ -107,7 +107,7 @@ const Window = memo(function Window({
         {onClose && (
             <button
   type="button"
-  className="flex items-center justify-center w-6 h-6 ml-auto border-none bg-transparent text-[#666] text-lg leading-none cursor-pointer rounded transition-all duration-150 hover:text-white hover:bg-[#e74c3c]"
+  className="flex items-center justify-center w-6 h-6 ml-auto border-none bg-transparent text-[#666] text-lg leading-none cursor-pointer rounded transition-all duration-200 hover:scale-110 active:scale-95 hover:text-white hover:bg-[#e74c3c]"
   onMouseDown={(e) => e.stopPropagation()}
   onClick={onClose}
 >

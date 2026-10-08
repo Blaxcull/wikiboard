@@ -208,7 +208,13 @@ function readWindowPos(el: HTMLElement): { x: number; y: number; w: number; h: n
   const offsetY = winEl !== el ? winEl.offsetTop : 0;
 
   if (winEl.classList.contains("pdf-window") && !winEl.classList.contains("maximized") && !winEl.classList.contains("is-compressed")) {
-    const canvas = winEl.querySelector("canvas");
+    const canvases = winEl.querySelectorAll<HTMLCanvasElement>("canvas");
+    const canvas =
+      Array.from(canvases).find((c) => {
+        const parent = c.closest<HTMLElement>("[data-page]");
+        return !parent || parent.style.display !== "none";
+      }) || canvases[0];
+
     if (canvas) {
       const windowRect = winEl.getBoundingClientRect();
       const canvasRect = canvas.getBoundingClientRect();

@@ -5,7 +5,19 @@ import { useWindows } from "../store/windows";
 export default function LeftMenu() {
   const isTextToolActive = useWindows((s) => s.isTextToolActive);
   const toggleTextTool = useWindows((s) => s.toggleTextTool);
+  const addWindow = useWindows((s) => s.addWindow);
   const [searchOpen, setSearchOpen] = useState(false);
+
+  const handleAddStickyNote = () => {
+    addWindow({
+      contentType: "sticky",
+      title: "Note",
+      stickyText: "",
+      noteColor: "yellow",
+      width: 260,
+      height: 200,
+    });
+  };
 
   useEffect(() => {
     const handleSearchState = (e: Event) => {
@@ -102,6 +114,40 @@ export default function LeftMenu() {
             <span>{isTextToolActive ? "Cancel Text Tool" : "Text Tool"}</span>
             <kbd className="px-1.5 py-0.5 text-[10px] bg-white/20 rounded font-sans leading-none text-gray-200">
               T
+            </kbd>
+          </div>
+        </div>
+
+        {/* Sticky Note Button ('N' or Click to Add Sticky Note) (Third item in the menu) */}
+        <div className="relative group">
+          <button
+            type="button"
+            onClick={handleAddStickyNote}
+            aria-label="Add Sticky Note"
+            className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border-none outline-none text-gray-600 hover:text-gray-900 hover:bg-black/6 active:scale-95"
+          >
+            <svg
+              className="w-5 h-5 transition-transform duration-150 group-hover:scale-105"
+              viewBox="0 0 24 24"
+              fill="#fef08a"
+              stroke="#ca8a04"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z" />
+              <path d="M15 3v6h6" />
+            </svg>
+          </button>
+
+          {/* Right Flyout Tooltip */}
+          <div
+            role="tooltip"
+            className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 px-2.5 py-1.5 bg-gray-900/90 text-white text-xs font-medium rounded-lg shadow-lg opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150 whitespace-nowrap flex items-center gap-2 z-50 backdrop-blur-md"
+          >
+            <span>Add Sticky Note</span>
+            <kbd className="px-1.5 py-0.5 text-[10px] bg-white/20 rounded font-sans leading-none text-gray-200">
+              N
             </kbd>
           </div>
         </div>

@@ -1882,6 +1882,7 @@ function App() {
   )
 
   const isTextToolActive = useWindows((s) => s.isTextToolActive);
+  const isStickyToolActive = useWindows((s) => s.isStickyToolActive);
   const [isShiftPressed, setIsShiftPressed] = useState(false);
   const [marquee, setMarquee] = useState<MarqueeState>(null);
 
@@ -1892,6 +1893,8 @@ function App() {
       } else if (e.key === "Escape") {
         if (useWindows.getState().isTextToolActive) {
           useWindows.getState().setTextToolActive(false);
+        } else if (useWindows.getState().isStickyToolActive) {
+          useWindows.getState().setStickyToolActive(false);
         } else {
           useWindows.getState().clearSelection();
           useWindows.getState().deactivateAll();
@@ -1902,6 +1905,20 @@ function App() {
         if (!isEditing) {
           e.preventDefault();
           useWindows.getState().toggleTextTool();
+        }
+      } else if ((e.key === "n" || e.key === "N") && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const target = e.target as HTMLElement | null;
+        const isEditing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
+        if (!isEditing) {
+          e.preventDefault();
+          useWindows.getState().addWindow({
+            contentType: "sticky",
+            title: "Note",
+            stickyText: "",
+            noteColor: "yellow",
+            width: 260,
+            height: 200,
+          });
         }
       }
     }
@@ -1967,6 +1984,24 @@ function App() {
           y: Math.round(startWorld.y),
         });
         useWindows.getState().setTextToolActive(false);
+        return;
+      }
+
+      if (useWindows.getState().isStickyToolActive) {
+        if (isWinClick || isSearchClick) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const startWorld = screenToWorld(e.clientX, e.clientY);
+        addWindow({
+          contentType: "sticky",
+          title: "Note",
+          stickyText: "",
+          width: 260,
+          height: 200,
+          x: Math.round(startWorld.x - 130),
+          y: Math.round(startWorld.y - 100),
+        });
+        useWindows.getState().setStickyToolActive(false);
         return;
       }
 
@@ -2049,7 +2084,7 @@ function App() {
       viewport.removeEventListener("mousedown", onPanMouseDown);
       viewport.removeEventListener("wheel", onWheel);
     };
-  }, [isShiftPressed, isTextToolActive]);
+  }, [isShiftPressed, isTextToolActive, isStickyToolActive]);
 
   async function spawnWithRealTitles() {
     try {

@@ -107,6 +107,9 @@ type WindowsStore = {
   isTextToolActive: boolean;
   setTextToolActive: (active: boolean) => void;
   toggleTextTool: () => void;
+  isStickyToolActive: boolean;
+  setStickyToolActive: (active: boolean) => void;
+  toggleStickyTool: () => void;
 };
 
 export const DEFAULT_WIDTH = 750;
@@ -323,8 +326,11 @@ export const useWindows = create<WindowsStore>((set) => ({
       windows: state.windows.map((w) => (w.active ? { ...w, active: false } : w)),
     })),
   isTextToolActive: false,
-  setTextToolActive: (active) => set({ isTextToolActive: active }),
-  toggleTextTool: () => set((state) => ({ isTextToolActive: !state.isTextToolActive })),
+  setTextToolActive: (active) => set({ isTextToolActive: active, ...(active ? { isStickyToolActive: false } : {}) }),
+  toggleTextTool: () => set((state) => ({ isTextToolActive: !state.isTextToolActive, isStickyToolActive: false })),
+  isStickyToolActive: false,
+  setStickyToolActive: (active) => set({ isStickyToolActive: active, ...(active ? { isTextToolActive: false } : {}) }),
+  toggleStickyTool: () => set((state) => ({ isStickyToolActive: !state.isStickyToolActive, isTextToolActive: false })),
   addGroup: (memberIds, color) =>
     set((state) => {
       const cleanIds = Array.from(new Set(memberIds));

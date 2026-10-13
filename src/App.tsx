@@ -7,6 +7,7 @@ import ArticleView from './components/articleView'
 import PdfViewer from './components/pdfViewer'
 import ImageViewer from './components/imageViewer'
 import StickyNote from './components/stickyNote'
+import DrawingViewer from './components/drawing/DrawingViewer'
 import WindowContextMenu, { type ContextMenuPosition } from './components/windowContextMenu'
 import { useWindows, getConnectedChildNotes, findRootWindow, type WindowData, nextCascadeOffset } from './store/windows'
 import { deleteScroll } from './utils/scrollMemory'
@@ -1572,6 +1573,71 @@ const WindowItem = memo(function WindowItem({
     );
   }
 
+  if (w.contentType === "drawing") {
+    const itemW = isCompressedGroupMember ? 220 : (w.width ?? 840);
+    const itemH = isCompressedGroupMember ? 140 : (w.height ?? 580);
+
+    return (
+      <div
+        id={`win-${w.id}`}
+        className={`window drawing-window ${w.active ? "active" : "inactive"} ${isCompressedGroupMember ? "is-compressed" : ""}`}
+        style={{
+          ...zIndexStyle,
+          left: `${w.x ?? 80}px`,
+          top: `${w.y ?? 80}px`,
+          width: `${itemW}px`,
+          height: `${itemH}px`,
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onContextMenu?.(e, w.id);
+        }}
+        onMouseDown={(e) => {
+          if (isCompressedGroupMember) return;
+          handleActivate();
+          Resize(e, (rect) => handlePositionChange(rect));
+        }}
+      >
+        {!isCompressedGroupMember && <StackedNoteStubs parentWin={w} />}
+        <DrawingViewer
+          win={w}
+          onClose={handleClose}
+          onActivate={handleActivate}
+          onPositionChange={handlePositionChange}
+        />
+        {!isCompressedGroupMember && (
+          <>
+            <button
+              type="button"
+              className="connection-point point-top"
+              title="Add sticky note"
+              onMouseDown={(e) => startWireDrag(e, w.id, "TOP", handleAddSticky)}
+            />
+            <button
+              type="button"
+              className="connection-point point-right"
+              title="Add sticky note"
+              onMouseDown={(e) => startWireDrag(e, w.id, "RIGHT", handleAddSticky)}
+            />
+            <button
+              type="button"
+              className="connection-point point-bottom"
+              title="Add sticky note"
+              onMouseDown={(e) => startWireDrag(e, w.id, "BOTTOM", handleAddSticky)}
+            />
+            <button
+              type="button"
+              className="connection-point point-left"
+              title="Add sticky note"
+              onMouseDown={(e) => startWireDrag(e, w.id, "LEFT", handleAddSticky)}
+            />
+          </>
+        )}
+      </div>
+    );
+  }
+
   if (w.contentType === "pdf") {
     const itemW = isCompressedGroupMember ? 220 : (w.width ?? 620);
     const itemH = isCompressedGroupMember ? 140 : (w.height ?? 945);
@@ -1800,6 +1866,15 @@ function App() {
     [addWindow],
   )
 
+  const handleOpenDrawing = useCallback(() => {
+    addWindow({
+      contentType: "drawing",
+      title: "Drawing Board",
+      width: 840,
+      height: 580,
+    })
+  }, [addWindow])
+
   const [isShiftPressed, setIsShiftPressed] = useState(false);
   const [marquee, setMarquee] = useState<MarqueeState>(null);
 
@@ -1964,6 +2039,35 @@ function App() {
         onChange={handlePdfFileChange}
         style={{ display: "none" }}
       />
+      <button
+        onClick={handleOpenDrawing}
+        style={{
+          position: 'fixed',
+          top: 10,
+          right: 95,
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          background: '#6965db',
+          color: '#ffffff',
+          border: 'none',
+          padding: '4px 10px',
+          borderRadius: '6px',
+          fontWeight: 600,
+          fontSize: '13px',
+          cursor: 'pointer',
+          boxShadow: '0 2px 8px rgba(105, 101, 219, 0.35)',
+        }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 2a10 10 0 1 0 10 10c0-2-1-3-3-3h-2.5a2 2 0 0 1-2-2v-1.5c0-1.5-.5-2.5-2.5-3.5Z" />
+          <circle cx="7.5" cy="10.5" r="1.5" fill="currentColor" />
+          <circle cx="12" cy="7.5" r="1.5" fill="currentColor" />
+          <circle cx="16.5" cy="10.5" r="1.5" fill="currentColor" />
+        </svg>
+        + Draw
+      </button>
       <button
         onClick={handleOpenPdf}
         style={{ position: 'fixed', top: 10, right: 10, zIndex: 9999 }}

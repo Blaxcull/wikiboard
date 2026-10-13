@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { screenToWorld } from "../utils/camera";
 import { focusWindowAndParent } from "../utils/canvas/zoom";
+import type { DrawingElement, DrawingSettings } from "../types/drawing";
 
 export type WindowLink = {
   label: string;
@@ -23,8 +24,14 @@ export type WindowData = {
   sourceHref?: string;
   /** Pre-extracted image src for File: pages — skips the fetchFileUrl API call */
   directImageUrl?: string;
-  /** Content type discriminator: "article" (default), "pdf", or "sticky" */
-  contentType?: "article" | "pdf" | "sticky";
+  /** Content type discriminator: "article" (default), "pdf", "sticky", or "drawing" */
+  contentType?: "article" | "pdf" | "sticky" | "drawing";
+  /** Excalidraw-like drawing elements stored in this window */
+  drawingElements?: DrawingElement[];
+  /** Canvas view & background settings for drawing board */
+  drawingSettings?: DrawingSettings;
+  /** Whether the drawing board is in maximized mode */
+  drawingMaximized?: boolean;
   /** Text stored in a sticky note window */
   stickyText?: string;
   /** Custom background color for sticky note */
@@ -349,8 +356,9 @@ export const useWindows = create<WindowsStore>((set) => ({
       const activeIdx = state.windows.findIndex((w) => w.active);
 
       const isSticky = data?.contentType === "sticky";
-      const childW = data?.width ?? (isSticky ? 260 : DEFAULT_WIDTH);
-      const childH = data?.height ?? (isSticky ? (data?.isExcerptNote ? 64 : 200) : DEFAULT_HEIGHT);
+      const isDrawing = data?.contentType === "drawing";
+      const childW = data?.width ?? (isSticky ? 260 : isDrawing ? 840 : DEFAULT_WIDTH);
+      const childH = data?.height ?? (isSticky ? (data?.isExcerptNote ? 64 : 200) : isDrawing ? 580 : DEFAULT_HEIGHT);
       let posX: number;
       let posY: number;
       let parentWindow: WindowData | undefined;
@@ -462,7 +470,7 @@ export const useWindows = create<WindowsStore>((set) => ({
           {
             id: data?.id ?? crypto.randomUUID(),
             url: "",
-            title: `Window ${windowCount}`,
+            title: data?.title ?? (isDrawing ? `Drawing Board ${windowCount}` : `Window ${windowCount}`),
             links: [],
             active: true,
             lastFocusedAt: Date.now(),

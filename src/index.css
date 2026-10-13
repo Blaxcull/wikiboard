@@ -54,9 +54,11 @@
 }
 
 .window.sticky-window {
-  will-change: transform, opacity;
   min-height: 48px !important;
   min-width: 80px !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 .window.sticky-window:not(.excerpt-note-window) {
@@ -96,17 +98,14 @@
   0% {
     opacity: 0;
     transform: scale(0.75) translateY(14px) rotate(-1.5deg);
-    filter: blur(2px);
   }
   65% {
     opacity: 1;
     transform: scale(1.04) translateY(-2px) rotate(0.5deg);
-    filter: blur(0px);
   }
   100% {
     opacity: 1;
     transform: scale(1) translateY(0) rotate(0deg);
-    filter: blur(0px);
   }
 }
 
@@ -114,12 +113,10 @@
   0% {
     opacity: 0;
     transform: scale(0.68) translateY(18px) rotate(1.8deg);
-    filter: blur(3px);
   }
   60% {
     opacity: 1;
     transform: scale(1.05) translateY(-3px) rotate(-0.5deg);
-    filter: blur(0px);
   }
   85% {
     transform: scale(0.98) translateY(1px);
@@ -127,7 +124,6 @@
   100% {
     opacity: 1;
     transform: scale(1) translateY(0) rotate(0deg);
-    filter: blur(0px);
   }
 }
 
@@ -230,6 +226,8 @@
 }
 
 .group-box {
+  user-select: none;
+  -webkit-user-select: none;
   transition: left 300ms cubic-bezier(0.16, 1, 0.3, 1),
               top 300ms cubic-bezier(0.16, 1, 0.3, 1),
               width 300ms cubic-bezier(0.16, 1, 0.3, 1),
@@ -241,6 +239,14 @@
 .group-box.dragging,
 .group-box.resizing {
   transition: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+.canvas-world.gesture-active,
+.canvas-world.gesture-active * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
 }
 
 .group-box.wire-target-hover {
@@ -509,6 +515,11 @@
   cursor: grabbing;
 }
 
+.canvas-viewport.text-tool-active,
+.canvas-viewport.text-tool-active .canvas-world {
+  cursor: text !important;
+}
+
 .canvas-grid {
   position: absolute;
   inset: 0;
@@ -605,4 +616,14 @@
 .window.is-compressed.sticky-window {
   overflow: hidden !important;
   font-size: 11px !important;
+  border-radius: 16px !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+.window.is-compressed.sticky-window > div,
+.window.is-compressed.sticky-window .sticky-note,
+.window.is-compressed.sticky-window [class*="rounded-sm"] {
+  border-radius: 16px !important;
+  overflow: hidden !important;
 }

@@ -77,7 +77,7 @@ function StickyColorPicker({
     if (winEl && pickerEl) {
       const rect = winEl.getBoundingClientRect();
       const pickerH = pickerEl.offsetHeight;
-      const pickerW = pickerEl.offsetWidth;
+      const pickerW = isHovered ? 230 : 48;
 
       const top = Math.min(window.innerHeight - pickerH - 12, rect.bottom + 14);
       let left = rect.left + rect.width / 2;
@@ -145,21 +145,22 @@ function StickyColorPicker({
       onMouseLeave={handleMouseLeave}
     >
       <div
-        className={`bg-white border-2 border-[#d0d0d0] shadow-[0_8px_24px_rgba(0,0,0,0.14)] flex items-center justify-center transition-all duration-200 ease-out ${
-          isHovered
-            ? "w-[240px] h-[50px] px-4 py-2 gap-3 rounded-[16px] overflow-hidden"
-            : "w-[48px] h-[48px] p-2 rounded-[14px] cursor-pointer"
-        }`}
+        className="bg-white border-2 border-[#d0d0d0] shadow-[0_8px_24px_rgba(0,0,0,0.14)] flex items-center justify-center rounded-[18px] overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        style={{
+          width: isHovered ? "224px" : "48px",
+          height: "48px",
+          padding: isHovered ? "6px 10px" : "6px",
+        }}
         onClick={() => {
           if (!isHovered) setIsHovered(true);
         }}
       >
         {!isHovered ? (
-          <div className="w-8 h-8 flex items-center justify-center cursor-pointer transition-transform hover:scale-105">
+          <div className="w-8 h-8 flex items-center justify-center cursor-pointer transition-transform hover:scale-105 shrink-0">
             <MiniStickyIcon bg={currentOpt.bg} isDark={currentOpt.isDark} size={28} />
           </div>
         ) : (
-          <div className="flex items-center gap-3 shrink-0 animate-in fade-in duration-200">
+          <div className="flex items-center justify-center gap-2.5 w-full shrink-0 transition-opacity duration-200">
             {STICKY_COLORS.map((opt) => {
               const isSelected = (currentColor || "yellow") === opt.id;
               return (
@@ -171,10 +172,10 @@ function StickyColorPicker({
                     updateWindow(winId, { noteColor: opt.id });
                   }}
                   onMouseDown={(e) => e.stopPropagation()}
-                  className={`relative p-0.5 rounded-[8px] cursor-pointer transition-all duration-150 shrink-0 bg-transparent border-none ${
+                  className={`relative p-0.5 rounded-[8px] cursor-pointer transition-transform duration-150 shrink-0 bg-transparent border-none ${
                     isSelected
-                      ? "scale-110 opacity-100"
-                      : "opacity-75 hover:opacity-100 hover:scale-105 active:scale-95"
+                      ? "scale-115 opacity-100"
+                      : "opacity-70 hover:opacity-100 hover:scale-105 active:scale-95"
                   }`}
                   title={opt.name}
                 >
@@ -193,10 +194,23 @@ function StickyColorPicker({
 export default function StickyNote({ win, onClose, onActivate, onPositionChange, onContextMenu }: Props) {
   const updateWindow = useWindows((s) => s.updateWindow);
   const textRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
 
   const isExcerpt = win.isExcerptNote;
   const currentBgColor = getNoteColor(win);
+
+  useEffect(() => {
+    // Automatically focus and place the vertical line cursor (|) ready to write
+    const timer = setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        const pos = textareaRef.current.value.length;
+        textareaRef.current.setSelectionRange(pos, pos);
+      }
+    }, 20);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleTextChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -380,6 +394,8 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange,
           className={`w-5 h-5 rounded flex items-center justify-center text-base leading-none font-semibold border-none bg-transparent cursor-pointer transition-colors z-10 ml-auto ${
             win.noteColor === "dark"
               ? "text-slate-300 hover:text-white hover:bg-white/20"
+              : win.noteColor === "white"
+              ? "text-gray-400 hover:text-gray-700 hover:bg-black/5"
               : "text-[#787236] hover:text-[#222] hover:bg-black/10"
           }`}
           title="Close note"
@@ -390,17 +406,28 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange,
         </button>
       </div>
 
-      {/* Handwritten Note Content Area */}
+      {/* Note Content Area */}
       <textarea
-        className={`flex-1 w-full px-3.5 pb-3 pt-1 bg-transparent text-xl border-none outline-none resize-none leading-relaxed font-semibold ${
-          win.noteColor === "dark" ? "text-slate-100 placeholder:text-slate-400" : "text-[#2c2a16]"
+        ref={textareaRef}
+        className={`flex-1 w-full px-3.5 pb-3 pt-1 bg-transparent border-none outline-none resize-none leading-relaxed select-text cursor-text ${
+          win.noteColor === "dark"
+            ? "text-slate-100 placeholder:text-slate-400 font-semibold text-xl"
+            : win.noteColor === "white"
+            ? "text-gray-900 placeholder:text-gray-400 font-normal text-base"
+            : "text-[#2c2a16] font-semibold text-xl"
         }`}
         style={{
-          fontFamily: "'Caveat', 'Kalam', 'Patrick Hand', 'Comic Sans MS', cursive, sans-serif",
-          fontSize: "22px",
-          lineHeight: "1.3",
+          fontFamily:
+            win.noteColor === "white"
+              ? "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+              : "'Caveat', 'Kalam', 'Patrick Hand', 'Comic Sans MS', cursive, sans-serif",
+          fontSize: win.noteColor === "white" ? "15px" : "22px",
+          lineHeight: win.noteColor === "white" ? "1.45" : "1.3",
+          WebkitFontSmoothing: "antialiased",
+          MozOsxFontSmoothing: "grayscale",
+          textRendering: "optimizeLegibility",
         }}
-        placeholder="Write a note…"
+        placeholder={win.noteColor === "white" ? "Type text here…" : "Write a note…"}
         value={win.stickyText ?? ""}
         onChange={handleTextChange}
         onMouseDown={(e) => {
@@ -438,7 +465,11 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange,
         }}
         title="Drag to resize note"
       >
-        <div className="opacity-40 group-hover/handle:opacity-100 transition-opacity pointer-events-none text-[#787236]">
+        <div
+          className={`opacity-40 group-hover/handle:opacity-100 transition-opacity pointer-events-none ${
+            win.noteColor === "white" ? "text-gray-400" : "text-[#787236]"
+          }`}
+        >
           <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
             <circle cx="10" cy="10" r="1.5" />
             <circle cx="6" cy="10" r="1.5" />

@@ -59,6 +59,53 @@ export default function SearchBox() {
     }
   }, [visible]);
 
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("wikiboard:search-state", { detail: { open: visible } })
+    );
+  }, [visible]);
+
+  useEffect(() => {
+    const handleOpen = () => {
+      mouseMovedRef.current = false;
+      lastMousePosRef.current = null;
+      setVisible(true);
+      setTimeout(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }, 0);
+    };
+
+    const handleClose = () => {
+      setVisible(false);
+    };
+
+    const handleToggle = () => {
+      setVisible((prev) => {
+        const next = !prev;
+        if (next) {
+          mouseMovedRef.current = false;
+          lastMousePosRef.current = null;
+          setTimeout(() => {
+            inputRef.current?.focus();
+            inputRef.current?.select();
+          }, 0);
+        }
+        return next;
+      });
+    };
+
+    window.addEventListener("wikiboard:open-search", handleOpen);
+    window.addEventListener("wikiboard:close-search", handleClose);
+    window.addEventListener("wikiboard:toggle-search", handleToggle);
+
+    return () => {
+      window.removeEventListener("wikiboard:open-search", handleOpen);
+      window.removeEventListener("wikiboard:close-search", handleClose);
+      window.removeEventListener("wikiboard:toggle-search", handleToggle);
+    };
+  }, []);
+
   // Alt + Space opens Spotlight Search (Alt + P removed)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

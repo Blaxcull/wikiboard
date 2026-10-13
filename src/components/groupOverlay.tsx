@@ -36,8 +36,8 @@ function MiniGroupBoxIcon({ border, bg, size = 26 }: { border: string; bg: strin
 export function readLiveWindowWorldBounds(el: HTMLElement | null, w: WindowData) {
   const baseLeft = parseFloat(el?.style.left || "") || (w.x ?? 80);
   const baseTop = parseFloat(el?.style.top || "") || (w.y ?? 80);
-  const baseW = parseFloat(el?.style.width || "") || el?.offsetWidth || (w.width ?? (w.contentType === "sticky" ? 320 : 380));
-  const baseH = parseFloat(el?.style.height || "") || el?.offsetHeight || (w.height ?? (w.contentType === "sticky" ? (w.isExcerptNote ? 64 : 200) : 480));
+  const baseW = parseFloat(el?.style.width || "") || el?.offsetWidth || (w.width ?? (w.contentType === "text" ? 220 : w.contentType === "sticky" ? 320 : 380));
+  const baseH = parseFloat(el?.style.height || "") || el?.offsetHeight || (w.height ?? (w.contentType === "text" ? 38 : w.contentType === "sticky" ? (w.isExcerptNote ? 64 : 200) : 480));
 
   let tx = 0;
   let ty = 0;
@@ -542,8 +542,8 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
   useEffect(() => {
     let rafId = 0;
     const isCompressed = !!group.compressed;
-    const PAD_X = isCompressed ? 32 : 36;
-    const PAD_Y = isCompressed ? 12 : 28;
+    const PAD_X = isCompressed ? 24 : 32;
+    const PAD_Y = isCompressed ? 24 : 32;
 
     function updateLiveGroupBounds() {
       rafId = 0;
@@ -557,9 +557,10 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
       let maxX = -Infinity;
       let maxY = -Infinity;
 
-      const nonStickyWins = memberWins.filter((win) => win.contentType !== "sticky");
+      const windowMembers = memberWins.filter((win) => win.contentType !== "sticky" && win.contentType !== "text");
+      const deckCandidates = windowMembers.length > 0 ? windowMembers : memberWins.filter((win) => win.contentType === "sticky");
       const visibleWins = isCompressed
-        ? (nonStickyWins.length > 0 ? nonStickyWins : memberWins.slice(0, 1))
+        ? [...deckCandidates].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0)).slice(-3)
         : memberWins;
 
       for (const w of visibleWins) {
@@ -630,17 +631,18 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
 
   const hasMaximizedMember = memberWins.some((w) => w.pdfMaximized);
   const isCompressed = !!group.compressed;
-  const PAD_X = isCompressed ? 32 : 36;
-  const PAD_Y = isCompressed ? 12 : 28;
+  const PAD_X = isCompressed ? 24 : 32;
+  const PAD_Y = isCompressed ? 24 : 32;
 
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
 
-  const nonStickyWins = memberWins.filter((win) => win.contentType !== "sticky");
+  const windowMembers = memberWins.filter((win) => win.contentType !== "sticky" && win.contentType !== "text");
+  const deckCandidates = windowMembers.length > 0 ? windowMembers : memberWins.filter((win) => win.contentType === "sticky");
   const visibleWins = isCompressed
-    ? (nonStickyWins.length > 0 ? nonStickyWins : memberWins.slice(0, 1))
+    ? [...deckCandidates].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0)).slice(-3)
     : memberWins;
 
   for (const w of visibleWins) {
@@ -750,7 +752,8 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
       maxZIndex: curMaxZ,
       windows: s.windows.map((w) => {
         const newZ = zMap.get(w.id);
-        return newZ !== undefined ? { ...w, zIndex: newZ, active: true } : { ...w, active: false };
+        const shouldBeActive = newZ !== undefined ? (w.contentType !== "text") : false;
+        return newZ !== undefined ? { ...w, zIndex: newZ, active: shouldBeActive } : { ...w, active: false };
       }),
     }));
   };
@@ -762,6 +765,9 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
 
     e.preventDefault();
     e.stopPropagation();
+
+    window.getSelection()?.removeAllRanges();
+    document.getSelection()?.removeAllRanges();
 
     handleActivateGroup();
 
@@ -1059,10 +1065,11 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
         {stackedGroupNotes.length > 0 && (
           <div className="absolute inset-0 pointer-events-none select-none z-[-1]" style={{ overflow: "visible" }}>
             {(["RIGHT", "LEFT", "TOP", "BOTTOM"] as const).map((side) => {
-              const sideNotes = stackedGroupNotes.filter(
+              const allSideNotes = stackedGroupNotes.filter(
                 (n) => (n.side ?? "RIGHT") === side
               );
-              if (sideNotes.length === 0) return null;
+              if (allSideNotes.length === 0) return null;
+              const sideNotes = allSideNotes.slice(0, 3);
 
               return (
                 <div key={side}>

@@ -3,10 +3,12 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import Window from './components/window'
 import LinkEditor from './components/linkEditor'
 import SearchBox from './components/searchBox'
+import LeftMenu from './components/leftMenu'
 import ArticleView from './components/articleView'
 import PdfViewer from './components/pdfViewer'
 import ImageViewer from './components/imageViewer'
 import StickyNote from './components/stickyNote'
+import CanvasTextItem from './components/canvasTextItem'
 import WindowContextMenu, { type ContextMenuPosition } from './components/windowContextMenu'
 import { useWindows, getConnectedChildNotes, findRootWindow, type WindowData, nextCascadeOffset } from './store/windows'
 import { deleteScroll } from './utils/scrollMemory'
@@ -185,8 +187,8 @@ function parseTransformTranslate(el: HTMLElement): { tx: number; ty: number } {
 }
 
 function readWindowPos(el: HTMLElement): { x: number; y: number; w: number; h: number; zIndex: number } {
-  let x = parseFloat(el.style.left) || 0;
-  let y = parseFloat(el.style.top) || 0;
+  let x = parseFloat(el.style.left) || el.offsetLeft || 0;
+  let y = parseFloat(el.style.top) || el.offsetTop || 0;
   const zIndex = parseInt(el.style.zIndex, 10) || 0;
 
   const { tx, ty } = parseTransformTranslate(el);
@@ -251,6 +253,7 @@ export function getNoteColor(win: Partial<WindowData>): string {
       tan: "#fed7aa",
       blue: "#bae6fd",
       dark: "#bae6fd", // fallback for legacy notes
+      white: "#ffffff",
     };
     return colorMap[win.noteColor] || win.noteColor;
   }
@@ -503,7 +506,7 @@ const StackedNoteStubs = memo(function StackedNoteStubs({
       {(["RIGHT", "LEFT", "TOP", "BOTTOM"] as const).map((side) => {
         const notes = bySide[side];
         if (!notes || notes.length === 0) return null;
-        const limit = (side === "TOP" || side === "BOTTOM") ? maxHoriz : maxVert;
+        const limit = Math.min(3, (side === "TOP" || side === "BOTTOM") ? maxHoriz : maxVert);
         const visibleNotes = notes.slice(0, limit);
 
         return (
@@ -541,23 +544,15 @@ const ConnectionArrows = memo(function ConnectionArrows({
 }: {
   windows: WindowData[];
 }) {
-  const lineSvgRef = useRef<SVGSVGElement>(null);
-  const arrowSvgRef = useRef<SVGSVGElement>(null);
-  const elRefs = useRef<Map<string, [SVGPathElement, SVGPolygonElement]>>(new Map());
-
   const groups = useWindows((s) => s.groups);
+  const cachedPosMapRef = useRef<Map<string, { x: number; y: number; w: number; h: number; zIndex: number }>>(new Map());
 
-  // Rebuild SVG elements when windows or groups change (add/remove)
-  useEffect(() => {
-    const lineSvg = lineSvgRef.current;
-    const arrowSvg = arrowSvgRef.current;
-    if (!lineSvg || !arrowSvg) return;
-
+  const links = useMemo(() => {
     const winIds = new Set(windows.map((w) => w.id));
     const groupIds = new Set(groups.map((g) => g.id));
     const allValidIds = new Set([...winIds, ...groupIds]);
 
-    const links: { key: string; parentId: string; childId: string }[] = [];
+    const result: { key: string; parentId: string; childId: string }[] = [];
 
     // Window children
     for (const child of windows) {
@@ -568,8 +563,8 @@ const ConnectionArrows = memo(function ConnectionArrows({
       if (child.parentId) pSet.add(child.parentId);
 
       for (const pid of pSet) {
-        if (allValidIds.has(pid)) {
-          links.push({ key: `${pid}->${child.id}`, parentId: pid, childId: child.id });
+        if (pid !== child.id && allValidIds.has(pid)) {
+          result.push({ key: `${pid}--${child.id}`, parentId: pid, childId: child.id });
         }
       }
     }
@@ -583,47 +578,18 @@ const ConnectionArrows = memo(function ConnectionArrows({
       if (childGroup.parentId) pSet.add(childGroup.parentId);
 
       for (const pid of pSet) {
-        if (allValidIds.has(pid)) {
-          links.push({ key: `${pid}->${childGroup.id}`, parentId: pid, childId: childGroup.id });
+        if (pid !== childGroup.id && allValidIds.has(pid)) {
+          result.push({ key: `${pid}--${childGroup.id}`, parentId: pid, childId: childGroup.id });
         }
       }
     }
 
-    const neededKeys = new Set(links.map((l) => l.key));
-    const existingKeys = new Set(elRefs.current.keys());
-
-    for (const key of existingKeys) {
-      if (!neededKeys.has(key)) {
-        const els = elRefs.current.get(key);
-        els?.[0].remove();
-        els?.[1].remove();
-        elRefs.current.delete(key);
-      }
-    }
-
-    for (const link of links) {
-      if (!elRefs.current.has(link.key)) {
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('fill', 'none');
-        path.setAttribute('stroke', '#a0a0a0');
-        path.setAttribute('stroke-width', '3');
-        path.setAttribute('stroke-linecap', 'round');
-
-        const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-        poly.setAttribute('fill', '#a0a0a0');
-
-        lineSvg.appendChild(path);
-        arrowSvg.appendChild(poly);
-        elRefs.current.set(link.key, [path, poly]);
-      }
-    }
+    return result;
   }, [windows, groups]);
-
-  const cachedPosMapRef = useRef<Map<string, { x: number; y: number; w: number; h: number; zIndex: number }>>(new Map());
 
   // Imperative update — reads DOM positions directly, no React re-render
   const updatePaths = useCallback((onlyActiveId?: string | null) => {
-    if (!lineSvgRef.current || elRefs.current.size === 0) return;
+    if (links.length === 0) return;
     const byId = new Map(windows.map((w) => [w.id, w]));
     const currentGroups = useWindows.getState().groups;
     const groupsById = new Map(currentGroups.map((g) => [g.id, g]));
@@ -683,10 +649,14 @@ const ConnectionArrows = memo(function ConnectionArrows({
       return null;
     };
 
-    for (const [key, [path, poly]] of elRefs.current) {
-      const parts = key.split("->");
-      const parentId = parts[0];
-      const childId = parts[1];
+    for (const link of links) {
+      const svg = document.getElementById(`arrow-svg-${link.key}`) as SVGSVGElement | null;
+      const path = document.getElementById(`arrow-path-${link.key}`) as SVGPathElement | null;
+      const poly = document.getElementById(`arrow-poly-${link.key}`) as SVGPolygonElement | null;
+      if (!svg || !path || !poly) continue;
+
+      const parentId = link.parentId;
+      const childId = link.childId;
 
       const pWin = byId.get(parentId);
       const cWin = byId.get(childId);
@@ -723,24 +693,21 @@ const ConnectionArrows = memo(function ConnectionArrows({
         isParentHidden ||
         isChildHidden
       ) {
-        path.style.display = 'none';
-        poly.style.display = 'none';
+        svg.style.display = 'none';
         continue;
       }
 
       const parentPos = getEntityPos(parentId);
       const childPos = getEntityPos(childId);
       if (!parentPos || !childPos) {
-        path.style.display = 'none';
-        poly.style.display = 'none';
+        svg.style.display = 'none';
         continue;
       }
 
       const pGrp = currentGroups.find((g) => g.memberIds.includes(parentId));
       const cGrp = currentGroups.find((g) => g.memberIds.includes(childId));
       if (pGrp && cGrp && pGrp.id === cGrp.id && pGrp.compressed) {
-        path.style.display = 'none';
-        poly.style.display = 'none';
+        svg.style.display = 'none';
         continue;
       }
 
@@ -752,13 +719,16 @@ const ConnectionArrows = memo(function ConnectionArrows({
       const dist = Math.hypot(a.ex - a.sx, a.ey - a.sy);
 
       if (dist < 5) {
-        path.style.display = 'none';
-        poly.style.display = 'none';
+        svg.style.display = 'none';
         continue;
       }
 
-      path.style.display = '';
       const childWin = byId.get(childId);
+      let endX = a.bcx;
+      let endY = a.bcy;
+      let c2x = a.c2x;
+      let c2y = a.c2y;
+
       if (childWin?.isExcerptNote) {
         let ex = a.ex;
         let ey = a.ey;
@@ -775,7 +745,11 @@ const ConnectionArrows = memo(function ConnectionArrows({
         }
         const ctrlDist = Math.hypot(ex - a.sx, ey - a.sy) * ARROW_CTRL;
         const c2 = controlOffset(a.childSide, { x: ex, y: ey }, ctrlDist);
-        path.setAttribute('d', `M${a.sx},${a.sy} C${a.c1x},${a.c1y} ${c2.x},${c2.y} ${ex},${ey}`);
+        c2x = c2.x;
+        c2y = c2.y;
+        endX = ex;
+        endY = ey;
+        path.setAttribute('d', `M${a.sx},${a.sy} C${a.c1x},${a.c1y} ${c2x},${c2y} ${endX},${endY}`);
         path.setAttribute('stroke-dasharray', '2 7');
         path.setAttribute('stroke-linecap', 'round');
         poly.style.display = 'none';
@@ -787,6 +761,23 @@ const ConnectionArrows = memo(function ConnectionArrows({
         poly.style.display = '';
       }
 
+      const minX = Math.floor(Math.min(a.sx, a.ex, a.c1x, c2x, a.tipX, a.b1x, a.b2x) - 15);
+      const minY = Math.floor(Math.min(a.sy, a.ey, a.c1y, c2y, a.tipY, a.b1y, a.b2y) - 15);
+      const maxX = Math.ceil(Math.max(a.sx, a.ex, a.c1x, c2x, a.tipX, a.b1x, a.b2x) + 15);
+      const maxY = Math.ceil(Math.max(a.sy, a.ey, a.c1y, c2y, a.tipY, a.b1y, a.b2y) + 15);
+      const w = Math.max(1, maxX - minX);
+      const h = Math.max(1, maxY - minY);
+
+      svg.style.left = `${minX}px`;
+      svg.style.top = `${minY}px`;
+      svg.style.width = `${w}px`;
+      svg.style.height = `${h}px`;
+      svg.setAttribute('viewBox', `${minX} ${minY} ${w} ${h}`);
+      svg.style.display = '';
+
+      const childZ = ("zIndex" in childPos ? childPos.zIndex : 0) ?? 0;
+      svg.style.zIndex = String(Math.max(1, childZ - 1));
+
       const isAnimating =
         isNoteUnstacking(childId) ||
         isNoteUnstacking(parentId) ||
@@ -794,18 +785,18 @@ const ConnectionArrows = memo(function ConnectionArrows({
         isWindowStacking(childId);
 
       if (isAnimating) {
-        path.style.opacity = "0";
-        poly.style.opacity = "0";
-        path.style.transition = "none";
-        poly.style.transition = "none";
+        svg.style.opacity = "0";
+        svg.style.transition = "none";
       } else {
-        path.style.transition = "opacity 400ms ease-out";
-        poly.style.transition = "opacity 400ms ease-out";
-        path.style.opacity = "1";
-        poly.style.opacity = "1";
+        svg.style.transition = "opacity 400ms ease-out";
+        svg.style.opacity = "1";
       }
     }
-  }, [windows]);
+  }, [windows, links]);
+
+  useLayoutEffect(() => {
+    updatePaths();
+  }, [links, updatePaths]);
 
   useEffect(() => {
     return subscribeAnimation(() => updatePaths());
@@ -828,7 +819,7 @@ const ConnectionArrows = memo(function ConnectionArrows({
     return () => {
       if (rafId) cancelAnimationFrame(rafId);
     };
-  }, [windows, groups, updatePaths]);
+  }, [links, updatePaths]);
 
   // rAF loop for live drag/resize tracking — imperative, no React state
   useEffect(() => {
@@ -878,33 +869,54 @@ const ConnectionArrows = memo(function ConnectionArrows({
 
   return (
     <>
-      <svg
-        ref={lineSvgRef}
-        className="connection-arrows"
-        style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, overflow: 'visible', pointerEvents: 'none', zIndex: 0 }}
-      />
-      <svg
-        ref={arrowSvgRef}
-        className="connection-arrows"
-        style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, overflow: 'visible', pointerEvents: 'none', zIndex: 0 }}
-      />
+      {links.map((link) => (
+        <svg
+          key={link.key}
+          id={`arrow-svg-${link.key}`}
+          className="connection-arrow-item"
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            width: 1,
+            height: 1,
+            overflow: 'visible',
+            pointerEvents: 'none',
+            zIndex: 1,
+            display: 'none',
+          }}
+        >
+          <path
+            id={`arrow-path-${link.key}`}
+            fill="none"
+            stroke="#a0a0a0"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
+          <polygon
+            id={`arrow-poly-${link.key}`}
+            fill="#a0a0a0"
+          />
+        </svg>
+      ))}
     </>
   );
 });
 
 const LiveWireOverlay = memo(function LiveWireOverlay() {
+  const svgRef = useRef<SVGSVGElement>(null);
   const pathRef = useRef<SVGPathElement>(null);
   const polyRef = useRef<SVGPolygonElement>(null);
 
   useEffect(() => {
     return subscribeWire((wire) => {
+      const svg = svgRef.current;
       const path = pathRef.current;
       const poly = polyRef.current;
-      if (!path || !poly) return;
+      if (!svg || !path || !poly) return;
 
       if (!wire) {
-        path.style.display = "none";
-        poly.style.display = "none";
+        svg.style.display = "none";
         return;
       }
 
@@ -944,48 +956,65 @@ const LiveWireOverlay = memo(function LiveWireOverlay() {
       const isStraightHoriz = (sourceSide === 'RIGHT' || sourceSide === 'LEFT') && Math.abs(sy - my) < 6;
       const isStraightVert = (sourceSide === 'TOP' || sourceSide === 'BOTTOM') && Math.abs(sx - mx) < 6;
 
+      let c1x = sx, c1y = sy, c2x = bcx, c2y = bcy;
+
       if (dist < 12 || isStraightHoriz || isStraightVert) {
         path.setAttribute("d", `M${sx},${sy} L${bcx},${bcy}`);
       } else {
         const ctrlDist = Math.min(dist * 0.45, 150);
         const c1 = controlOffset(sourceSide, { x: sx, y: sy }, ctrlDist);
-        const c2x = bcx - ctrlDist * 0.5 * Math.cos(angle);
-        const c2y = bcy - ctrlDist * 0.5 * Math.sin(angle);
-
-        path.setAttribute("d", `M${sx},${sy} C${c1.x},${c1.y} ${c2x},${c2y} ${bcx},${bcy}`);
+        c1x = c1.x;
+        c1y = c1.y;
+        c2x = bcx - ctrlDist * 0.5 * Math.cos(angle);
+        c2y = bcy - ctrlDist * 0.5 * Math.sin(angle);
+        path.setAttribute("d", `M${sx},${sy} C${c1x},${c1y} ${c2x},${c2y} ${bcx},${bcy}`);
       }
 
-      path.style.display = "";
       poly.setAttribute("points", `${tipX},${tipY} ${b1x},${b1y} ${b2x},${b2y}`);
-      poly.style.display = "";
+
+      const minX = Math.floor(Math.min(sx, mx, c1x, c2x, tipX, b1x, b2x) - 20);
+      const minY = Math.floor(Math.min(sy, my, c1y, c2y, tipY, b1y, b2y) - 20);
+      const maxX = Math.ceil(Math.max(sx, mx, c1x, c2x, tipX, b1x, b2x) + 20);
+      const maxY = Math.ceil(Math.max(sy, my, c1y, c2y, tipY, b1y, b2y) + 20);
+      const w = Math.max(1, maxX - minX);
+      const h = Math.max(1, maxY - minY);
+
+      svg.style.left = `${minX}px`;
+      svg.style.top = `${minY}px`;
+      svg.style.width = `${w}px`;
+      svg.style.height = `${h}px`;
+      svg.setAttribute('viewBox', `${minX} ${minY} ${w} ${h}`);
+      svg.style.display = "";
     });
   }, []);
 
   return (
-    <>
-      <svg
-        className="connection-arrows"
-        style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, overflow: 'visible', pointerEvents: 'none', zIndex: 999999 }}
-      >
-        <path
-          ref={pathRef}
-          fill="none"
-          stroke="#a0a0a0"
-          strokeWidth="3"
-          style={{ display: "none" }}
-        />
-      </svg>
-      <svg
-        className="connection-arrows"
-        style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, overflow: 'visible', pointerEvents: 'none', zIndex: 999999 }}
-      >
-        <polygon
-          ref={polyRef}
-          fill="#a0a0a0"
-          style={{ display: "none" }}
-        />
-      </svg>
-    </>
+    <svg
+      ref={svgRef}
+      className="connection-arrows live-wire-arrows"
+      style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        width: 1,
+        height: 1,
+        pointerEvents: 'none',
+        zIndex: 999999,
+        display: "none",
+      }}
+    >
+      <path
+        ref={pathRef}
+        fill="none"
+        stroke="#a0a0a0"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+      <polygon
+        ref={polyRef}
+        fill="#a0a0a0"
+      />
+    </svg>
   );
 });
 
@@ -1135,6 +1164,20 @@ const WindowItem = memo(function WindowItem({
   const windows = useWindows((s) => s.windows)
   const parentGroup = groups.find((g) => g.memberIds.includes(w.id))
   const isCompressedGroupMember = !!parentGroup?.compressed
+
+  // In a compressed group, only show up to 3 tabs in the deck; all others stay hidden
+  const isHiddenOverflowDeckMember = useMemo(() => {
+    if (!parentGroup?.compressed) return false;
+    const memberWins = windows.filter((win) => parentGroup.memberIds.includes(win.id));
+    const windowMembers = memberWins.filter((win) => win.contentType !== "sticky" && win.contentType !== "text");
+    const visibleMembers = windowMembers.length > 0
+      ? windowMembers
+      : memberWins.filter((win) => win.contentType === "sticky");
+    if (!visibleMembers.some((win) => win.id === w.id)) return false;
+    const sorted = [...visibleMembers].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+    const top3 = sorted.slice(-3);
+    return !top3.some((win) => win.id === w.id);
+  }, [parentGroup?.compressed, parentGroup?.memberIds, windows, w.id]);
 
   const connectedCompressedGroup = useMemo(() => {
     if (isCompressedGroupMember) return null;
@@ -1466,7 +1509,36 @@ const WindowItem = memo(function WindowItem({
     }
   }, [w.stacked, w.id, w.contentType, w.parentId, w.parentIds]);
 
-  if (w.stacked) return null;
+  if (isHiddenOverflowDeckMember) {
+    return null;
+  }
+
+  if (w.contentType === "text") {
+    if (isCompressedGroupMember) {
+      return null;
+    }
+
+    return (
+      <div
+        id={`win-${w.id}`}
+        className="window-wrapper absolute"
+        style={{
+          ...zIndexStyle,
+          left: `${w.x ?? 80}px`,
+          top: `${w.y ?? 80}px`,
+          width: w.width ? `${w.width}px` : "auto",
+        }}
+      >
+        <CanvasTextItem
+          win={w}
+          onClose={handleClose}
+          onActivate={handleActivate}
+          onPositionChange={handlePositionChange}
+          onAddSticky={handleAddSticky}
+        />
+      </div>
+    );
+  }
 
   if (w.contentType === "sticky") {
     const isExcerpt = w.isExcerptNote;
@@ -1491,9 +1563,11 @@ const WindowItem = memo(function WindowItem({
       w.pdfPage !== attachedPdf.pdfCurrentPage;
 
     const groupMembers = parentGroup ? windows.filter((win) => parentGroup.memberIds.includes(win.id)) : [];
-    const hasNonStickyMember = groupMembers.some((win) => win.contentType !== "sticky");
-    const isFirstStickyInGroup = !hasNonStickyMember && groupMembers.filter((win) => win.contentType === "sticky")[0]?.id === w.id;
-    const isHiddenInCompressedGroup = isCompressedGroupMember && !isFirstStickyInGroup;
+    // Regular windows in the group (articles, pdfs, images, or default windows)
+    const hasWindowMember = groupMembers.some((win) => win.contentType !== "sticky" && win.contentType !== "text");
+    // If the group has windows, hide attached stickies so the primary windows are shown;
+    // But if there are no windows in the group, show the sticky notes in the compressed card deck!
+    const isHiddenInCompressedGroup = isCompressedGroupMember && hasWindowMember;
 
     const shouldHideSticky = isAttachedPdfMaximized || isWrongPdfPage || isHiddenInCompressedGroup;
 
@@ -1522,12 +1596,19 @@ const WindowItem = memo(function WindowItem({
         <div
           className={`window sticky-window ${isExcerpt ? "excerpt-note-window" : ""} ${w.active ? "active" : "inactive"} ${isCompressedGroupMember ? "is-compressed" : ""} w-full h-full relative`}
           style={{
-            ...(isExcerpt
+            ...(isCompressedGroupMember
+              ? {
+                  borderRadius: "16px",
+                  background: "transparent",
+                  border: "none",
+                  boxShadow: "none",
+                }
+              : isExcerpt
               ? {
                   borderRadius: "22px",
                   background: "#f0e5d8",
                   border: "1px solid #e4d5c3",
-                  boxShadow: isCompressedGroupMember ? "none" : "0 4px 14px rgba(0, 0, 0, 0.08)",
+                  boxShadow: "0 4px 14px rgba(0, 0, 0, 0.08)",
                 }
               : {}),
           }}
@@ -1800,6 +1881,7 @@ function App() {
     [addWindow],
   )
 
+  const isTextToolActive = useWindows((s) => s.isTextToolActive);
   const [isShiftPressed, setIsShiftPressed] = useState(false);
   const [marquee, setMarquee] = useState<MarqueeState>(null);
 
@@ -1808,7 +1890,19 @@ function App() {
       if (e.key === "Shift") {
         setIsShiftPressed(true);
       } else if (e.key === "Escape") {
-        useWindows.getState().clearSelection();
+        if (useWindows.getState().isTextToolActive) {
+          useWindows.getState().setTextToolActive(false);
+        } else {
+          useWindows.getState().clearSelection();
+          useWindows.getState().deactivateAll();
+        }
+      } else if ((e.key === "t" || e.key === "T") && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const target = e.target as HTMLElement | null;
+        const isEditing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
+        if (!isEditing) {
+          e.preventDefault();
+          useWindows.getState().toggleTextTool();
+        }
       }
     }
 
@@ -1851,12 +1945,30 @@ function App() {
     function onPanMouseDown(e: MouseEvent) {
       if (e.button !== 0) return;
       const target = e.target as HTMLElement | null;
-      const isWinClick = Boolean(target?.closest(".window"));
+      const isWinClick = Boolean(target?.closest(".window, .window-wrapper, .canvas-text-item"));
       const isSearchClick = Boolean(target?.closest(".search-box"));
       const isMenuClick = Boolean(target?.closest(".group-context-menu"));
       const isGroupClick = Boolean(target?.closest("[id^='group-box-']"));
+      const isLeftMenuClick = Boolean(target?.closest(".left-menu"));
 
-      if (isMenuClick || isGroupClick) return;
+      if (isMenuClick || isGroupClick || isLeftMenuClick) return;
+
+      if (useWindows.getState().isTextToolActive) {
+        if (isWinClick || isSearchClick) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const startWorld = screenToWorld(e.clientX, e.clientY);
+        addWindow({
+          contentType: "text",
+          title: "Text",
+          stickyText: "",
+          fontSize: 36,
+          x: Math.round(startWorld.x),
+          y: Math.round(startWorld.y),
+        });
+        useWindows.getState().setTextToolActive(false);
+        return;
+      }
 
       if (!isWinClick && !isSearchClick) {
         window.getSelection()?.removeAllRanges();
@@ -1868,7 +1980,7 @@ function App() {
       const currentShift = e.shiftKey || isShiftPressed;
 
       if (currentShift) {
-        if (isWinClick || isSearchClick) return;
+        if (isWinClick || isSearchClick || isLeftMenuClick) return;
 
         e.preventDefault();
         e.stopPropagation();
@@ -1918,6 +2030,7 @@ function App() {
 
       if (!isWinClick && !isSearchClick) {
         useWindows.getState().clearSelection();
+        useWindows.getState().deactivateAll();
         startCanvasPan(e, viewport);
       }
     }
@@ -1936,7 +2049,7 @@ function App() {
       viewport.removeEventListener("mousedown", onPanMouseDown);
       viewport.removeEventListener("wheel", onWheel);
     };
-  }, [isShiftPressed]);
+  }, [isShiftPressed, isTextToolActive]);
 
   async function spawnWithRealTitles() {
     try {
@@ -1956,6 +2069,7 @@ function App() {
   return (
     <>
       <Fps />
+      <LeftMenu />
       <SearchBox />
       <input
         ref={fileInputRef}
@@ -2015,7 +2129,11 @@ function App() {
         Spawn 75 Windows
       </button>
 
-      <div ref={viewportRef} className="canvas-viewport" style={{ cursor: isShiftPressed ? "crosshair" : undefined }}>
+      <div
+        ref={viewportRef}
+        className={`canvas-viewport ${isTextToolActive ? "text-tool-active" : ""}`}
+        style={{ cursor: isTextToolActive ? "text" : (isShiftPressed ? "crosshair" : undefined) }}
+      >
         <div ref={gridRef} className="canvas-grid" />
         <div ref={worldRef} className="canvas-world">
           <GroupOverlay />

@@ -23,8 +23,8 @@ export type WindowData = {
   sourceHref?: string;
   /** Pre-extracted image src for File: pages — skips the fetchFileUrl API call */
   directImageUrl?: string;
-  /** Content type discriminator: "article" (default), "pdf", or "sticky" */
-  contentType?: "article" | "pdf" | "sticky";
+  /** Content type discriminator: "article" (default), "pdf", "sticky", or "text" */
+  contentType?: "article" | "pdf" | "sticky" | "text";
   /** Text stored in a sticky note window */
   stickyText?: string;
   /** Custom background color for sticky note */
@@ -62,6 +62,8 @@ export type WindowData = {
   y?: number;
   width?: number;
   height?: number;
+  fontSize?: number;
+  isUserResized?: boolean;
   uncompressedX?: number;
   uncompressedY?: number;
 };
@@ -96,11 +98,15 @@ type WindowsStore = {
   selectedIds: string[];
   setSelectedIds: (ids: string[]) => void;
   clearSelection: () => void;
+  deactivateAll: () => void;
   addGroup: (memberIds: string[], color?: string) => void;
   removeGroup: (groupId: string) => void;
   updateGroup: (groupId: string, patch: Partial<Omit<WindowGroup, "id">>) => void;
   ungroup: (groupId: string) => void;
   toggleCompressGroup: (groupId: string) => void;
+  isTextToolActive: boolean;
+  setTextToolActive: (active: boolean) => void;
+  toggleTextTool: () => void;
 };
 
 export const DEFAULT_WIDTH = 750;
@@ -312,6 +318,13 @@ export const useWindows = create<WindowsStore>((set) => ({
   selectedIds: [],
   setSelectedIds: (ids) => set({ selectedIds: ids }),
   clearSelection: () => set({ selectedIds: [] }),
+  deactivateAll: () =>
+    set((state) => ({
+      windows: state.windows.map((w) => (w.active ? { ...w, active: false } : w)),
+    })),
+  isTextToolActive: false,
+  setTextToolActive: (active) => set({ isTextToolActive: active }),
+  toggleTextTool: () => set((state) => ({ isTextToolActive: !state.isTextToolActive })),
   addGroup: (memberIds, color) =>
     set((state) => {
       const cleanIds = Array.from(new Set(memberIds));
@@ -349,8 +362,9 @@ export const useWindows = create<WindowsStore>((set) => ({
       const activeIdx = state.windows.findIndex((w) => w.active);
 
       const isSticky = data?.contentType === "sticky";
-      const childW = data?.width ?? (isSticky ? 260 : DEFAULT_WIDTH);
-      const childH = data?.height ?? (isSticky ? (data?.isExcerptNote ? 64 : 200) : DEFAULT_HEIGHT);
+      const isText = data?.contentType === "text";
+      const childW = data?.width !== undefined ? data.width : (isText ? undefined : (isSticky ? 260 : DEFAULT_WIDTH));
+      const childH = data?.height !== undefined ? data.height : (isText ? undefined : (isSticky ? (data?.isExcerptNote ? 64 : 200) : DEFAULT_HEIGHT));
       let posX: number;
       let posY: number;
       let parentWindow: WindowData | undefined;
@@ -388,6 +402,8 @@ export const useWindows = create<WindowsStore>((set) => ({
             pw = parentEl.offsetWidth || pw;
             ph = parentEl.offsetHeight || ph;
           }
+          const effW = childW ?? 120;
+          const effH = childH ?? 36;
           const GAP = 160;
           const side = data.side ?? "RIGHT";
           const existingChildrenOnSide = state.windows.filter(
@@ -396,18 +412,18 @@ export const useWindows = create<WindowsStore>((set) => ({
           const childIdx = existingChildrenOnSide.length;
 
           if (side === "LEFT") {
-            posX = px - childW - GAP;
-            posY = py + (ph - childH) / 2 + childIdx * 30;
+            posX = px - effW - GAP;
+            posY = py + (ph - effH) / 2 + childIdx * 30;
           } else if (side === "TOP") {
-            posX = px + (pw - childW) / 2 + childIdx * 30;
-            posY = py - childH - GAP;
+            posX = px + (pw - effW) / 2 + childIdx * 30;
+            posY = py - effH - GAP;
           } else if (side === "BOTTOM") {
-            posX = px + (pw - childW) / 2 + childIdx * 30;
+            posX = px + (pw - effW) / 2 + childIdx * 30;
             posY = py + ph + GAP;
           } else {
             // RIGHT
             posX = px + pw + GAP;
-            posY = py + (ph - childH) / 2 + childIdx * 30;
+            posY = py + (ph - effH) / 2 + childIdx * 30;
           }
         } else {
           posX = center.x - DEFAULT_WIDTH / 2 + offset;
@@ -422,8 +438,8 @@ export const useWindows = create<WindowsStore>((set) => ({
         const cleanPos = findNonOverlappingPosition(
           posX,
           posY,
-          childW,
-          childH,
+          childW ?? 120,
+          childH ?? 36,
           state.windows
         );
         posX = cleanPos.x;
@@ -438,7 +454,7 @@ export const useWindows = create<WindowsStore>((set) => ({
       }
 
       if (!state.windows.some((w) => w.pdfMaximized)) {
-        const childRect = { x: posX, y: posY, width: childW, height: childH };
+        const childRect = { x: posX, y: posY, width: childW ?? 120, height: childH ?? 36 };
         const parentRect = parentWindow
           ? {
               x: parentWindow.x ?? 0,
@@ -471,8 +487,11 @@ export const useWindows = create<WindowsStore>((set) => ({
             y: posY,
             width: childW,
             height: childH,
-            parentIds: data?.parentIds ?? (data?.parentId ? [data.parentId] : []),
             ...data,
+            parentId: data?.parentId,
+            parentIds: (data?.parentIds && data.parentIds.length > 0)
+              ? data.parentIds
+              : (data?.parentId ? [data.parentId] : []),
             relX: data?.relX ?? relX,
             relY: data?.relY ?? relY,
           },
@@ -1074,21 +1093,38 @@ export const useWindows = create<WindowsStore>((set) => ({
         if (startX === Infinity) startX = 80;
         if (startY === Infinity) startY = 80;
 
+        const windowMembers = memberWins.filter((w) => w.contentType !== "sticky" && w.contentType !== "text");
+        const visibleMembers = windowMembers.length > 0
+          ? windowMembers
+          : memberWins.filter((w) => w.contentType === "sticky");
+
         let curMaxZ = state.maxZIndex;
-        const sorted = [...memberWins].sort((a, b) => {
-          const aIsSticky = a.contentType === "sticky";
-          const bIsSticky = b.contentType === "sticky";
-          if (aIsSticky !== bIsSticky) {
-            return aIsSticky ? -1 : 1;
-          }
-          return (a.zIndex ?? 0) - (b.zIndex ?? 0);
-        });
+        const sortedVisible = [...visibleMembers].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+
+        // When compressed, only show up to 3 tabs in the staggered deck so large groups don't clutter
+        const MAX_DECK_TABS = 3;
+        const topDeckMembers = sortedVisible.slice(-MAX_DECK_TABS);
+        const hiddenDeckMembers = sortedVisible.slice(0, -MAX_DECK_TABS);
 
         const DECK_OFFSET_X = 14;
         const DECK_OFFSET_Y = 34;
 
         const posMap = new Map<string, { x: number; y: number; uncompressedX: number; uncompressedY: number; zIndex: number }>();
-        sorted.forEach((w, i) => {
+
+        // Park overflow members at the base stack position so they remain hidden underneath the deck
+        hiddenDeckMembers.forEach((w) => {
+          curMaxZ += 1;
+          posMap.set(w.id, {
+            x: startX,
+            y: startY,
+            uncompressedX: w.uncompressedX ?? (w.x ?? 80),
+            uncompressedY: w.uncompressedY ?? (w.y ?? 80),
+            zIndex: curMaxZ,
+          });
+        });
+
+        // The top 3 tabs stagger cleanly as a neat deck of cards
+        topDeckMembers.forEach((w, i) => {
           curMaxZ += 1;
           posMap.set(w.id, {
             x: startX + i * DECK_OFFSET_X,
@@ -1098,6 +1134,20 @@ export const useWindows = create<WindowsStore>((set) => ({
             zIndex: curMaxZ,
           });
         });
+
+        // For members not displayed in the visible deck (e.g. text boxes or attached stickies hidden behind windows),
+        // park their coordinate reference at startX, startY cleanly
+        memberWins
+          .filter((w) => !posMap.has(w.id))
+          .forEach((w) => {
+            posMap.set(w.id, {
+              x: startX,
+              y: startY,
+              uncompressedX: w.uncompressedX ?? (w.x ?? 80),
+              uncompressedY: w.uncompressedY ?? (w.y ?? 80),
+              zIndex: w.zIndex ?? 0,
+            });
+          });
 
         return {
           maxZIndex: curMaxZ,

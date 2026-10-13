@@ -17,8 +17,8 @@ type SelectionOverlayProps = {
 export function getWindowWorldBounds(w: WindowData) {
   const wx = w.x ?? 80;
   const wy = w.y ?? 80;
-  const ww = w.width ?? (w.contentType === "sticky" ? 320 : 380);
-  const wh = w.height ?? (w.contentType === "sticky" ? (w.isExcerptNote ? 64 : 200) : 480);
+  const ww = w.width ?? (w.contentType === "text" ? 220 : w.contentType === "sticky" ? 320 : 380);
+  const wh = w.height ?? (w.contentType === "text" ? 38 : w.contentType === "sticky" ? (w.isExcerptNote ? 64 : 200) : 480);
   return { left: wx, top: wy, right: wx + ww, bottom: wy + wh, width: ww, height: wh };
 }
 
@@ -83,7 +83,7 @@ const SelectionOverlay = memo(function SelectionOverlay({ marquee }: SelectionOv
   }, []);
 
   let groupBoundingBox = null;
-  if (selectedWindows.length > 0) {
+  if (selectedWindows.length > 1) {
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
@@ -97,8 +97,8 @@ const SelectionOverlay = memo(function SelectionOverlay({ marquee }: SelectionOv
       if (b.bottom > maxY) maxY = b.bottom;
     }
 
-    const PAD_X = 36;
-    const PAD_Y = 28;
+    const PAD_X = 32;
+    const PAD_Y = 32;
     const boxX = minX - PAD_X;
     const boxY = minY - PAD_Y;
     const boxW = maxX - minX + PAD_X * 2;

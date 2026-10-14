@@ -33,6 +33,16 @@ export type WindowData = {
   fillColor?: string;
   /** Stroke width for shape */
   strokeWidth?: number;
+  /** Start and end coordinates for line/arrow: [x1, y1, x2, y2] relative to shape origin (win.x, win.y) */
+  shapePoints?: [number, number, number, number];
+  /** Middle vertex coordinates for line/arrow: [midX, midY] relative to shape origin (win.x, win.y) */
+  midPoint?: [number, number];
+  /** Curve perpendicular offset for curved line/arrow (middle handle) */
+  curveOffset?: number;
+  /** Parametric position t (0 to 1) of middle handle along the line/curve */
+  midT?: number;
+  /** Rotation angle in degrees for shapes */
+  rotation?: number;
   /** Text stored in a sticky note window */
   stickyText?: string;
   /** Custom background color for sticky note */

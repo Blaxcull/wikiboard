@@ -8,6 +8,7 @@ export type MarqueeState = {
   startY: number;
   currentX: number;
   currentY: number;
+  shapeType?: "rectangle" | "circle" | "diamond" | "line" | "arrow";
 } | null;
 
 type SelectionOverlayProps = {
@@ -109,33 +110,141 @@ const SelectionOverlay = memo(function SelectionOverlay({ marquee }: SelectionOv
 
   let marqueeBox = null;
   if (marquee) {
-    const minX = Math.min(marquee.startX, marquee.currentX);
-    const minY = Math.min(marquee.startY, marquee.currentY);
-    const boxW = Math.abs(marquee.currentX - marquee.startX);
-    const boxH = Math.abs(marquee.currentY - marquee.startY);
-    marqueeBox = { minX, minY, boxW, boxH };
+    if (marquee.shapeType === "line" || marquee.shapeType === "arrow") {
+      const p1x = marquee.startX;
+      const p1y = marquee.startY;
+      const p2x = marquee.currentX;
+      const p2y = marquee.currentY;
+      const minX = Math.min(p1x, p2x);
+      const minY = Math.min(p1y, p2y);
+      const boxW = Math.max(1, Math.abs(p2x - p1x));
+      const boxH = Math.max(1, Math.abs(p2y - p1y));
+      marqueeBox = { minX, minY, boxW, boxH, p1x, p1y, p2x, p2y };
+    } else {
+      const minX = Math.min(marquee.startX, marquee.currentX);
+      const minY = Math.min(marquee.startY, marquee.currentY);
+      const boxW = Math.abs(marquee.currentX - marquee.startX);
+      const boxH = Math.abs(marquee.currentY - marquee.startY);
+      marqueeBox = { minX, minY, boxW, boxH };
+    }
   }
 
   const allSelectedAlwaysOnTop = selectedWindows.length > 0 && selectedWindows.every((w) => w.alwaysOnTop);
 
   return (
     <>
-      {/* Active Marquee Selection Box */}
+      {/* Active Marquee Selection Box / Shape Drawing Preview */}
       {marqueeBox && (
-        <div
-          style={{
-            position: "absolute",
-            left: `${marqueeBox.minX}px`,
-            top: `${marqueeBox.minY}px`,
-            width: `${marqueeBox.boxW}px`,
-            height: `${marqueeBox.boxH}px`,
-            border: "1.5px dashed #ea580c",
-            backgroundColor: "rgba(249, 115, 22, 0.15)",
-            borderRadius: "12px",
-            pointerEvents: "none",
-            zIndex: 99999,
-          }}
-        />
+        marquee?.shapeType ? (
+          <div
+            style={{
+              position: "absolute",
+              left: `${marqueeBox.minX}px`,
+              top: `${marqueeBox.minY}px`,
+              width: `${marqueeBox.boxW}px`,
+              height: `${marqueeBox.boxH}px`,
+              pointerEvents: "none",
+              zIndex: 99999,
+            }}
+          >
+            <svg
+              width={marqueeBox.boxW}
+              height={marqueeBox.boxH}
+              viewBox={`0 0 ${marqueeBox.boxW} ${marqueeBox.boxH}`}
+              className="overflow-visible block w-full h-full"
+            >
+              {marquee.shapeType === "rectangle" && (
+                <rect
+                  x={1.25}
+                  y={1.25}
+                  width={Math.max(0, marqueeBox.boxW - 2.5)}
+                  height={Math.max(0, marqueeBox.boxH - 2.5)}
+                  rx={8}
+                  fill="transparent"
+                  stroke="#64748b"
+                  strokeWidth={2.5}
+                  strokeDasharray="4 3"
+                />
+              )}
+              {marquee.shapeType === "circle" && (
+                <ellipse
+                  cx={marqueeBox.boxW / 2}
+                  cy={marqueeBox.boxH / 2}
+                  rx={Math.max(0, (marqueeBox.boxW - 2.5) / 2)}
+                  ry={Math.max(0, (marqueeBox.boxH - 2.5) / 2)}
+                  fill="transparent"
+                  stroke="#64748b"
+                  strokeWidth={2.5}
+                  strokeDasharray="4 3"
+                />
+              )}
+              {marquee.shapeType === "diamond" && (
+                <polygon
+                  points={`${marqueeBox.boxW / 2},1.25 ${marqueeBox.boxW - 1.25},${marqueeBox.boxH / 2} ${marqueeBox.boxW / 2},${marqueeBox.boxH - 1.25} 1.25,${marqueeBox.boxH / 2}`}
+                  fill="transparent"
+                  stroke="#64748b"
+                  strokeWidth={2.5}
+                  strokeDasharray="4 3"
+                  strokeLinejoin="round"
+                />
+              )}
+              {marquee.shapeType === "line" && (
+                <line
+                  x1={(marqueeBox.p1x ?? marquee.startX) - marqueeBox.minX}
+                  y1={(marqueeBox.p1y ?? marquee.startY) - marqueeBox.minY}
+                  x2={(marqueeBox.p2x ?? marquee.currentX) - marqueeBox.minX}
+                  y2={(marqueeBox.p2y ?? marquee.currentY) - marqueeBox.minY}
+                  stroke="#64748b"
+                  strokeWidth={2.5}
+                  strokeDasharray="4 3"
+                  strokeLinecap="round"
+                />
+              )}
+              {marquee.shapeType === "arrow" && (
+                <g>
+                  <defs>
+                    <marker
+                      id="arrowhead-preview"
+                      markerWidth="8"
+                      markerHeight="6"
+                      refX="6"
+                      refY="3"
+                      orient="auto"
+                    >
+                      <polygon points="0 0, 8 3, 0 6" fill="#64748b" />
+                    </marker>
+                  </defs>
+                  <line
+                    x1={(marqueeBox.p1x ?? marquee.startX) - marqueeBox.minX}
+                    y1={(marqueeBox.p1y ?? marquee.startY) - marqueeBox.minY}
+                    x2={(marqueeBox.p2x ?? marquee.currentX) - marqueeBox.minX}
+                    y2={(marqueeBox.p2y ?? marquee.currentY) - marqueeBox.minY}
+                    stroke="#64748b"
+                    strokeWidth={2.5}
+                    strokeDasharray="4 3"
+                    strokeLinecap="round"
+                    markerEnd="url(#arrowhead-preview)"
+                  />
+                </g>
+              )}
+            </svg>
+          </div>
+        ) : (
+          <div
+            style={{
+              position: "absolute",
+              left: `${marqueeBox.minX}px`,
+              top: `${marqueeBox.minY}px`,
+              width: `${marqueeBox.boxW}px`,
+              height: `${marqueeBox.boxH}px`,
+              border: "1.5px dashed #ea580c",
+              backgroundColor: "rgba(249, 115, 22, 0.15)",
+              borderRadius: "12px",
+              pointerEvents: "none",
+              zIndex: 99999,
+            }}
+          />
+        )
       )}
 
       {/* Enclosing Group Selection Bounding Box & Group Menu */}

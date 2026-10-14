@@ -1612,16 +1612,23 @@ const WindowItem = memo(function WindowItem({
       return null;
     }
 
+    const wrapperLeft = w.x ?? 80;
+    const wrapperTop = w.y ?? 80;
+    const wrapperW = w.width ?? 120;
+    const wrapperH = w.height ?? 120;
+
+    const isLineOrArrow = w.shapeType === "line" || w.shapeType === "arrow";
+
     return (
       <div
         id={`win-${w.id}`}
-        className="window-wrapper absolute"
+        className={`window-wrapper absolute ${isLineOrArrow ? "pointer-events-none" : ""}`}
         style={{
           ...zIndexStyle,
-          left: `${w.x ?? 80}px`,
-          top: `${w.y ?? 80}px`,
-          width: `${w.width ?? 120}px`,
-          height: `${w.height ?? 120}px`,
+          left: `${wrapperLeft}px`,
+          top: `${wrapperTop}px`,
+          width: `${wrapperW}px`,
+          height: `${wrapperH}px`,
         }}
       >
         <CanvasShapeItem
@@ -2193,11 +2200,23 @@ function App() {
         e.stopPropagation();
 
         const startWorld = screenToWorld(e.clientX, e.clientY);
-        setMarquee({ startX: startWorld.x, startY: startWorld.y, currentX: startWorld.x, currentY: startWorld.y });
+        setMarquee({
+          startX: startWorld.x,
+          startY: startWorld.y,
+          currentX: startWorld.x,
+          currentY: startWorld.y,
+          shapeType: activeDrawingTool ?? undefined,
+        });
 
         function onDrawMove(ev: MouseEvent) {
           const curWorld = screenToWorld(ev.clientX, ev.clientY);
-          setMarquee({ startX: startWorld.x, startY: startWorld.y, currentX: curWorld.x, currentY: curWorld.y });
+          setMarquee({
+            startX: startWorld.x,
+            startY: startWorld.y,
+            currentX: curWorld.x,
+            currentY: curWorld.y,
+            shapeType: activeDrawingTool ?? undefined,
+          });
         }
 
         function onDrawUp(ev: MouseEvent) {
@@ -2213,11 +2232,56 @@ function App() {
 
           if (!activeDrawingTool) return;
 
-          // If clicked without drag, use clean default dimensions (120x120 or 150x60)
-          const shapeW = rawW >= 15 ? Math.round(rawW) : 120;
-          const shapeH = rawH >= 15 ? Math.round(rawH) : (activeDrawingTool === "line" || activeDrawingTool === "arrow" ? 60 : 120);
-          const posX = rawW >= 15 ? Math.round(minX) : Math.round(startWorld.x - shapeW / 2);
-          const posY = rawH >= 15 ? Math.round(minY) : Math.round(startWorld.y - shapeH / 2);
+          let shapeW: number;
+          let shapeH: number;
+          let posX: number;
+          let posY: number;
+          let shapePoints: [number, number, number, number] | undefined = undefined;
+          let midPoint: [number, number] | undefined = undefined;
+
+          if (activeDrawingTool === "line" || activeDrawingTool === "arrow") {
+            const dragDist = Math.hypot(curWorld.x - startWorld.x, curWorld.y - startWorld.y);
+            if (dragDist >= 15) {
+              const p1x = startWorld.x;
+              const p1y = startWorld.y;
+              const p2x = curWorld.x;
+              const p2y = curWorld.y;
+
+              const minX = Math.min(p1x, p2x);
+              const minY = Math.min(p1y, p2y);
+              const maxX = Math.max(p1x, p2x);
+              const maxY = Math.max(p1y, p2y);
+
+              posX = Math.round(minX);
+              posY = Math.round(minY);
+              shapeW = Math.max(2, Math.round(maxX - minX));
+              shapeH = Math.max(2, Math.round(maxY - minY));
+
+              const x1 = Math.round(p1x - minX);
+              const y1 = Math.round(p1y - minY);
+              const x2 = Math.round(p2x - minX);
+              const y2 = Math.round(p2y - minY);
+              const mx = Math.round((x1 + x2) / 2);
+              const my = Math.round((y1 + y2) / 2);
+
+              shapePoints = [x1, y1, x2, y2];
+              midPoint = [mx, my];
+            } else {
+              // Clicked without drag: create a horizontal line/arrow of length 200px
+              posX = Math.round(startWorld.x);
+              posY = Math.round(startWorld.y);
+              shapeW = 200;
+              shapeH = 2;
+              shapePoints = [0, 1, 200, 1];
+              midPoint = [100, 1];
+            }
+          } else {
+            // Rectangle, Circle, Diamond
+            shapeW = rawW >= 15 ? Math.round(rawW) : 120;
+            shapeH = rawH >= 15 ? Math.round(rawH) : 120;
+            posX = rawW >= 15 ? Math.round(minX) : Math.round(startWorld.x - shapeW / 2);
+            posY = rawH >= 15 ? Math.round(minY) : Math.round(startWorld.y - shapeH / 2);
+          }
 
           addWindow({
             contentType: "shape",
@@ -2227,9 +2291,12 @@ function App() {
             height: shapeH,
             x: posX,
             y: posY,
-            strokeColor: "#2563eb",
-            fillColor: activeDrawingTool === "line" || activeDrawingTool === "arrow" ? "transparent" : "rgba(59, 130, 246, 0.08)",
+            strokeColor: "#64748b",
+            fillColor: "transparent",
             strokeWidth: 2.5,
+            shapePoints,
+            midPoint,
+            active: activeDrawingTool === "line" || activeDrawingTool === "arrow" ? false : true,
           });
 
           useWindows.getState().setDrawingTool(null);

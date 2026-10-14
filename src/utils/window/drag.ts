@@ -12,7 +12,7 @@ export function setDraggingWindow(val: boolean) {
 }
 
 export default function startDrag(
-  e: React.MouseEvent<HTMLDivElement>,
+  e: React.MouseEvent<HTMLElement | SVGElement>,
   onDragEnd?: (pos: { x: number; y: number }) => void,
   onActivate?: () => void,
 ) {

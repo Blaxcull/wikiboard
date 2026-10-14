@@ -17,8 +17,8 @@ type SelectionOverlayProps = {
 export function getWindowWorldBounds(w: WindowData) {
   const wx = w.x ?? 80;
   const wy = w.y ?? 80;
-  const ww = w.width ?? (w.contentType === "text" ? 220 : w.contentType === "sticky" ? 320 : 380);
-  const wh = w.height ?? (w.contentType === "text" ? 38 : w.contentType === "sticky" ? (w.isExcerptNote ? 64 : 200) : 480);
+  const ww = w.width ?? (w.contentType === "text" ? 220 : w.contentType === "sticky" ? 320 : (w.contentType === "shape" ? 120 : 380));
+  const wh = w.height ?? (w.contentType === "text" ? 38 : w.contentType === "sticky" ? (w.isExcerptNote ? 64 : 200) : (w.contentType === "shape" ? 120 : 480));
   return { left: wx, top: wy, right: wx + ww, bottom: wy + wh, width: ww, height: wh };
 }
 

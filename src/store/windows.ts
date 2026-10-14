@@ -23,8 +23,16 @@ export type WindowData = {
   sourceHref?: string;
   /** Pre-extracted image src for File: pages — skips the fetchFileUrl API call */
   directImageUrl?: string;
-  /** Content type discriminator: "article" (default), "pdf", "sticky", or "text" */
-  contentType?: "article" | "pdf" | "sticky" | "text";
+  /** Content type discriminator: "article" (default), "pdf", "sticky", "text", or "shape" */
+  contentType?: "article" | "pdf" | "sticky" | "text" | "shape";
+  /** Shape type for contentType === "shape" */
+  shapeType?: "rectangle" | "circle" | "diamond" | "line" | "arrow";
+  /** Stroke color for shape */
+  strokeColor?: string;
+  /** Fill color for shape */
+  fillColor?: string;
+  /** Stroke width for shape */
+  strokeWidth?: number;
   /** Text stored in a sticky note window */
   stickyText?: string;
   /** Custom background color for sticky note */
@@ -53,6 +61,8 @@ export type WindowData = {
     height: number;
   };
   alwaysOnTop?: boolean;
+  /** Per-parent connection line style ('pointy' | 'curved') stored permanently when connected */
+  connectionStyles?: Record<string, "pointy" | "curved">;
   stacked?: boolean;
   stackedParentId?: string;
   relX?: number;
@@ -75,6 +85,8 @@ export type WindowGroup = {
   alwaysOnTop?: boolean;
   parentId?: string;
   parentIds?: string[];
+  /** Per-parent connection line style ('pointy' | 'curved') stored permanently when connected */
+  connectionStyles?: Record<string, "pointy" | "curved">;
   side?: "TOP" | "RIGHT" | "BOTTOM" | "LEFT";
   compressed?: boolean;
 };
@@ -104,12 +116,24 @@ type WindowsStore = {
   updateGroup: (groupId: string, patch: Partial<Omit<WindowGroup, "id">>) => void;
   ungroup: (groupId: string) => void;
   toggleCompressGroup: (groupId: string) => void;
+  isEraserToolActive: boolean;
+  setEraserToolActive: (active: boolean) => void;
+  toggleEraserTool: () => void;
+  disconnectEntities: (parentId: string, childId: string) => void;
   isTextToolActive: boolean;
   setTextToolActive: (active: boolean) => void;
   toggleTextTool: () => void;
   isStickyToolActive: boolean;
   setStickyToolActive: (active: boolean) => void;
   toggleStickyTool: () => void;
+  isSelectToolActive: boolean;
+  setSelectToolActive: (active: boolean) => void;
+  toggleSelectTool: () => void;
+  connectionStyle: "pointy" | "curved";
+  setConnectionStyle: (style: "pointy" | "curved") => void;
+  drawingTool: "rectangle" | "circle" | "diamond" | "line" | "arrow" | null;
+  setDrawingTool: (tool: "rectangle" | "circle" | "diamond" | "line" | "arrow" | null) => void;
+  toggleDrawingTool: (tool: "rectangle" | "circle" | "diamond" | "line" | "arrow") => void;
 };
 
 export const DEFAULT_WIDTH = 750;
@@ -325,12 +349,68 @@ export const useWindows = create<WindowsStore>((set) => ({
     set((state) => ({
       windows: state.windows.map((w) => (w.active ? { ...w, active: false } : w)),
     })),
+  isEraserToolActive: false,
+  setEraserToolActive: (active) =>
+    set({
+      isEraserToolActive: active,
+      ...(active ? { isTextToolActive: false, isStickyToolActive: false, isSelectToolActive: false, drawingTool: null } : {}),
+    }),
+  toggleEraserTool: () =>
+    set((state) => ({
+      isEraserToolActive: !state.isEraserToolActive,
+      isTextToolActive: false,
+      isStickyToolActive: false,
+      isSelectToolActive: false,
+      drawingTool: null,
+    })),
+  disconnectEntities: (parentId: string, childId: string) =>
+    set((state) => ({
+      windows: state.windows.map((w) => {
+        if (w.id === childId) {
+          const newParentIds = w.parentIds?.filter((pid) => pid !== parentId) ?? [];
+          const newStyles = { ...(w.connectionStyles ?? {}) };
+          delete newStyles[parentId];
+          return {
+            ...w,
+            parentIds: newParentIds,
+            parentId: w.parentId === parentId ? (newParentIds[0] ?? undefined) : w.parentId,
+            connectionStyles: newStyles,
+          };
+        }
+        return w;
+      }),
+      groups: state.groups.map((g) => {
+        if (g.id === childId) {
+          const newParentIds = g.parentIds?.filter((pid) => pid !== parentId) ?? [];
+          const newStyles = { ...(g.connectionStyles ?? {}) };
+          delete newStyles[parentId];
+          return {
+            ...g,
+            parentIds: newParentIds,
+            parentId: g.parentId === parentId ? (newParentIds[0] ?? undefined) : g.parentId,
+            connectionStyles: newStyles,
+          };
+        }
+        return g;
+      }),
+    })),
   isTextToolActive: false,
-  setTextToolActive: (active) => set({ isTextToolActive: active, ...(active ? { isStickyToolActive: false } : {}) }),
-  toggleTextTool: () => set((state) => ({ isTextToolActive: !state.isTextToolActive, isStickyToolActive: false })),
+  setTextToolActive: (active) => set({ isTextToolActive: active, ...(active ? { isEraserToolActive: false, isStickyToolActive: false, isSelectToolActive: false, drawingTool: null } : {}) }),
+  toggleTextTool: () => set((state) => ({ isTextToolActive: !state.isTextToolActive, isEraserToolActive: false, isStickyToolActive: false, isSelectToolActive: false, drawingTool: null })),
   isStickyToolActive: false,
-  setStickyToolActive: (active) => set({ isStickyToolActive: active, ...(active ? { isTextToolActive: false } : {}) }),
-  toggleStickyTool: () => set((state) => ({ isStickyToolActive: !state.isStickyToolActive, isTextToolActive: false })),
+  setStickyToolActive: (active) => set({ isStickyToolActive: active, ...(active ? { isEraserToolActive: false, isTextToolActive: false, isSelectToolActive: false, drawingTool: null } : {}) }),
+  toggleStickyTool: () => set((state) => ({ isStickyToolActive: !state.isStickyToolActive, isEraserToolActive: false, isTextToolActive: false, isSelectToolActive: false, drawingTool: null })),
+  isSelectToolActive: false,
+  setSelectToolActive: (active) => set({ isSelectToolActive: active, ...(active ? { isEraserToolActive: false, isTextToolActive: false, isStickyToolActive: false, drawingTool: null } : {}) }),
+  toggleSelectTool: () => set((state) => ({ isSelectToolActive: !state.isSelectToolActive, isEraserToolActive: false, isTextToolActive: false, isStickyToolActive: false, drawingTool: null })),
+  connectionStyle: "pointy",
+  setConnectionStyle: (style) => set({ connectionStyle: style }),
+  drawingTool: null,
+  setDrawingTool: (tool) => set({ drawingTool: tool, ...(tool ? { isEraserToolActive: false, isTextToolActive: false, isStickyToolActive: false, isSelectToolActive: false } : {}) }),
+  toggleDrawingTool: (tool) => set((state) => ({
+    drawingTool: state.drawingTool === tool ? null : tool,
+    ...(state.drawingTool !== tool ? { isEraserToolActive: false, isTextToolActive: false, isStickyToolActive: false, isSelectToolActive: false } : {}),
+  })),
   addGroup: (memberIds, color) =>
     set((state) => {
       const cleanIds = Array.from(new Set(memberIds));
@@ -498,6 +578,17 @@ export const useWindows = create<WindowsStore>((set) => ({
             parentIds: (data?.parentIds && data.parentIds.length > 0)
               ? data.parentIds
               : (data?.parentId ? [data.parentId] : []),
+            connectionStyles: data?.connectionStyles ?? (() => {
+              const pList = (data?.parentIds && data.parentIds.length > 0)
+                ? data.parentIds
+                : (data?.parentId ? [data.parentId] : []);
+              if (pList.length === 0) return undefined;
+              const styles: Record<string, "pointy" | "curved"> = {};
+              for (const pid of pList) {
+                styles[pid] = state.connectionStyle ?? "pointy";
+              }
+              return styles;
+            })(),
             relX: data?.relX ?? relX,
             relY: data?.relY ?? relY,
           },
@@ -819,13 +910,16 @@ export const useWindows = create<WindowsStore>((set) => ({
         findAndBreakLink(sourceId);
       }
 
+      const appliedStyle = state.connectionStyle ?? "pointy";
+
       if (targetWin) {
         newWindows = newWindows.map((w) => {
           if (w.id === targetId) {
             const pSet = new Set(getParents(w));
             pSet.add(sourceId);
             const newPList = Array.from(pSet);
-            return { ...w, parentIds: newPList, parentId: newPList[0] };
+            const updatedStyles = { ...(w.connectionStyles ?? {}), [sourceId]: appliedStyle };
+            return { ...w, parentIds: newPList, parentId: newPList[0], connectionStyles: updatedStyles };
           }
           return w;
         });
@@ -835,7 +929,8 @@ export const useWindows = create<WindowsStore>((set) => ({
             const pSet = new Set(getParents(g));
             pSet.add(sourceId);
             const newPList = Array.from(pSet);
-            return { ...g, parentIds: newPList, parentId: newPList[0] };
+            const updatedStyles = { ...(g.connectionStyles ?? {}), [sourceId]: appliedStyle };
+            return { ...g, parentIds: newPList, parentId: newPList[0], connectionStyles: updatedStyles };
           }
           return g;
         });

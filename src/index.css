@@ -286,6 +286,8 @@
   content-visibility: visible !important;
   min-width: 100px !important;
   min-height: 100px !important;
+  animation: none !important;
+  transition: none !important;
 }
 
 .pdf-window,
@@ -518,6 +520,21 @@
 .canvas-viewport.text-tool-active,
 .canvas-viewport.text-tool-active .canvas-world {
   cursor: text !important;
+}
+
+.canvas-viewport.select-tool-active,
+.canvas-viewport.select-tool-active .canvas-world {
+  cursor: crosshair !important;
+}
+
+.canvas-viewport.eraser-tool-active,
+.canvas-viewport.eraser-tool-active *,
+.canvas-viewport.eraser-tool-active .canvas-world,
+.canvas-viewport.eraser-tool-active .window,
+.canvas-viewport.eraser-tool-active .window *,
+.canvas-viewport.eraser-tool-active .canvas-text-item,
+.canvas-viewport.eraser-tool-active .canvas-shape-item {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22'%3E%3Ccircle cx='11' cy='11' r='8' fill='white' stroke='%23374151' stroke-width='2' stroke-opacity='0.9' /%3E%3C/svg%3E") 11 11, crosshair !important;
 }
 
 .canvas-grid {

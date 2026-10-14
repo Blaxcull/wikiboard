@@ -9,6 +9,7 @@ import PdfViewer from './components/pdfViewer'
 import ImageViewer from './components/imageViewer'
 import StickyNote from './components/stickyNote'
 import CanvasTextItem from './components/canvasTextItem'
+import CanvasShapeItem from './components/canvasShapeItem'
 import WindowContextMenu, { type ContextMenuPosition } from './components/windowContextMenu'
 import { useWindows, getConnectedChildNotes, findRootWindow, type WindowData, nextCascadeOffset } from './store/windows'
 import { deleteScroll } from './utils/scrollMemory'
@@ -545,6 +546,7 @@ const ConnectionArrows = memo(function ConnectionArrows({
   windows: WindowData[];
 }) {
   const groups = useWindows((s) => s.groups);
+  const connectionStyle = useWindows((s) => s.connectionStyle);
   const cachedPosMapRef = useRef<Map<string, { x: number; y: number; w: number; h: number; zIndex: number }>>(new Map());
 
   const links = useMemo(() => {
@@ -729,6 +731,11 @@ const ConnectionArrows = memo(function ConnectionArrows({
       let c2x = a.c2x;
       let c2y = a.c2y;
 
+      const childEntity = byId.get(childId) || groupsById.get(childId);
+      const linkStyle = childEntity?.connectionStyles?.[parentId] ?? connectionStyle ?? 'pointy';
+
+      const hitPath = document.getElementById(`arrow-hit-${link.key}`) as SVGPathElement | null;
+      let dAttr = '';
       if (childWin?.isExcerptNote) {
         let ex = a.ex;
         let ey = a.ey;
@@ -749,16 +756,33 @@ const ConnectionArrows = memo(function ConnectionArrows({
         c2y = c2.y;
         endX = ex;
         endY = ey;
-        path.setAttribute('d', `M${a.sx},${a.sy} C${a.c1x},${a.c1y} ${c2x},${c2y} ${endX},${endY}`);
+        dAttr = `M${a.sx},${a.sy} C${a.c1x},${a.c1y} ${c2x},${c2y} ${endX},${endY}`;
+        path.setAttribute('d', dAttr);
         path.setAttribute('stroke-dasharray', '2 7');
         path.setAttribute('stroke-linecap', 'round');
         poly.style.display = 'none';
+      } else if (linkStyle === 'curved') {
+        const ctrlDist = Math.hypot(a.ex - a.sx, a.ey - a.sy) * ARROW_CTRL;
+        const c2 = controlOffset(a.childSide, { x: a.ex, y: a.ey }, ctrlDist);
+        c2x = c2.x;
+        c2y = c2.y;
+        endX = a.ex;
+        endY = a.ey;
+        dAttr = `M${a.sx},${a.sy} C${a.c1x},${a.c1y} ${c2x},${c2y} ${endX},${endY}`;
+        path.setAttribute('d', dAttr);
+        path.removeAttribute('stroke-dasharray');
+        path.setAttribute('stroke-linecap', 'round');
+        poly.style.display = 'none';
       } else {
-        path.setAttribute('d', `M${a.sx},${a.sy} C${a.c1x},${a.c1y} ${a.c2x},${a.c2y} ${a.bcx},${a.bcy}`);
+        dAttr = `M${a.sx},${a.sy} C${a.c1x},${a.c1y} ${a.c2x},${a.c2y} ${a.bcx},${a.bcy}`;
+        path.setAttribute('d', dAttr);
         path.removeAttribute('stroke-dasharray');
         path.setAttribute('stroke-linecap', 'butt');
         poly.setAttribute('points', `${a.tipX},${a.tipY} ${a.b1x},${a.b1y} ${a.b2x},${a.b2y}`);
         poly.style.display = '';
+      }
+      if (hitPath && dAttr) {
+        hitPath.setAttribute('d', dAttr);
       }
 
       const minX = Math.floor(Math.min(a.sx, a.ex, a.c1x, c2x, a.tipX, a.b1x, a.b2x) - 15);
@@ -792,7 +816,7 @@ const ConnectionArrows = memo(function ConnectionArrows({
         svg.style.opacity = "1";
       }
     }
-  }, [windows, links]);
+  }, [windows, links, connectionStyle]);
 
   useLayoutEffect(() => {
     updatePaths();
@@ -867,6 +891,9 @@ const ConnectionArrows = memo(function ConnectionArrows({
     };
   }, [updatePaths]);
 
+  const isEraserToolActive = useWindows((s) => s.isEraserToolActive);
+  const disconnectEntities = useWindows((s) => s.disconnectEntities);
+
   return (
     <>
       {links.map((link) => (
@@ -881,21 +908,42 @@ const ConnectionArrows = memo(function ConnectionArrows({
             width: 1,
             height: 1,
             overflow: 'visible',
-            pointerEvents: 'none',
-            zIndex: 1,
+            pointerEvents: isEraserToolActive ? 'auto' : 'none',
+            zIndex: isEraserToolActive ? 9999 : 1,
             display: 'none',
+            cursor: isEraserToolActive ? 'pointer' : undefined,
+          }}
+          onClick={(e) => {
+            if (isEraserToolActive) {
+              e.preventDefault();
+              e.stopPropagation();
+              disconnectEntities(link.parentId, link.childId);
+            }
           }}
         >
+          {/* Invisible thick stroke for easier clicking with eraser */}
+          {isEraserToolActive && (
+            <path
+              id={`arrow-hit-${link.key}`}
+              fill="none"
+              stroke="transparent"
+              strokeWidth="20"
+              strokeLinecap="round"
+              style={{ pointerEvents: 'stroke' }}
+            />
+          )}
           <path
             id={`arrow-path-${link.key}`}
             fill="none"
             stroke="#a0a0a0"
             strokeWidth="3"
             strokeLinecap="round"
+            style={{ pointerEvents: isEraserToolActive ? 'stroke' : 'none' }}
           />
           <polygon
             id={`arrow-poly-${link.key}`}
             fill="#a0a0a0"
+            style={{ pointerEvents: isEraserToolActive ? 'auto' : 'none' }}
           />
         </svg>
       ))}
@@ -958,19 +1006,36 @@ const LiveWireOverlay = memo(function LiveWireOverlay() {
 
       let c1x = sx, c1y = sy, c2x = bcx, c2y = bcy;
 
-      if (dist < 12 || isStraightHoriz || isStraightVert) {
-        path.setAttribute("d", `M${sx},${sy} L${bcx},${bcy}`);
-      } else {
-        const ctrlDist = Math.min(dist * 0.45, 150);
-        const c1 = controlOffset(sourceSide, { x: sx, y: sy }, ctrlDist);
-        c1x = c1.x;
-        c1y = c1.y;
-        c2x = bcx - ctrlDist * 0.5 * Math.cos(angle);
-        c2y = bcy - ctrlDist * 0.5 * Math.sin(angle);
-        path.setAttribute("d", `M${sx},${sy} C${c1x},${c1y} ${c2x},${c2y} ${bcx},${bcy}`);
-      }
+      const isCurved = useWindows.getState().connectionStyle === 'curved';
 
-      poly.setAttribute("points", `${tipX},${tipY} ${b1x},${b1y} ${b2x},${b2y}`);
+      if (isCurved) {
+        if (dist < 12 || isStraightHoriz || isStraightVert) {
+          path.setAttribute("d", `M${sx},${sy} L${mx},${my}`);
+        } else {
+          const ctrlDist = Math.min(dist * 0.45, 150);
+          const c1 = controlOffset(sourceSide, { x: sx, y: sy }, ctrlDist);
+          c1x = c1.x;
+          c1y = c1.y;
+          c2x = mx - ctrlDist * 0.5 * Math.cos(angle);
+          c2y = my - ctrlDist * 0.5 * Math.sin(angle);
+          path.setAttribute("d", `M${sx},${sy} C${c1x},${c1y} ${c2x},${c2y} ${mx},${my}`);
+        }
+        poly.style.display = "none";
+      } else {
+        if (dist < 12 || isStraightHoriz || isStraightVert) {
+          path.setAttribute("d", `M${sx},${sy} L${bcx},${bcy}`);
+        } else {
+          const ctrlDist = Math.min(dist * 0.45, 150);
+          const c1 = controlOffset(sourceSide, { x: sx, y: sy }, ctrlDist);
+          c1x = c1.x;
+          c1y = c1.y;
+          c2x = bcx - ctrlDist * 0.5 * Math.cos(angle);
+          c2y = bcy - ctrlDist * 0.5 * Math.sin(angle);
+          path.setAttribute("d", `M${sx},${sy} C${c1x},${c1y} ${c2x},${c2y} ${bcx},${bcy}`);
+        }
+        poly.setAttribute("points", `${tipX},${tipY} ${b1x},${b1y} ${b2x},${b2y}`);
+        poly.style.display = "";
+      }
 
       const minX = Math.floor(Math.min(sx, mx, c1x, c2x, tipX, b1x, b2x) - 20);
       const minY = Math.floor(Math.min(sy, my, c1y, c2y, tipY, b1y, b2y) - 20);
@@ -1162,6 +1227,8 @@ const WindowItem = memo(function WindowItem({
 
   const groups = useWindows((s) => s.groups)
   const windows = useWindows((s) => s.windows)
+  const selectedIds = useWindows((s) => s.selectedIds)
+  const isSelected = selectedIds.includes(w.id)
   const parentGroup = groups.find((g) => g.memberIds.includes(w.id))
   const isCompressedGroupMember = !!parentGroup?.compressed
 
@@ -1540,6 +1607,33 @@ const WindowItem = memo(function WindowItem({
     );
   }
 
+  if (w.contentType === "shape") {
+    if (isCompressedGroupMember) {
+      return null;
+    }
+
+    return (
+      <div
+        id={`win-${w.id}`}
+        className="window-wrapper absolute"
+        style={{
+          ...zIndexStyle,
+          left: `${w.x ?? 80}px`,
+          top: `${w.y ?? 80}px`,
+          width: `${w.width ?? 120}px`,
+          height: `${w.height ?? 120}px`,
+        }}
+      >
+        <CanvasShapeItem
+          win={w}
+          onClose={handleClose}
+          onActivate={handleActivate}
+          onPositionChange={handlePositionChange}
+        />
+      </div>
+    );
+  }
+
   if (w.contentType === "sticky") {
     const isExcerpt = w.isExcerptNote;
     const itemW = isCompressedGroupMember ? (isExcerpt ? 110 : 150) : (w.width ?? 260);
@@ -1594,7 +1688,7 @@ const WindowItem = memo(function WindowItem({
       >
         {!isCompressedGroupMember && <StackedNoteStubs parentWin={w} />}
         <div
-          className={`window sticky-window ${isExcerpt ? "excerpt-note-window" : ""} ${w.active ? "active" : "inactive"} ${isCompressedGroupMember ? "is-compressed" : ""} w-full h-full relative`}
+          className={`window sticky-window ${isExcerpt ? "excerpt-note-window" : ""} ${w.active ? "active" : "inactive"} ${isCompressedGroupMember ? "is-compressed" : ""} ${isSelected ? "ring-2 ring-blue-500/80 shadow-md" : ""} w-full h-full relative`}
           style={{
             ...(isCompressedGroupMember
               ? {
@@ -1881,8 +1975,11 @@ function App() {
     [addWindow],
   )
 
+  const isEraserToolActive = useWindows((s) => s.isEraserToolActive);
   const isTextToolActive = useWindows((s) => s.isTextToolActive);
   const isStickyToolActive = useWindows((s) => s.isStickyToolActive);
+  const isSelectToolActive = useWindows((s) => s.isSelectToolActive);
+  const drawingTool = useWindows((s) => s.drawingTool);
   const [isShiftPressed, setIsShiftPressed] = useState(false);
   const [marquee, setMarquee] = useState<MarqueeState>(null);
 
@@ -1891,13 +1988,90 @@ function App() {
       if (e.key === "Shift") {
         setIsShiftPressed(true);
       } else if (e.key === "Escape") {
-        if (useWindows.getState().isTextToolActive) {
+        if (useWindows.getState().isEraserToolActive) {
+          useWindows.getState().setEraserToolActive(false);
+        } else if (useWindows.getState().isTextToolActive) {
           useWindows.getState().setTextToolActive(false);
         } else if (useWindows.getState().isStickyToolActive) {
           useWindows.getState().setStickyToolActive(false);
+        } else if (useWindows.getState().isSelectToolActive) {
+          useWindows.getState().setSelectToolActive(false);
+        } else if (useWindows.getState().drawingTool) {
+          useWindows.getState().setDrawingTool(null);
         } else {
           useWindows.getState().clearSelection();
           useWindows.getState().deactivateAll();
+        }
+      } else if (e.key === "Delete" || e.key === "Backspace") {
+        const target = e.target as HTMLElement | null;
+        const isSearchInput = !!target?.closest(".search-box, input[type='search'], input[placeholder*='Search' i]");
+        if (isSearchInput) return;
+
+        const isInput = target?.tagName === "INPUT";
+        if (isInput) return;
+
+        const isTextarea = target?.tagName === "TEXTAREA";
+        const state = useWindows.getState();
+
+        // If user is inside a textarea (e.g. sticky note) and presses Delete
+        if (isTextarea && (e.key === "Delete" || (e.key === "Backspace" && (e.ctrlKey || e.metaKey)))) {
+          const textarea = target as HTMLTextAreaElement;
+          const hasSelectedText = textarea.selectionStart !== textarea.selectionEnd;
+          const activeWin = state.windows.find((w) => w.active);
+          // Only delete if the user has explicitly selected this item (so it is in selectedIds)
+          const isExplicitlySelected = activeWin && state.selectedIds && state.selectedIds.includes(activeWin.id);
+
+          if (isExplicitlySelected && (!hasSelectedText || e.ctrlKey || e.metaKey)) {
+            const idsToDelete = new Set<string>();
+            state.selectedIds.forEach((id) => idsToDelete.add(id));
+            if (activeWin) {
+              idsToDelete.add(activeWin.id);
+            }
+            if (idsToDelete.size > 0) {
+              e.preventDefault();
+              idsToDelete.forEach((id) => {
+                deleteScroll(id);
+                state.removeWindow(id);
+              });
+              evictClosedWindowArticles();
+              state.clearSelection();
+              return;
+            }
+          }
+        }
+
+        const isEditing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
+        if (!isEditing) {
+          const idsToDelete = new Set<string>();
+
+          // Only delete items that are explicitly selected in selectedIds
+          if (state.selectedIds && state.selectedIds.length > 0) {
+            state.selectedIds.forEach((id) => idsToDelete.add(id));
+          } else {
+            // If nothing is in selectedIds, only delete the active window if it is an article/pdf window (traditional window manager behavior)
+            // but NEVER delete an unselected sticky note, shape, or text item!
+            const activeWin = state.windows.find((w) => w.active);
+            if (activeWin && activeWin.contentType !== "sticky" && activeWin.contentType !== "shape" && activeWin.contentType !== "text") {
+              idsToDelete.add(activeWin.id);
+            }
+          }
+
+          if (idsToDelete.size > 0) {
+            e.preventDefault();
+            idsToDelete.forEach((id) => {
+              deleteScroll(id);
+              state.removeWindow(id);
+            });
+            evictClosedWindowArticles();
+            state.clearSelection();
+          }
+        }
+      } else if ((e.key === "e" || e.key === "E") && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const target = e.target as HTMLElement | null;
+        const isEditing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
+        if (!isEditing) {
+          e.preventDefault();
+          useWindows.getState().toggleEraserTool();
         }
       } else if ((e.key === "t" || e.key === "T") && !e.ctrlKey && !e.metaKey && !e.altKey) {
         const target = e.target as HTMLElement | null;
@@ -1905,6 +2079,13 @@ function App() {
         if (!isEditing) {
           e.preventDefault();
           useWindows.getState().toggleTextTool();
+        }
+      } else if ((e.key === "v" || e.key === "V") && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const target = e.target as HTMLElement | null;
+        const isEditing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
+        if (!isEditing) {
+          e.preventDefault();
+          useWindows.getState().toggleSelectTool();
         }
       } else if ((e.key === "n" || e.key === "N") && !e.ctrlKey && !e.metaKey && !e.altKey) {
         const target = e.target as HTMLElement | null;
@@ -2005,6 +2186,60 @@ function App() {
         return;
       }
 
+      const activeDrawingTool = useWindows.getState().drawingTool;
+      if (activeDrawingTool) {
+        if (isWinClick || isSearchClick) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        const startWorld = screenToWorld(e.clientX, e.clientY);
+        setMarquee({ startX: startWorld.x, startY: startWorld.y, currentX: startWorld.x, currentY: startWorld.y });
+
+        function onDrawMove(ev: MouseEvent) {
+          const curWorld = screenToWorld(ev.clientX, ev.clientY);
+          setMarquee({ startX: startWorld.x, startY: startWorld.y, currentX: curWorld.x, currentY: curWorld.y });
+        }
+
+        function onDrawUp(ev: MouseEvent) {
+          window.removeEventListener("mousemove", onDrawMove);
+          window.removeEventListener("mouseup", onDrawUp);
+          setMarquee(null);
+
+          const curWorld = screenToWorld(ev.clientX, ev.clientY);
+          const minX = Math.min(startWorld.x, curWorld.x);
+          const minY = Math.min(startWorld.y, curWorld.y);
+          const rawW = Math.abs(curWorld.x - startWorld.x);
+          const rawH = Math.abs(curWorld.y - startWorld.y);
+
+          if (!activeDrawingTool) return;
+
+          // If clicked without drag, use clean default dimensions (120x120 or 150x60)
+          const shapeW = rawW >= 15 ? Math.round(rawW) : 120;
+          const shapeH = rawH >= 15 ? Math.round(rawH) : (activeDrawingTool === "line" || activeDrawingTool === "arrow" ? 60 : 120);
+          const posX = rawW >= 15 ? Math.round(minX) : Math.round(startWorld.x - shapeW / 2);
+          const posY = rawH >= 15 ? Math.round(minY) : Math.round(startWorld.y - shapeH / 2);
+
+          addWindow({
+            contentType: "shape",
+            shapeType: activeDrawingTool,
+            title: activeDrawingTool.charAt(0).toUpperCase() + activeDrawingTool.slice(1),
+            width: shapeW,
+            height: shapeH,
+            x: posX,
+            y: posY,
+            strokeColor: "#2563eb",
+            fillColor: activeDrawingTool === "line" || activeDrawingTool === "arrow" ? "transparent" : "rgba(59, 130, 246, 0.08)",
+            strokeWidth: 2.5,
+          });
+
+          useWindows.getState().setDrawingTool(null);
+        }
+
+        window.addEventListener("mousemove", onDrawMove);
+        window.addEventListener("mouseup", onDrawUp);
+        return;
+      }
+
       if (!isWinClick && !isSearchClick) {
         window.getSelection()?.removeAllRanges();
         document.getSelection()?.removeAllRanges();
@@ -2012,7 +2247,7 @@ function App() {
 
       if (useWindows.getState().windows.some((win) => win.pdfMaximized)) return;
 
-      const currentShift = e.shiftKey || isShiftPressed;
+      const currentShift = e.shiftKey || isShiftPressed || useWindows.getState().isSelectToolActive;
 
       if (currentShift) {
         if (isWinClick || isSearchClick || isLeftMenuClick) return;
@@ -2069,6 +2304,53 @@ function App() {
         startCanvasPan(e, viewport);
       }
     }
+
+    function onEraserCapture(e: MouseEvent) {
+      if (e.button !== 0) return;
+      if (!useWindows.getState().isEraserToolActive) return;
+
+      const target = e.target as HTMLElement | null;
+      if (target?.closest(".left-menu") || target?.closest(".search-box") || target?.closest("button")) {
+        return;
+      }
+
+      // Check if clicked on a window wrapper or canvas item
+      const itemEl = target?.closest(".window-wrapper, .window, .canvas-text-item, .canvas-shape-item") as HTMLElement | null;
+      if (itemEl) {
+        let winId: string | undefined;
+        if (itemEl.id?.startsWith("win-")) {
+          winId = itemEl.id.replace("win-", "");
+        } else {
+          const wrapper = itemEl.closest("[id^='win-']") as HTMLElement | null;
+          if (wrapper?.id) {
+            winId = wrapper.id.replace("win-", "");
+          }
+        }
+
+        if (winId) {
+          e.preventDefault();
+          e.stopPropagation();
+          deleteScroll(winId);
+          useWindows.getState().removeWindow(winId);
+          evictClosedWindowArticles();
+          return;
+        }
+      }
+
+      // Check if clicked on a connection arrow
+      const arrowSvg = target?.closest(".connection-arrow-item") as SVGSVGElement | null;
+      if (arrowSvg && arrowSvg.id?.startsWith("arrow-svg-")) {
+        const key = arrowSvg.id.replace("arrow-svg-", "");
+        const [pId, cId] = key.split("--");
+        if (pId && cId) {
+          e.preventDefault();
+          e.stopPropagation();
+          useWindows.getState().disconnectEntities(pId, cId);
+          return;
+        }
+      }
+    }
+
     function onWheel(e: WheelEvent) {
       if (useWindows.getState().windows.some((win) => win.pdfMaximized)) return;
       if (e.ctrlKey) {
@@ -2076,15 +2358,17 @@ function App() {
       }
     }
 
+    viewport.addEventListener("mousedown", onEraserCapture, true);
     viewport.addEventListener("mousedown", onPanMouseDown);
     viewport.addEventListener("wheel", onWheel, { passive: false });
 
     return () => {
       unsub();
+      viewport.removeEventListener("mousedown", onEraserCapture, true);
       viewport.removeEventListener("mousedown", onPanMouseDown);
       viewport.removeEventListener("wheel", onWheel);
     };
-  }, [isShiftPressed, isTextToolActive, isStickyToolActive]);
+  }, [isShiftPressed, isEraserToolActive, isTextToolActive, isStickyToolActive, isSelectToolActive, drawingTool]);
 
   async function spawnWithRealTitles() {
     try {
@@ -2166,8 +2450,14 @@ function App() {
 
       <div
         ref={viewportRef}
-        className={`canvas-viewport ${isTextToolActive ? "text-tool-active" : ""}`}
-        style={{ cursor: isTextToolActive ? "text" : (isShiftPressed ? "crosshair" : undefined) }}
+        className={`canvas-viewport ${isEraserToolActive ? "eraser-tool-active" : ""} ${isTextToolActive ? "text-tool-active" : ""} ${isSelectToolActive || drawingTool ? "select-tool-active" : ""}`}
+        style={{
+          cursor: isEraserToolActive
+            ? undefined
+            : isTextToolActive
+            ? "text"
+            : (isShiftPressed || isSelectToolActive || drawingTool ? "crosshair" : undefined),
+        }}
       >
         <div ref={gridRef} className="canvas-grid" />
         <div ref={worldRef} className="canvas-world">

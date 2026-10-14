@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { WindowData } from "../store/windows";
+import { useWindows } from "../store/windows";
 import { fetchFileUrl } from "../utils/wiki";
 import startDrag from "../utils/window/drag";
 
@@ -10,7 +11,7 @@ type Props = {
   onPositionChange: (pos: { x?: number; y?: number; width?: number; height?: number }) => void;
 };
 
-export default function ImageViewer({ win, onClose, onActivate, onPositionChange }: Props) {
+const ImageViewer = memo(function ImageViewer({ win, onClose, onActivate, onPositionChange }: Props) {
   const directUrl = win.directImageUrl;
   const [fetchedUrl, setFetchedUrl] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(!directUrl);
@@ -28,6 +29,7 @@ export default function ImageViewer({ win, onClose, onActivate, onPositionChange
           if (cancelled) return;
           if (info?.url) {
             setFetchedUrl(info.url);
+            useWindows.getState().updateWindow(win.id, { directImageUrl: info.url });
           } else {
             setError(true);
           }
@@ -44,7 +46,7 @@ export default function ImageViewer({ win, onClose, onActivate, onPositionChange
     return () => {
       cancelled = true;
     };
-  }, [win.title, directUrl]);
+  }, [win.title, win.id, directUrl]);
 
   const hasAdjustedRef = useRef(false);
 
@@ -101,6 +103,8 @@ export default function ImageViewer({ win, onClose, onActivate, onPositionChange
           alt={win.title.replace(/^File:/i, "").replace(/_/g, " ")}
           className="w-full h-full object-contain rounded-2xl shadow-[0_10px_35px_rgba(0,0,0,0.35)] block"
           draggable={false}
+          loading="eager"
+          decoding="async"
           onLoad={handleImageLoad}
           onError={() => setError(true)}
         />
@@ -116,4 +120,6 @@ export default function ImageViewer({ win, onClose, onActivate, onPositionChange
       ) : null}
     </div>
   );
-}
+});
+
+export default ImageViewer;

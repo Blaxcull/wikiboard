@@ -102,16 +102,20 @@ export function connectWithoutCycles(sourceId: string, targetId: string) {
     });
   }
 
+  const appliedStyle = useWindows.getState().connectionStyle ?? "pointy";
+
   updatedWindows = updatedWindows.map((w) => {
     if (w.id === targetId) {
       const pSet = new Set(getParents(w));
       pSet.add(sourceId);
       pSet.delete(targetId);
       const newPList = Array.from(pSet);
+      const updatedStyles = { ...(w.connectionStyles ?? {}), [sourceId]: appliedStyle };
       return {
         ...w,
         parentIds: newPList,
         parentId: newPList[0],
+        connectionStyles: updatedStyles,
       };
     }
     return w;

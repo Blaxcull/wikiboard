@@ -271,6 +271,7 @@ export default function CanvasTextItem({
       onDoubleClick={handleDoubleClick}
       onMouseDown={(e) => {
         onActivate();
+        useWindows.getState().setSelectedIds([win.id]);
         if (!isEditing) {
           const rect = e.currentTarget.getBoundingClientRect();
           const isBottomRight = e.clientX >= rect.right - 8 && e.clientY >= rect.bottom - 8;
@@ -475,8 +476,9 @@ export default function CanvasTextItem({
               textareaRef.current?.blur();
               setIsEditing(false);
               commitMeasuredBounds();
-              // Keep focused/active so the box outline appears defined by the text
+              // Keep focused/active and selected so the box outline appears and can be deleted
               useWindows.getState().setActive(win.id);
+              useWindows.getState().setSelectedIds([win.id]);
             }
           }
         }}

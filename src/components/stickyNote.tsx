@@ -266,6 +266,7 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange,
 
   const handleActivate = () => {
     onActivate();
+    useWindows.getState().setSelectedIds([win.id]);
     if (win.isExcerptNote && win.pdfPage && win.parentId) {
       const parent = useWindows.getState().windows.find((w) => w.id === win.parentId);
       if (parent?.contentType === "pdf") {
@@ -430,6 +431,12 @@ export default function StickyNote({ win, onClose, onActivate, onPositionChange,
         placeholder={win.noteColor === "white" ? "Type text here…" : "Write a note…"}
         value={win.stickyText ?? ""}
         onChange={handleTextChange}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            textareaRef.current?.blur();
+            useWindows.getState().setSelectedIds([win.id]);
+          }
+        }}
         onMouseDown={(e) => {
           const rawTarget = e.currentTarget.closest(".window-wrapper, .window") as HTMLElement | null;
           if (rawTarget) {

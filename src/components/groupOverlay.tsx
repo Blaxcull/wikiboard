@@ -751,7 +751,7 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
       maxZIndex: curMaxZ,
       windows: s.windows.map((w) => {
         const newZ = zMap.get(w.id);
-        const shouldBeActive = newZ !== undefined ? (w.contentType !== "text") : false;
+        const shouldBeActive = newZ !== undefined ? (w.contentType !== "text" && w.contentType !== "shape") : false;
         return newZ !== undefined ? { ...w, zIndex: newZ, active: shouldBeActive } : { ...w, active: false };
       }),
     }));
@@ -760,13 +760,15 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
   const handleContainerMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement | null;
-    if (target?.closest(".window, .group-context-menu, button")) return;
+    if (target?.closest(".window, .canvas-text-item, .group-context-menu, button")) return;
 
     e.preventDefault();
     e.stopPropagation();
 
     window.getSelection()?.removeAllRanges();
     document.getSelection()?.removeAllRanges();
+
+    useWindows.getState().clearSelection();
 
     handleActivateGroup();
 

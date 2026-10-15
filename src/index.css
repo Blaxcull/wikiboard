@@ -490,7 +490,8 @@
 }
 
 .window:hover .connection-point,
-.group-box:hover .connection-point {
+.group-box:hover .connection-point,
+.canvas-shape-item:hover .connection-point {
   opacity: 1;
 }
 

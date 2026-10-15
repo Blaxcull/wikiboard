@@ -3,12 +3,14 @@ import type { WindowData } from "../store/windows";
 import { useWindows } from "../store/windows";
 import startDrag from "../utils/window/drag";
 import { getCamera } from "../utils/camera";
+import { startWireDrag, type Side } from "../utils/window/wireDrag";
 
 type Props = {
   win: WindowData;
   onClose: () => void;
   onActivate: () => void;
   onPositionChange: (pos: { x?: number; y?: number; width?: number; height?: number }) => void;
+  onAddSticky?: (side: Side) => void;
 };
 
 // Generates a smooth Catmull-Rom spline converted to cubic Bezier segments passing cleanly
@@ -113,6 +115,7 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
   win,
   onActivate,
   onPositionChange,
+  onAddSticky,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDraggingPoint, setIsDraggingPoint] = useState(false);
@@ -199,7 +202,7 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
   const handleMouseDown = (e: React.MouseEvent<HTMLElement | SVGElement>) => {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
-    if (target.closest(".shape-resize-handle, .line-control-dot, .line-corner-handle")) return;
+    if (target.closest(".shape-resize-handle, .line-control-dot, .line-corner-handle, .connection-point")) return;
 
     e.stopPropagation();
     onActivate();
@@ -784,17 +787,13 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
   return (
     <div
       ref={containerRef}
-      className={`group relative select-none transition-shadow ${
-        isLineOrArrow ? "pointer-events-none" : ""
-      }`}
+      className={`canvas-shape-item group relative select-none transition-shadow pointer-events-none`}
       style={{
         width: `${containerW}px`,
         height: `${containerH}px`,
-        cursor: isLineOrArrow ? undefined : "move",
         transform: rotation ? `rotate(${rotation}deg)` : undefined,
         transformOrigin: "center center",
       }}
-      onMouseDown={isLineOrArrow ? undefined : handleMouseDown}
     >
       <svg
         width={containerW}
@@ -825,18 +824,20 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
 
         {shapeType === "rectangle" && (
           <>
-            {isFocusedOrActive && (
-              <rect
-                x={strokeWidth / 2 - 2.5}
-                y={strokeWidth / 2 - 2.5}
-                width={Math.max(0, width - strokeWidth + 5)}
-                height={Math.max(0, height - strokeWidth + 5)}
-                rx={8 + 2.5}
-                fill="none"
-                stroke="rgb(148 163 184 / 0.8)"
-                strokeWidth={1.8}
-              />
-            )}
+            {/* Invisible thick stroke for easy boundary clicking/dragging to open box */}
+            <rect
+              x={strokeWidth / 2}
+              y={strokeWidth / 2}
+              width={Math.max(0, width - strokeWidth)}
+              height={Math.max(0, height - strokeWidth)}
+              rx={8}
+              fill="none"
+              stroke="transparent"
+              strokeWidth={Math.max(16, strokeWidth + 14)}
+              style={{ pointerEvents: "stroke", cursor: "move" }}
+              onMouseDown={handleMouseDown}
+            />
+            {/* Visible rectangle boundary */}
             <rect
               x={strokeWidth / 2}
               y={strokeWidth / 2}
@@ -846,23 +847,27 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
               fill={fillColor}
               stroke={strokeColor}
               strokeWidth={strokeWidth}
+              style={{ pointerEvents: "stroke", cursor: "move" }}
+              onMouseDown={handleMouseDown}
             />
           </>
         )}
 
         {shapeType === "circle" && (
           <>
-            {isFocusedOrActive && (
-              <ellipse
-                cx={width / 2}
-                cy={height / 2}
-                rx={Math.max(0, (width - strokeWidth) / 2 + 2.5)}
-                ry={Math.max(0, (height - strokeWidth) / 2 + 2.5)}
-                fill="none"
-                stroke="rgb(148 163 184 / 0.8)"
-                strokeWidth={1.8}
-              />
-            )}
+            {/* Invisible thick stroke for easy boundary clicking/dragging to open box */}
+            <ellipse
+              cx={width / 2}
+              cy={height / 2}
+              rx={Math.max(0, (width - strokeWidth) / 2)}
+              ry={Math.max(0, (height - strokeWidth) / 2)}
+              fill="none"
+              stroke="transparent"
+              strokeWidth={Math.max(16, strokeWidth + 14)}
+              style={{ pointerEvents: "stroke", cursor: "move" }}
+              onMouseDown={handleMouseDown}
+            />
+            {/* Visible circle boundary */}
             <ellipse
               cx={width / 2}
               cy={height / 2}
@@ -871,27 +876,33 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
               fill={fillColor}
               stroke={strokeColor}
               strokeWidth={strokeWidth}
+              style={{ pointerEvents: "stroke", cursor: "move" }}
+              onMouseDown={handleMouseDown}
             />
           </>
         )}
 
         {shapeType === "diamond" && (
           <>
-            {isFocusedOrActive && (
-              <polygon
-                points={`${width / 2},${strokeWidth / 2 - 2.5} ${width - strokeWidth / 2 + 2.5},${height / 2} ${width / 2},${height - strokeWidth / 2 + 2.5} ${strokeWidth / 2 - 2.5},${height / 2}`}
-                fill="none"
-                stroke="rgb(148 163 184 / 0.8)"
-                strokeWidth={1.8}
-                strokeLinejoin="round"
-              />
-            )}
+            {/* Invisible thick stroke for easy boundary clicking/dragging to open box */}
+            <polygon
+              points={`${width / 2},${strokeWidth / 2} ${width - strokeWidth / 2},${height / 2} ${width / 2},${height - strokeWidth / 2} ${strokeWidth / 2},${height / 2}`}
+              fill="none"
+              stroke="transparent"
+              strokeWidth={Math.max(16, strokeWidth + 14)}
+              strokeLinejoin="round"
+              style={{ pointerEvents: "stroke", cursor: "move" }}
+              onMouseDown={handleMouseDown}
+            />
+            {/* Visible diamond boundary */}
             <polygon
               points={`${width / 2},${strokeWidth / 2} ${width - strokeWidth / 2},${height / 2} ${width / 2},${height - strokeWidth / 2} ${strokeWidth / 2},${height / 2}`}
               fill={fillColor}
               stroke={strokeColor}
               strokeWidth={strokeWidth}
               strokeLinejoin="round"
+              style={{ pointerEvents: "stroke", cursor: "move" }}
+              onMouseDown={handleMouseDown}
             />
           </>
         )}
@@ -925,21 +936,68 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
         )}
       </svg>
 
-      {/* Rotation & Resize Handles for 2D shapes (rectangle, circle, diamond) */}
+      {/* Square Bounding Box with Rotation & Resize Handles for 2D shapes (rectangle, circle, diamond) */}
       {isFocusedOrActive && !isLineOrArrow && (
-        <>
+        <div className="absolute inset-0 pointer-events-none z-10 border border-[#6366f1]">
           {/* Top rotation circle */}
           <div
-            className="absolute -top-5 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full border-2 border-slate-500 bg-white hover:bg-slate-500/20 pointer-events-auto cursor-grab active:cursor-grabbing shadow-sm transition-transform hover:scale-125 z-20"
+            className="absolute -top-5 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full border-2 border-[#6366f1] bg-white hover:bg-[#6366f1]/20 pointer-events-auto cursor-grab active:cursor-grabbing shadow-sm transition-transform hover:scale-125 z-20"
             onMouseDown={handleRotateStart}
             title="Drag to rotate shape"
           />
 
+          {/* Corner marks for square box */}
+          <div className="absolute -top-1 -left-1 w-2 h-2 rounded-[2px] border border-[#6366f1] bg-white pointer-events-none" />
+          <div className="absolute -top-1 -right-1 w-2 h-2 rounded-[2px] border border-[#6366f1] bg-white pointer-events-none" />
+          <div className="absolute -bottom-1 -left-1 w-2 h-2 rounded-[2px] border border-[#6366f1] bg-white pointer-events-none" />
+
           {/* Resize Handle at bottom right */}
           <div
-            className="shape-resize-handle absolute -right-1.5 -bottom-1.5 w-3.5 h-3.5 bg-white border-2 border-slate-500 rounded-sm cursor-se-resize z-20 shadow-sm"
+            className="shape-resize-handle absolute -right-1.5 -bottom-1.5 w-3.5 h-3.5 bg-white border-2 border-[#6366f1] rounded-sm pointer-events-auto cursor-se-resize z-20 shadow-sm"
             onMouseDown={handleResizeStart}
             title="Drag to resize shape"
+          />
+        </div>
+      )}
+
+      {/* 4 Connection Points for all 3 shapes (rectangle, circle, diamond) */}
+      {!isLineOrArrow && onAddSticky && (
+        <>
+          <button
+            type="button"
+            className={`connection-point point-top ${isFocusedOrActive ? "!opacity-100" : ""}`}
+            title="Connect from top"
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              startWireDrag(e, win.id, "TOP", onAddSticky);
+            }}
+          />
+          <button
+            type="button"
+            className={`connection-point point-right ${isFocusedOrActive ? "!opacity-100" : ""}`}
+            title="Connect from right"
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              startWireDrag(e, win.id, "RIGHT", onAddSticky);
+            }}
+          />
+          <button
+            type="button"
+            className={`connection-point point-bottom ${isFocusedOrActive ? "!opacity-100" : ""}`}
+            title="Connect from bottom"
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              startWireDrag(e, win.id, "BOTTOM", onAddSticky);
+            }}
+          />
+          <button
+            type="button"
+            className={`connection-point point-left ${isFocusedOrActive ? "!opacity-100" : ""}`}
+            title="Connect from left"
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              startWireDrag(e, win.id, "LEFT", onAddSticky);
+            }}
           />
         </>
       )}

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { screenToWorld } from "../utils/camera";
-import { focusWindowAndParent } from "../utils/canvas/zoom";
+import { focusWindowAndParent, setZoomImmediate } from "../utils/canvas/zoom";
+import { recordSnapshot, type CanvasSnapshot } from "../utils/history";
 
 export type WindowLink = {
   label: string;
@@ -145,6 +146,9 @@ type WindowsStore = {
   drawingTool: "rectangle" | "circle" | "diamond" | "line" | "arrow" | null;
   setDrawingTool: (tool: "rectangle" | "circle" | "diamond" | "line" | "arrow" | null) => void;
   toggleDrawingTool: (tool: "rectangle" | "circle" | "diamond" | "line" | "arrow") => void;
+  restoreSnapshot: (snapshot: CanvasSnapshot) => void;
+  loadBoard: (data: { windows: WindowData[]; groups: WindowGroup[]; maxZIndex?: number; connectionStyle?: "pointy" | "curved" }) => void;
+  clearBoard: () => void;
 };
 
 export const DEFAULT_WIDTH = 750;
@@ -349,10 +353,48 @@ export function getParentEntityGeometry(
   return null;
 }
 
-export const useWindows = create<WindowsStore>((set) => ({
+export const useWindows = create<WindowsStore>((set, get) => ({
   windows: [],
   groups: [],
   maxZIndex: 0,
+  restoreSnapshot: (snapshot) =>
+    set({
+      windows: snapshot.windows,
+      groups: snapshot.groups,
+      connectionStyle: snapshot.connectionStyle,
+      maxZIndex: snapshot.maxZIndex ?? get().maxZIndex,
+      selectedIds: [],
+    }),
+  loadBoard: (data) => {
+    recordSnapshot();
+    const computedMaxZ =
+      data.maxZIndex ??
+      (data.windows.length > 0
+        ? data.windows.reduce((max, w) => Math.max(max, w.zIndex ?? 0), 0) + 1
+        : 1);
+    set({
+      windows: data.windows,
+      groups: data.groups,
+      connectionStyle: data.connectionStyle ?? "pointy",
+      maxZIndex: Math.max(get().maxZIndex, computedMaxZ),
+      selectedIds: [],
+    });
+  },
+  clearBoard: () => {
+    recordSnapshot();
+    set({
+      windows: [],
+      groups: [],
+      selectedIds: [],
+      maxZIndex: 0,
+      drawingTool: null,
+      isEraserToolActive: false,
+      isTextToolActive: false,
+      isStickyToolActive: false,
+      isSelectToolActive: false,
+    });
+    setZoomImmediate(1, 0, 0);
+  },
   selectedIds: [],
   setSelectedIds: (ids) => set({ selectedIds: ids }),
   clearSelection: () => set({ selectedIds: [] }),
@@ -374,7 +416,8 @@ export const useWindows = create<WindowsStore>((set) => ({
       isSelectToolActive: false,
       drawingTool: null,
     })),
-  disconnectEntities: (parentId: string, childId: string) =>
+  disconnectEntities: (parentId: string, childId: string) => {
+    recordSnapshot();
     set((state) => ({
       windows: state.windows.map((w) => {
         if (w.id === childId) {
@@ -404,7 +447,8 @@ export const useWindows = create<WindowsStore>((set) => ({
         }
         return g;
       }),
-    })),
+    }));
+  },
   isTextToolActive: false,
   setTextToolActive: (active) => set({ isTextToolActive: active, ...(active ? { isEraserToolActive: false, isStickyToolActive: false, isSelectToolActive: false, drawingTool: null } : {}) }),
   toggleTextTool: () => set((state) => ({ isTextToolActive: !state.isTextToolActive, isEraserToolActive: false, isStickyToolActive: false, isSelectToolActive: false, drawingTool: null })),
@@ -415,14 +459,18 @@ export const useWindows = create<WindowsStore>((set) => ({
   setSelectToolActive: (active) => set({ isSelectToolActive: active, ...(active ? { isEraserToolActive: false, isTextToolActive: false, isStickyToolActive: false, drawingTool: null } : {}) }),
   toggleSelectTool: () => set((state) => ({ isSelectToolActive: !state.isSelectToolActive, isEraserToolActive: false, isTextToolActive: false, isStickyToolActive: false, drawingTool: null })),
   connectionStyle: "pointy",
-  setConnectionStyle: (style) => set({ connectionStyle: style }),
+  setConnectionStyle: (style) => {
+    recordSnapshot();
+    set({ connectionStyle: style });
+  },
   drawingTool: null,
   setDrawingTool: (tool) => set({ drawingTool: tool, ...(tool ? { isEraserToolActive: false, isTextToolActive: false, isStickyToolActive: false, isSelectToolActive: false } : {}) }),
   toggleDrawingTool: (tool) => set((state) => ({
     drawingTool: state.drawingTool === tool ? null : tool,
     ...(state.drawingTool !== tool ? { isEraserToolActive: false, isTextToolActive: false, isStickyToolActive: false, isSelectToolActive: false } : {}),
   })),
-  addGroup: (memberIds, color) =>
+  addGroup: (memberIds, color) => {
+    recordSnapshot();
     set((state) => {
       const cleanIds = Array.from(new Set(memberIds));
       if (cleanIds.length === 0) return state;
@@ -438,17 +486,23 @@ export const useWindows = create<WindowsStore>((set) => ({
         }))
         .filter((g) => g.memberIds.length > 0);
       return { groups: [...filteredExisting, newGroup] };
-    }),
-  removeGroup: (groupId) =>
-    set((state) => ({ groups: state.groups.filter((g) => g.id !== groupId) })),
-  ungroup: (groupId) =>
-    set((state) => ({ groups: state.groups.filter((g) => g.id !== groupId) })),
+    });
+  },
+  removeGroup: (groupId) => {
+    recordSnapshot();
+    set((state) => ({ groups: state.groups.filter((g) => g.id !== groupId) }));
+  },
+  ungroup: (groupId) => {
+    recordSnapshot();
+    set((state) => ({ groups: state.groups.filter((g) => g.id !== groupId) }));
+  },
   updateGroup: (groupId, patch) =>
     set((state) => ({
       groups: state.groups.map((g) => (g.id === groupId ? { ...g, ...patch } : g)),
     })),
 
-  addWindow: (data) =>
+  addWindow: (data) => {
+    recordSnapshot();
     set((state) => {
       const nextZIndex = state.maxZIndex + 1;
       const center = screenToWorld(
@@ -605,9 +659,11 @@ export const useWindows = create<WindowsStore>((set) => ({
           },
         ],
       };
-    }),
+    });
+  },
 
-  removeWindow: (id) =>
+  removeWindow: (id) => {
+    recordSnapshot();
     set((state) => {
       const closingWin = state.windows.find((w) => w.id === id);
       if (typeof window !== "undefined") {
@@ -640,7 +696,8 @@ export const useWindows = create<WindowsStore>((set) => ({
             parentId: w.parentId === id ? undefined : w.parentId,
           })),
       };
-    }),
+    });
+  },
 
   setActive: (id) =>
     set((state) => {
@@ -701,7 +758,8 @@ export const useWindows = create<WindowsStore>((set) => ({
       };
     }),
 
-  spawnWindows: (count: number, startIdx: number, titles?: string[]) =>
+  spawnWindows: (count: number, startIdx: number, titles?: string[]) => {
+    recordSnapshot();
     set((state) => {
       const center = screenToWorld(
         (typeof window !== "undefined" ? window.innerWidth : 800) / 2,
@@ -741,9 +799,11 @@ export const useWindows = create<WindowsStore>((set) => ({
         maxZIndex: state.maxZIndex + count,
         windows,
       };
-    }),
+    });
+  },
 
-  breakConnections: (id: string) =>
+  breakConnections: (id: string) => {
+    recordSnapshot();
     set((state) => ({
       windows: state.windows.map((w) => {
         if (w.id === id) {
@@ -764,9 +824,11 @@ export const useWindows = create<WindowsStore>((set) => ({
         }
         return w;
       }),
-    })),
+    }));
+  },
 
-  breakGroupExternalConnections: (groupId: string) =>
+  breakGroupExternalConnections: (groupId: string) => {
+    recordSnapshot();
     set((state) => {
       const newWindows = state.windows.map((w) => {
         const existingParents =
@@ -822,9 +884,11 @@ export const useWindows = create<WindowsStore>((set) => ({
       });
 
       return { windows: newWindows, groups: newGroups };
-    }),
+    });
+  },
 
-  connectEntitiesWithoutCycles: (sourceId: string, targetId: string) =>
+  connectEntitiesWithoutCycles: (sourceId: string, targetId: string) => {
+    recordSnapshot();
     set((state) => {
       if (sourceId === targetId) return state;
 
@@ -938,9 +1002,11 @@ export const useWindows = create<WindowsStore>((set) => ({
       }
 
       return { windows: newWindows, groups: newGroups };
-    }),
+    });
+  },
 
-  toggleAlwaysOnTop: (id: string) =>
+  toggleAlwaysOnTop: (id: string) => {
+    recordSnapshot();
     set((state) => {
       const target = state.windows.find((w) => w.id === id);
       if (!target) return state;
@@ -954,9 +1020,11 @@ export const useWindows = create<WindowsStore>((set) => ({
             : w
         ),
       };
-    }),
+    });
+  },
 
-  toggleStackWindow: (id: string) =>
+  toggleStackWindow: (id: string) => {
+    recordSnapshot();
     set((state) => {
       const parentWin = state.windows.find((w) => w.id === id);
       if (!parentWin) return state;
@@ -1034,9 +1102,11 @@ export const useWindows = create<WindowsStore>((set) => ({
           }
         }),
       };
-    }),
+    });
+  },
 
-  unstackNote: (id: string) =>
+  unstackNote: (id: string) => {
+    recordSnapshot();
     set((state) => {
       const target = state.windows.find((w) => w.id === id);
       if (!target || !target.stacked) return state;
@@ -1073,9 +1143,11 @@ export const useWindows = create<WindowsStore>((set) => ({
           w.id === id ? { ...w, stacked: false, stackedParentId: undefined, x: finalX, y: finalY } : w
         ),
       };
-    }),
+    });
+  },
 
-  unstackNotes: (ids: string[]) =>
+  unstackNotes: (ids: string[]) => {
+    recordSnapshot();
     set((state) => {
       const idSet = new Set(ids);
       let unstackCount = 0;
@@ -1123,9 +1195,11 @@ export const useWindows = create<WindowsStore>((set) => ({
           };
         }),
       };
-    }),
+    });
+  },
 
-  toggleStackSingleNote: (id: string) =>
+  toggleStackSingleNote: (id: string) => {
+    recordSnapshot();
     set((state) => {
       const target = state.windows.find((w) => w.id === id);
       if (!target || target.contentType !== "sticky") return state;
@@ -1215,9 +1289,11 @@ export const useWindows = create<WindowsStore>((set) => ({
           ),
         };
       }
-    }),
+    });
+  },
 
-  toggleCompressGroup: (groupId: string) =>
+  toggleCompressGroup: (groupId: string) => {
+    recordSnapshot();
     set((state) => {
       const grp = state.groups.find((g) => g.id === groupId);
       if (!grp) return state;
@@ -1330,5 +1406,6 @@ export const useWindows = create<WindowsStore>((set) => ({
           }),
         };
       }
-    }),
+    });
+  },
 }));

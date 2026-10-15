@@ -37,6 +37,7 @@ const SelectionOverlay = memo(function SelectionOverlay({ marquee }: SelectionOv
       useWindows.getState().addGroup(selected);
     }
     useWindows.getState().clearSelection();
+    useWindows.getState().deactivateAll();
   }, []);
 
   const handleAlwaysOnTop = useCallback((e?: React.MouseEvent) => {

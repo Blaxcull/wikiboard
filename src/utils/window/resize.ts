@@ -1,6 +1,7 @@
 import { useWindows } from "../../store/windows";
 import { isDraggingWindow } from "./drag";
 import { getCamera } from "../camera";
+import { captureSnapshot, recordSnapshot } from "../history";
 
 // shared flag so OnEdge etc. can skip work while a resize is active
 export let isResizingWindow = false;
@@ -88,6 +89,7 @@ export function Resize(
 
   const startX = e.clientX;
   const startY = e.clientY;
+  const preResizeSnapshot = captureSnapshot();
 
   isResizingWindow = true;
   activeResizingWindowId = target.id.replace(/^win-/, "");
@@ -184,6 +186,10 @@ export function Resize(
 
     target.style.width = `${finalW}px`;
     target.style.height = `${finalH}px`;
+
+    if (finalW !== startWidth || finalH !== startHeight) {
+      recordSnapshot(preResizeSnapshot);
+    }
 
     onResizeEnd?.({ x: baseLeft, y: baseTop, width: finalW, height: finalH });
 

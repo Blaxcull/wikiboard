@@ -4,6 +4,11 @@ import Window from './components/window'
 import LinkEditor from './components/linkEditor'
 import SearchBox from './components/searchBox'
 import LeftMenu from './components/leftMenu'
+import RightMenu from './components/rightMenu'
+import ZoomControl from './components/zoomControl'
+import UndoRedoControl from './components/undoRedoControl'
+import { undo, redo } from './utils/history'
+import { saveCanvasToFile } from './utils/canvasPersistence'
 import ArticleView from './components/articleView'
 import PdfViewer from './components/pdfViewer'
 import ImageViewer from './components/imageViewer'
@@ -18,7 +23,7 @@ import { getCamera, subscribeCamera, screenToWorld } from './utils/camera'
 import SelectionOverlay, { getWindowWorldBounds, type MarqueeState } from './components/selectionOverlay'
 import GroupOverlay from './components/groupOverlay'
 import { startCanvasPan } from './utils/canvas/pan'
-import { handleZoom } from './utils/canvas/zoom'
+import { handleZoom, zoomIn, zoomOut, resetZoom } from './utils/canvas/zoom'
 import { isDraggingWindow, activeDraggedWindowId } from './utils/window/drag'
 import { isResizingWindow, activeResizingWindowId, Resize } from './utils/window/resize'
 import { startWireDrag, subscribeWire } from './utils/window/wireDrag'
@@ -1662,12 +1667,10 @@ const WindowItem = memo(function WindowItem({
     const wrapperW = w.width ?? 120;
     const wrapperH = w.height ?? 120;
 
-    const isLineOrArrow = w.shapeType === "line" || w.shapeType === "arrow";
-
     return (
       <div
         id={`win-${w.id}`}
-        className={`window-wrapper absolute ${isLineOrArrow ? "pointer-events-none" : ""}`}
+        className="window-wrapper absolute pointer-events-none"
         style={{
           ...zIndexStyle,
           left: `${wrapperLeft}px`,
@@ -1681,6 +1684,7 @@ const WindowItem = memo(function WindowItem({
           onClose={handleClose}
           onActivate={handleActivate}
           onPositionChange={handlePositionChange}
+          onAddSticky={handleAddSticky}
         />
       </div>
     );
@@ -2153,6 +2157,36 @@ function App() {
             height: 200,
           });
         }
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) {
+        const target = e.target as HTMLElement | null;
+        const isEditing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
+        if (!isEditing) {
+          e.preventDefault();
+          if (e.shiftKey) {
+            redo();
+          } else {
+            undo();
+          }
+        }
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === "y" || e.key === "Y")) {
+        const target = e.target as HTMLElement | null;
+        const isEditing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
+        if (!isEditing) {
+          e.preventDefault();
+          redo();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
+        e.preventDefault();
+        saveCanvasToFile();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === "=" || e.key === "+")) {
+        e.preventDefault();
+        zoomIn();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === "-" || e.key === "_")) {
+        e.preventDefault();
+        zoomOut();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === "0") {
+        e.preventDefault();
+        resetZoom();
       }
     }
 
@@ -2200,8 +2234,10 @@ function App() {
       const isMenuClick = Boolean(target?.closest(".group-context-menu"));
       const isGroupClick = Boolean(target?.closest("[id^='group-box-']"));
       const isLeftMenuClick = Boolean(target?.closest(".left-menu"));
+      const isRightMenuClick = Boolean(target?.closest(".right-menu"));
+      const isBottomControlsClick = Boolean(target?.closest(".bottom-controls, .zoom-control, .undo-redo-control"));
 
-      if (isMenuClick || isGroupClick || isLeftMenuClick) return;
+      if (isMenuClick || isGroupClick || isLeftMenuClick || isRightMenuClick || isBottomControlsClick) return;
 
       if (useWindows.getState().isTextToolActive) {
         if (isWinClick || isSearchClick) return;
@@ -2362,7 +2398,7 @@ function App() {
       const currentShift = e.shiftKey || isShiftPressed || useWindows.getState().isSelectToolActive;
 
       if (currentShift) {
-        if (isWinClick || isSearchClick || isLeftMenuClick) return;
+        if (isWinClick || isSearchClick || isLeftMenuClick || isRightMenuClick || isBottomControlsClick) return;
 
         e.preventDefault();
         e.stopPropagation();
@@ -2422,7 +2458,12 @@ function App() {
       if (!useWindows.getState().isEraserToolActive) return;
 
       const target = e.target as HTMLElement | null;
-      if (target?.closest(".left-menu") || target?.closest(".search-box") || target?.closest("button")) {
+      if (
+        target?.closest(".left-menu") ||
+        target?.closest(".zoom-control") ||
+        target?.closest(".search-box") ||
+        target?.closest("button")
+      ) {
         return;
       }
 
@@ -2501,6 +2542,11 @@ function App() {
     <>
       <Fps />
       <LeftMenu />
+      <RightMenu />
+      <div className="bottom-controls fixed bottom-5 left-5 z-[9990] flex items-center gap-2 select-none">
+        <ZoomControl />
+        <UndoRedoControl />
+      </div>
       <SearchBox />
       <input
         ref={fileInputRef}

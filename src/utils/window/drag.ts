@@ -2,6 +2,7 @@ import { useWindows } from "../../store/windows";
 import { getCamera } from "../camera";
 import { setZoomImmediate } from "../canvas/zoom";
 import { isResizingWindow } from "./resize";
+import { captureSnapshot, recordSnapshot } from "../history";
 
 // shared flag so other handlers can skip work while a drag is active
 export let isDraggingWindow = false;
@@ -24,6 +25,7 @@ export default function startDrag(
 
   const startX = e.clientX;
   const startY = e.clientY;
+  const preDragSnapshot = captureSnapshot();
 
   // Freeze any active smooth camera pan/zoom animations immediately so camera stays static during drag
   const cam = getCamera();
@@ -127,6 +129,10 @@ export default function startDrag(
     const curWorldMouseY = (mouseY - curCam.panY) / curCam.zoom;
     const rdx = Math.round(curWorldMouseX - worldShiftX - baseLeft);
     const rdy = Math.round(curWorldMouseY - worldShiftY - baseTop);
+
+    if (rdx !== 0 || rdy !== 0) {
+      recordSnapshot(preDragSnapshot);
+    }
 
     for (const gt of groupTargets) {
       const finalLeft = gt.baseLeft + rdx;

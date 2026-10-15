@@ -1,9 +1,13 @@
 import { getCamera, setCamera } from "../camera";
 
-const MIN_ZOOM = 0.05;
-const MAX_ZOOM = 10;
+export const MIN_ZOOM = 0.05;
+export const MAX_ZOOM = 10;
 const LERP = 0.25;
 const SNAP_THRESHOLD = 0.001;
+
+export const ZOOM_STEPS = [
+  0.05, 0.1, 0.15, 0.2, 0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0, 5.0, 7.5, 10.0,
+];
 
 let targetZoom = 1;
 let targetPanX = 0;
@@ -67,15 +71,64 @@ export function setZoomImmediate(zoom: number, panX?: number, panY?: number) {
   setCamera({ zoom, panX: targetPanX, panY: targetPanY });
 }
 
-/** Reset zoom target (e.g. on double-click to reset view). */
-export function resetZoom() {
-  targetZoom = 1;
-  targetPanX = getCamera().panX;
-  targetPanY = getCamera().panY;
+/** Smoothly zoom to a target zoom level centered at screen point (cx, cy). */
+export function smoothZoomTo(
+  nextZoom: number,
+  cx = typeof window !== "undefined" ? window.innerWidth / 2 : 0,
+  cy = typeof window !== "undefined" ? window.innerHeight / 2 : 0,
+) {
+  const cam = getCamera();
+  const oldZoom = cam.zoom;
+  targetZoom = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
+
+  targetPanX = cx - (cx - cam.panX) * (targetZoom / oldZoom);
+  targetPanY = cy - (cy - cam.panY) * (targetZoom / oldZoom);
+
   if (!rafPending) {
     rafPending = true;
     requestAnimationFrame(animate);
   }
+}
+
+/** Instantly snap to a target zoom level without lerp animation, keeping screen point (cx, cy) fixed. */
+export function snapZoomTo(
+  nextZoom: number,
+  cx = typeof window !== "undefined" ? window.innerWidth / 2 : 0,
+  cy = typeof window !== "undefined" ? window.innerHeight / 2 : 0,
+) {
+  const cam = getCamera();
+  const clampedZoom = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
+  const oldZoom = cam.zoom;
+  if (Math.abs(oldZoom - clampedZoom) < SNAP_THRESHOLD) return;
+
+  const nextPanX = cx - (cx - cam.panX) * (clampedZoom / oldZoom);
+  const nextPanY = cy - (cy - cam.panY) * (clampedZoom / oldZoom);
+
+  setZoomImmediate(clampedZoom, nextPanX, nextPanY);
+}
+
+/** Zoom in to the next discrete zoom step in a snap. */
+export function zoomIn() {
+  const current = getCamera().zoom;
+  const next = ZOOM_STEPS.find((s) => s > current * 1.01) ?? MAX_ZOOM;
+  snapZoomTo(next);
+}
+
+/** Zoom out to the previous discrete zoom step in a snap. */
+export function zoomOut() {
+  const current = getCamera().zoom;
+  const prev = [...ZOOM_STEPS].reverse().find((s) => s < current * 0.99) ?? MIN_ZOOM;
+  snapZoomTo(prev);
+}
+
+/** Snap zoom to 100% immediately without lerp animation. Centered at screen center. */
+export function snapZoomTo100() {
+  snapZoomTo(1);
+}
+
+/** Reset zoom target (to 100% in a snap). */
+export function resetZoom() {
+  snapZoomTo(1);
 }
 
 /** Smoothly pan camera to target panX, panY (and optional target zoom). */

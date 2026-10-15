@@ -29,29 +29,51 @@ export default function CanvasTextItem({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const mountTimeRef = useRef(Date.now());
   const [isEditing, setIsEditing] = useState(!win.stickyText);
 
   // Compute font size dynamically based on explicit fontSize or comfortable default
   const currentFontSize = win.fontSize ?? 36;
 
-  // Auto-focus and place vertical cursor on initial creation or edit mode
+  // Auto-focus and place vertical cursor on initial creation or edit mode with multi-tier retry
   useEffect(() => {
     if (isEditing && textareaRef.current) {
-      textareaRef.current.focus();
-      const pos = textareaRef.current.value.length;
-      textareaRef.current.setSelectionRange(pos, pos);
+      const focusTextarea = () => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          const pos = textareaRef.current.value.length;
+          textareaRef.current.setSelectionRange(pos, pos);
+        }
+      };
+
+      focusTextarea();
+      const rafId = requestAnimationFrame(focusTextarea);
+      const timer1 = setTimeout(focusTextarea, 25);
+      const timer2 = setTimeout(focusTextarea, 80);
+      const timer3 = setTimeout(focusTextarea, 200);
+
+      return () => {
+        cancelAnimationFrame(rafId);
+        clearTimeout(timer1);
+        clearTimeout(timer2);
+        clearTimeout(timer3);
+      };
     }
   }, [isEditing]);
 
   // Measure text bounds using exact font and DOM metrics
-  const getMeasuredTextBounds = useCallback((text: string) => {
+  const getMeasuredTextBounds = useCallback((text: string, overrideFontSize?: number) => {
+    const fontSizeToUse = overrideFontSize ?? currentFontSize;
     const lines = (text || "").split("\n");
     // Create or reuse hidden measurement span with identical styling
     const span = document.createElement("span");
     span.style.visibility = "hidden";
     span.style.position = "absolute";
     span.style.whiteSpace = "pre";
-    span.style.fontSize = `${currentFontSize}px`;
+    span.style.fontSize = `${fontSizeToUse}px`;
+    span.style.lineHeight = "1.05";
+    span.style.padding = "0 2px";
+    span.style.margin = "0";
     span.style.fontWeight = "600";
     span.style.fontFamily = "'Caveat', 'Kalam', 'Patrick Hand', 'Comic Sans MS', cursive, sans-serif";
     span.style.letterSpacing = "normal";
@@ -63,13 +85,13 @@ export default function CanvasTextItem({
       span.textContent = line || " ";
       const rect = span.getBoundingClientRect();
       if (rect.width > maxLineWidth) maxLineWidth = rect.width;
-      totalHeight += rect.height || currentFontSize * 1.2;
+      totalHeight += rect.height || fontSizeToUse * 1.05;
     }
     document.body.removeChild(span);
 
-    // Provide 20px breathing room (10px left/right padding + italic overhang safety buffer)
-    const measuredW = Math.max(32, Math.ceil(maxLineWidth + 20));
-    const measuredH = Math.max(20, Math.ceil(totalHeight + 4));
+    // Tight padding: 4px horizontal breathing room so characters don't clip
+    const measuredW = Math.max(16, Math.ceil(maxLineWidth + 4));
+    const measuredH = Math.max(16, Math.ceil(totalHeight));
     return { measuredW, measuredH };
   }, [currentFontSize]);
 
@@ -84,9 +106,24 @@ export default function CanvasTextItem({
     }
   }, [win.stickyText, isEditing, currentFontSize]);
 
+  const commitMeasuredBounds = useCallback(() => {
+    if (textareaRef.current && containerRef.current) {
+      const { measuredW, measuredH } = getMeasuredTextBounds(win.stickyText || "");
+      // If the user manually resized the box handles, preserve that width;
+      // otherwise, fit the box tightly to the text bounds!
+      const targetW = win.isUserResized && win.width ? win.width : measuredW;
+      const targetH = win.isUserResized && win.height ? win.height : measuredH;
+      updateWindow(win.id, { width: targetW, height: targetH });
+    }
+  }, [win.id, win.stickyText, win.width, win.height, win.isUserResized, getMeasuredTextBounds, updateWindow]);
+
   // Dismiss editing / border when clicking outside this text item
   useEffect(() => {
     function handleGlobalPointerDown(e: MouseEvent | TouchEvent) {
+      // Ignore clicks during initial grace period so creation gesture doesn't dismiss text item
+      if (Date.now() - mountTimeRef.current < 500) {
+        return;
+      }
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         if (!win.stickyText || win.stickyText.trim() === "") {
           onClose();
@@ -100,18 +137,7 @@ export default function CanvasTextItem({
     return () => {
       window.removeEventListener("mousedown", handleGlobalPointerDown);
     };
-  }, [win.stickyText, onClose]);
-
-  const commitMeasuredBounds = useCallback(() => {
-    if (textareaRef.current && containerRef.current) {
-      const { measuredW, measuredH } = getMeasuredTextBounds(win.stickyText || "");
-      // If the user manually resized the box handles, preserve that width;
-      // otherwise, fit the box tightly to the text bounds!
-      const targetW = win.isUserResized && win.width ? win.width : measuredW;
-      const targetH = win.isUserResized && win.height ? win.height : measuredH;
-      updateWindow(win.id, { width: targetW, height: targetH });
-    }
-  }, [win.id, win.stickyText, win.width, win.height, win.isUserResized, getMeasuredTextBounds, updateWindow]);
+  }, [win.stickyText, onClose, commitMeasuredBounds]);
 
   const handleTextChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -130,6 +156,12 @@ export default function CanvasTextItem({
   );
 
   const handleBlur = () => {
+    // If blur fired within initial grace period (e.g. mouseup from creating text box),
+    // ignore blur and refocus the textarea immediately!
+    if (Date.now() - mountTimeRef.current < 500) {
+      textareaRef.current?.focus();
+      return;
+    }
     if (!win.stickyText || win.stickyText.trim() === "") {
       onClose();
     } else {
@@ -154,6 +186,8 @@ export default function CanvasTextItem({
     const startH = containerRef.current?.offsetHeight ?? (win.height ?? 36);
     const startX = win.x ?? 0;
     const startY = win.y ?? 0;
+    const startRight = startX + startW;
+    const startBottom = startY + startH;
     const startSize = currentFontSize;
     const camZoom = getCamera().zoom || 1;
 
@@ -161,40 +195,40 @@ export default function CanvasTextItem({
       const dx = (ev.clientX - startClientX) / camZoom;
       const dy = (ev.clientY - startClientY) / camZoom;
 
+      let factor = 1;
       if (corner === "bottom-right") {
-        const factorX = 1 + dx / Math.max(startW, 40);
-        const factorY = 1 + dy / Math.max(startH, 30);
-        const factor = Math.max(0.3, (factorX + factorY) / 2);
-        const newW = Math.max(30, Math.round(startW * factor));
-        const newFontSize = Math.max(10, Math.min(160, Math.round(startSize * factor)));
-        updateWindow(win.id, { width: newW, fontSize: newFontSize });
+        const factorX = 1 + dx / Math.max(startW, 30);
+        const factorY = 1 + dy / Math.max(startH, 20);
+        factor = Math.max(0.1, (factorX + factorY) / 2);
       } else if (corner === "bottom-left") {
-        const factorX = 1 - dx / Math.max(startW, 40);
-        const factorY = 1 + dy / Math.max(startH, 30);
-        const factor = Math.max(0.3, (factorX + factorY) / 2);
-        const newW = Math.max(30, Math.round(startW * factor));
-        const newX = Math.round(startX + (startW - newW));
-        const newFontSize = Math.max(10, Math.min(160, Math.round(startSize * factor)));
-        updateWindow(win.id, { width: newW, x: newX, fontSize: newFontSize });
+        const factorX = 1 - dx / Math.max(startW, 30);
+        const factorY = 1 + dy / Math.max(startH, 20);
+        factor = Math.max(0.1, (factorX + factorY) / 2);
       } else if (corner === "top-right") {
-        const factorX = 1 + dx / Math.max(startW, 40);
-        const factorY = 1 - dy / Math.max(startH, 30);
-        const factor = Math.max(0.3, (factorX + factorY) / 2);
-        const newW = Math.max(30, Math.round(startW * factor));
-        const newH = Math.max(20, Math.round(startH * factor));
-        const newY = Math.round(startY + (startH - newH));
-        const newFontSize = Math.max(10, Math.min(160, Math.round(startSize * factor)));
-        updateWindow(win.id, { width: newW, y: newY, fontSize: newFontSize });
+        const factorX = 1 + dx / Math.max(startW, 30);
+        const factorY = 1 - dy / Math.max(startH, 20);
+        factor = Math.max(0.1, (factorX + factorY) / 2);
       } else if (corner === "top-left") {
-        const factorX = 1 - dx / Math.max(startW, 40);
-        const factorY = 1 - dy / Math.max(startH, 30);
-        const factor = Math.max(0.3, (factorX + factorY) / 2);
-        const newW = Math.max(30, Math.round(startW * factor));
-        const newH = Math.max(20, Math.round(startH * factor));
-        const newX = Math.round(startX + (startW - newW));
-        const newY = Math.round(startY + (startH - newH));
-        const newFontSize = Math.max(10, Math.min(160, Math.round(startSize * factor)));
-        updateWindow(win.id, { width: newW, x: newX, y: newY, fontSize: newFontSize });
+        const factorX = 1 - dx / Math.max(startW, 30);
+        const factorY = 1 - dy / Math.max(startH, 20);
+        factor = Math.max(0.1, (factorX + factorY) / 2);
+      }
+
+      const newFontSize = Math.max(8, Math.round(startSize * factor));
+      const { measuredW, measuredH } = getMeasuredTextBounds(win.stickyText || "", newFontSize);
+
+      if (corner === "bottom-right") {
+        updateWindow(win.id, { width: measuredW, height: measuredH, fontSize: newFontSize, isUserResized: false });
+      } else if (corner === "bottom-left") {
+        const newX = Math.round(startRight - measuredW);
+        updateWindow(win.id, { width: measuredW, height: measuredH, x: newX, fontSize: newFontSize, isUserResized: false });
+      } else if (corner === "top-right") {
+        const newY = Math.round(startBottom - measuredH);
+        updateWindow(win.id, { width: measuredW, height: measuredH, y: newY, fontSize: newFontSize, isUserResized: false });
+      } else if (corner === "top-left") {
+        const newX = Math.round(startRight - measuredW);
+        const newY = Math.round(startBottom - measuredH);
+        updateWindow(win.id, { width: measuredW, height: measuredH, x: newX, y: newY, fontSize: newFontSize, isUserResized: false });
       }
     }
 
@@ -264,7 +298,7 @@ export default function CanvasTextItem({
       ref={containerRef}
       className="canvas-text-item group/canvas-text relative select-text transition-shadow"
       style={{
-        minWidth: "12px",
+        minWidth: "16px",
         minHeight: "16px",
         cursor: isEditing ? "text" : "move",
       }}
@@ -297,6 +331,8 @@ export default function CanvasTextItem({
             e.stopPropagation();
             startDrag(e, (pos) => onPositionChange(pos), onActivate);
           }
+        } else {
+          textareaRef.current?.focus();
         }
       }}
     >
@@ -449,17 +485,21 @@ export default function CanvasTextItem({
 
       <textarea
         ref={textareaRef}
+        autoFocus
         value={win.stickyText ?? ""}
         onChange={handleTextChange}
         onBlur={handleBlur}
         placeholder=""
         rows={1}
-        className="w-full bg-transparent border-none outline-none resize-none leading-normal text-gray-900 font-semibold select-text cursor-text overflow-hidden block"
+        className="w-full bg-transparent border-none outline-none resize-none text-gray-900 font-semibold select-text cursor-text overflow-hidden block"
         style={{
           fontFamily: "'Caveat', 'Kalam', 'Patrick Hand', 'Comic Sans MS', cursive, sans-serif",
           fontSize: `${currentFontSize}px`,
-          lineHeight: "1.2",
-          padding: "1px 6px",
+          lineHeight: "1.05",
+          minWidth: "8px",
+          caretColor: "#111827",
+          padding: "0 2px",
+          margin: 0,
           whiteSpace: "pre",
           wordBreak: "normal",
           WebkitFontSmoothing: "antialiased",

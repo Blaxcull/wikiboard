@@ -91,6 +91,20 @@ function StickyColorPicker({
 
   useEffect(() => {
     if (!isOpen) return;
+    const handleCloseMenus = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.exceptWindowId !== winId) {
+        onClose();
+      }
+    };
+    window.addEventListener("wikiboard:close-menus", handleCloseMenus as EventListener);
+    return () => {
+      window.removeEventListener("wikiboard:close-menus", handleCloseMenus as EventListener);
+    };
+  }, [isOpen, winId, onClose]);
+
+  useEffect(() => {
+    if (!isOpen) return;
     const handleDismiss = (e: Event) => {
       const target = e.target as HTMLElement | null;
       if (

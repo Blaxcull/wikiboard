@@ -1644,6 +1644,12 @@ const WindowItem = memo(function WindowItem({
           left: `${w.x ?? 80}px`,
           top: `${w.y ?? 80}px`,
           width: w.width ? `${w.width}px` : "auto",
+          height: w.height ? `${w.height}px` : "auto",
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onContextMenu?.(e, w.id);
         }}
       >
         <CanvasTextItem
@@ -1652,6 +1658,7 @@ const WindowItem = memo(function WindowItem({
           onActivate={handleActivate}
           onPositionChange={handlePositionChange}
           onAddSticky={handleAddSticky}
+          onContextMenu={(e) => onContextMenu?.(e, w.id)}
         />
       </div>
     );

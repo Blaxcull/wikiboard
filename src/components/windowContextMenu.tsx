@@ -31,12 +31,17 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
       const menuW = menuEl.offsetWidth;
 
       let top = rect.top - menuH - 18;
+      if (top < 12) {
+        top = Math.min(window.innerHeight - menuH - 12, rect.bottom + 18);
+      }
       let left = rect.left + (rect.width - menuW) / 2;
 
       if (left + menuW > window.innerWidth - 12) left = window.innerWidth - menuW - 12;
       if (left < 12) left = 12;
 
       setStylePos({ left, top });
+    } else if (pos) {
+      setStylePos({ left: pos.x, top: pos.y });
     }
   }, [pos]);
 
@@ -47,7 +52,8 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
       if (
         menuRef.current &&
         !menuRef.current.contains(target as Node) &&
-        !target?.closest(".sticky-color-picker")
+        !target?.closest(".sticky-color-picker") &&
+        !target?.closest(".text-color-picker")
       ) {
         onClose();
       }
@@ -73,30 +79,26 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
   const isAlwaysOnTop = !!targetWin?.alwaysOnTop;
   const isSticky = targetWin?.contentType === "sticky";
   const isImage = !!(targetWin?.directImageUrl || targetWin?.title?.startsWith("File:"));
+  const isText = targetWin?.contentType === "text";
 
   const childNotes = pos?.windowId ? getConnectedChildNotes(pos.windowId, windows, groups) : [];
+  const canStack = isSticky || isImage || childNotes.length > 0;
   const hasUnstackedNotes = childNotes.some((w) => !w.stacked || w.stackedParentId !== pos?.windowId);
 
-  let stackLabel = "Stack notes";
-  if (isImage) {
-    if (childNotes.length > 0) {
-      stackLabel = hasUnstackedNotes ? "Stack notes" : "Unstack notes";
-    } else {
-      stackLabel = targetWin?.stacked ? "Unstack image" : "Stack image";
-    }
+  let stackLabel: string;
+  if (childNotes.length > 0) {
+    stackLabel = hasUnstackedNotes ? "Stack notes" : "Unstack notes";
+  } else if (isImage) {
+    stackLabel = targetWin?.stacked ? "Unstack image" : "Stack image";
   } else if (isSticky) {
-    if (childNotes.length > 0) {
-      stackLabel = hasUnstackedNotes ? "Stack notes" : "Unstack notes";
-    } else {
-      stackLabel = targetWin?.stacked ? "Unstack note" : "Stack note";
-    }
+    stackLabel = targetWin?.stacked ? "Unstack note" : "Stack note";
   } else {
-    stackLabel = childNotes.length > 0 && !hasUnstackedNotes ? "Unstack notes" : "Stack notes";
+    stackLabel = "Stack notes";
   }
 
   if (!pos) return null;
 
-  const items = [
+  const allItems = [
     {
       id: "stack",
       label: stackLabel,
@@ -144,6 +146,8 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
     },
   ];
 
+  const items = isText || !canStack ? allItems.filter((item) => item.id !== "stack") : allItems;
+
   return createPortal(
     <div
       ref={menuRef}
@@ -157,6 +161,9 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
           type="button"
           className="w-full flex items-center gap-3 px-3 py-2 text-[13px] font-semibold text-[#171717] rounded-[10px] transition-colors cursor-pointer border-none bg-transparent hover:bg-black/10 active:bg-black/15 text-left"
           onClick={() => {
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new CustomEvent("wikiboard:close-menus"));
+            }
             if (item.id === "delete") {
               deleteScroll(pos.windowId);
               useWindows.getState().removeWindow(pos.windowId);

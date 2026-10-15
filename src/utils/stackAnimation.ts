@@ -153,6 +153,14 @@ export function stackSingleNoteWithAnimation(noteId: string) {
     }
     state.toggleStackSingleNote(noteId);
   } else {
+    const parentId = note.stackedParentId ?? note.parentId ?? note.parentIds?.[0];
+    const hasParent =
+      !!parentId ||
+      state.windows.some(
+        (w) => w.contentType !== "sticky" && (w.parentId === noteId || w.parentIds?.includes(noteId))
+      );
+    if (!hasParent) return; // Unconnected sticky note: do not do anything!
+
     const noteEl = document.getElementById(`win-${noteId}`);
     if (noteEl) {
       lastUnstackedRects.set(noteId, noteEl.getBoundingClientRect());

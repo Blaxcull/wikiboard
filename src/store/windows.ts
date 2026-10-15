@@ -84,6 +84,7 @@ export type WindowData = {
   width?: number;
   height?: number;
   fontSize?: number;
+  textColor?: string;
   isUserResized?: boolean;
   uncompressedX?: number;
   uncompressedY?: number;
@@ -1240,6 +1241,18 @@ export const useWindows = create<WindowsStore>((set, get) => ({
       } else {
         const parentId = target.stackedParentId ?? target.parentId ?? target.parentIds?.[0];
         const pGeom = getParentEntityGeometry(parentId, state.windows, state.groups);
+        const parentWin = !pGeom
+          ? state.windows.find(
+              (w) => w.contentType !== "sticky" && (w.parentId === id || w.parentIds?.includes(id))
+            )
+          : undefined;
+
+        if (!parentId && !pGeom && !parentWin) {
+          // Unconnected sticky note: do not do anything
+          return state;
+        }
+
+        const effectiveParentId = parentId ?? parentWin?.id;
 
         let parentX = 80;
         let parentY = 80;
@@ -1251,16 +1264,11 @@ export const useWindows = create<WindowsStore>((set, get) => ({
           parentY = pGeom.py;
           parentW = pGeom.pw;
           parentH = pGeom.ph;
-        } else {
-          const parentWin = state.windows.find(
-            (w) => w.contentType !== "sticky" && (w.parentId === id || w.parentIds?.includes(id))
-          );
-          if (parentWin) {
-            parentX = parentWin.x ?? 80;
-            parentY = parentWin.y ?? 80;
-            parentW = parentWin.width ?? DEFAULT_WIDTH;
-            parentH = parentWin.height ?? DEFAULT_HEIGHT;
-          }
+        } else if (parentWin) {
+          parentX = parentWin.x ?? 80;
+          parentY = parentWin.y ?? 80;
+          parentW = parentWin.width ?? DEFAULT_WIDTH;
+          parentH = parentWin.height ?? DEFAULT_HEIGHT;
         }
 
         const relX = (target.x ?? 80) - parentX;
@@ -1285,7 +1293,7 @@ export const useWindows = create<WindowsStore>((set, get) => ({
 
         return {
           windows: state.windows.map((w) =>
-            w.id === id ? { ...w, stacked: true, stackedParentId: parentId, side, relX, relY } : w
+            w.id === id ? { ...w, stacked: true, stackedParentId: effectiveParentId, side, relX, relY } : w
           ),
         };
       }

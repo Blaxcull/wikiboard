@@ -2557,13 +2557,13 @@ function App() {
       />
       <button
         onClick={handleOpenPdf}
-        style={{ position: 'fixed', top: 10, right: 10, zIndex: 9999 }}
+        style={{ position: 'fixed', top: 210, right: 10, zIndex: 9999 }}
       >
         Open PDF
       </button>
       <button
         onClick={spawnWithRealTitles}
-        style={{ position: 'fixed', top: 40, right: 10, zIndex: 9999 }}
+        style={{ position: 'fixed', top: 240, right: 10, zIndex: 9999 }}
       >
         Spawn 100 Windows
       </button>
@@ -2582,7 +2582,7 @@ function App() {
             spawnWindows(50, 0)
           }
         }}
-        style={{ position: 'fixed', top: 70, right: 10, zIndex: 9999 }}
+        style={{ position: 'fixed', top: 270, right: 10, zIndex: 9999 }}
       >
         Spawn 50 Windows
       </button>
@@ -2601,7 +2601,7 @@ function App() {
             spawnWindows(75, 0)
           }
         }}
-        style={{ position: 'fixed', top: 100, right: 10, zIndex: 9999 }}
+        style={{ position: 'fixed', top: 300, right: 10, zIndex: 9999 }}
       >
         Spawn 75 Windows
       </button>

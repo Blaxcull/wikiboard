@@ -11,6 +11,104 @@ type Props = {
   onPositionChange: (pos: { x?: number; y?: number; width?: number; height?: number }) => void;
 };
 
+// Generates a smooth Catmull-Rom spline converted to cubic Bezier segments passing cleanly
+// through P0 (x1, y1) -> P_mid (midX, midY) -> P2 (x2, y2) without unnatural bulging or sharp corners.
+function getArrowCurvePointsAndPath(
+  x1: number,
+  y1: number,
+  midX: number,
+  midY: number,
+  x2: number,
+  y2: number
+) {
+  const d01 = Math.hypot(midX - x1, midY - y1);
+  const d12 = Math.hypot(x2 - midX, y2 - midY);
+  const d02 = Math.hypot(x2 - x1, y2 - y1);
+
+  if (d02 < 1e-4) {
+    return {
+      pathData: `M ${x1} ${y1} L ${x2} ${y2}`,
+      bounds: {
+        minX: Math.min(x1, x2, midX),
+        maxX: Math.max(x1, x2, midX),
+        minY: Math.min(y1, y2, midY),
+        maxY: Math.max(y1, y2, midY),
+      },
+    };
+  }
+
+  const ux = (x2 - x1) / d02;
+  const uy = (y2 - y1) / d02;
+
+  // Tangent magnitude clamped to avoid extreme overshoot on asymmetrical midpoints
+  const s1 = Math.min(d02 / 6, d01 / 2);
+  const s2 = Math.min(d02 / 6, d12 / 2);
+
+  const c0aX = x1 + (midX - x1) / 3;
+  const c0aY = y1 + (midY - y1) / 3;
+
+  const c0bX = midX - ux * s1;
+  const c0bY = midY - uy * s1;
+
+  const c1aX = midX + ux * s2;
+  const c1aY = midY + uy * s2;
+
+  const c1bX = x2 - (x2 - midX) / 3;
+  const c1bY = y2 - (y2 - midY) / 3;
+
+  const pathData = `M ${x1} ${y1} C ${c0aX} ${c0aY}, ${c0bX} ${c0bY}, ${midX} ${midY} C ${c1aX} ${c1aY}, ${c1bX} ${c1bY}, ${x2} ${y2}`;
+
+  let minX = Math.min(x1, midX, x2);
+  let maxX = Math.max(x1, midX, x2);
+  let minY = Math.min(y1, midY, y2);
+  let maxY = Math.max(y1, midY, y2);
+
+  // Sample along cubic segment 1 (P0 -> Mid)
+  for (let step = 1; step < 10; step++) {
+    const t = step / 10;
+    const inv = 1 - t;
+    const px =
+      inv * inv * inv * x1 +
+      3 * inv * inv * t * c0aX +
+      3 * inv * t * t * c0bX +
+      t * t * t * midX;
+    const py =
+      inv * inv * inv * y1 +
+      3 * inv * inv * t * c0aY +
+      3 * inv * t * t * c0bY +
+      t * t * t * midY;
+    if (px < minX) minX = px;
+    if (px > maxX) maxX = px;
+    if (py < minY) minY = py;
+    if (py > maxY) maxY = py;
+  }
+
+  // Sample along cubic segment 2 (Mid -> P2)
+  for (let step = 1; step < 10; step++) {
+    const t = step / 10;
+    const inv = 1 - t;
+    const px =
+      inv * inv * inv * midX +
+      3 * inv * inv * t * c1aX +
+      3 * inv * t * t * c1bX +
+      t * t * t * x2;
+    const py =
+      inv * inv * inv * midY +
+      3 * inv * inv * t * c1aY +
+      3 * inv * t * t * c1bY +
+      t * t * t * y2;
+    if (px < minX) minX = px;
+    if (px > maxX) maxX = px;
+    if (py < minY) minY = py;
+    if (py > maxY) maxY = py;
+  }
+
+  return {
+    pathData,
+    bounds: { minX, maxX, minY, maxY },
+  };
+}
+
 const CanvasShapeItem = memo(function CanvasShapeItem({
   win,
   onActivate,
@@ -65,13 +163,43 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
     midY = Math.round((y1 + y2) / 2);
   }
 
-  // Two straight line segments joined at the middle point (P1 -> Mid -> P2)
-  const pathData = `M ${x1} ${y1} L ${midX} ${midY} L ${x2} ${y2}`;
+  // For arrow, render a smooth continuous Catmull-Rom curve passing cleanly through (midX, midY) without bulging or a pointy corner.
+  // For standard line, keep two straight segments joined at the middle vertex (P1 -> Mid -> P2).
+  let pathData: string;
+  let containerX = 0;
+  let containerY = 0;
+  let containerW = width;
+  let containerH = height;
+
+  if (shapeType === "arrow") {
+    const curve = getArrowCurvePointsAndPath(x1, y1, midX, midY, x2, y2);
+    pathData = curve.pathData;
+    containerX = curve.bounds.minX;
+    containerY = curve.bounds.minY;
+    containerW = Math.max(2, curve.bounds.maxX - curve.bounds.minX);
+    containerH = Math.max(2, curve.bounds.maxY - curve.bounds.minY);
+  } else if (shapeType === "line") {
+    pathData = `M ${x1} ${y1} L ${midX} ${midY} L ${x2} ${y2}`;
+    const minBx = Math.min(x1, x2, midX);
+    const maxBx = Math.max(x1, x2, midX);
+    const minBy = Math.min(y1, y2, midY);
+    const maxBy = Math.max(y1, y2, midY);
+
+    containerX = minBx;
+    containerY = minBy;
+    containerW = Math.max(2, maxBx - minBx);
+    containerH = Math.max(2, maxBy - minBy);
+  } else {
+    pathData = "";
+  }
+  const svgViewBox = isLineOrArrow
+    ? `${containerX} ${containerY} ${containerW} ${containerH}`
+    : `0 0 ${width} ${height}`;
 
   const handleMouseDown = (e: React.MouseEvent<HTMLElement | SVGElement>) => {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
-    if (target.closest(".shape-resize-handle, .line-control-dot")) return;
+    if (target.closest(".shape-resize-handle, .line-control-dot, .line-corner-handle")) return;
 
     e.stopPropagation();
     onActivate();
@@ -191,10 +319,23 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
     const u2x = w2.x * cos + w2.y * sin;
     const u2y = -w2.x * sin + w2.y * cos;
 
-    const minUx = Math.min(u1x, umidx, u2x);
-    const maxUx = Math.max(u1x, umidx, u2x);
-    const minUy = Math.min(u1y, umidy, u2y);
-    const maxUy = Math.max(u1y, umidy, u2y);
+    let minUx: number;
+    let maxUx: number;
+    let minUy: number;
+    let maxUy: number;
+
+    if (shapeType === "arrow") {
+      const { bounds } = getArrowCurvePointsAndPath(u1x, u1y, umidx, umidy, u2x, u2y);
+      minUx = bounds.minX;
+      maxUx = bounds.maxX;
+      minUy = bounds.minY;
+      maxUy = bounds.maxY;
+    } else {
+      minUx = Math.min(u1x, umidx, u2x);
+      maxUx = Math.max(u1x, umidx, u2x);
+      minUy = Math.min(u1y, umidy, u2y);
+      maxUy = Math.max(u1y, umidy, u2y);
+    }
 
     const newW = Math.max(2, maxUx - minUx);
     const newH = Math.max(2, maxUy - minUy);
@@ -395,8 +536,11 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
     window.addEventListener("mouseup", onMouseUp);
   };
 
-  // Full line/arrow scaling via bottom-right corner handle of outer box
-  const handleLineScaleStart = (e: React.MouseEvent) => {
+  // Full line/arrow scaling via 4 corner handles of outer box
+  const handleLineScaleStart = (
+    e: React.MouseEvent,
+    corner: "nw" | "ne" | "sw" | "se"
+  ) => {
     e.stopPropagation();
     e.preventDefault();
     onActivate();
@@ -411,8 +555,10 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
     const startMidY = midY;
     const startX2 = x2;
     const startY2 = y2;
-    const startW = Math.max(10, containerW);
-    const startH = Math.max(10, containerH);
+    const startW = containerW;
+    const startH = containerH;
+    const baseW = Math.max(10, startW);
+    const baseH = Math.max(10, startH);
 
     const rot = win.rotation ?? 0;
     const rad = -(rot * Math.PI) / 180;
@@ -424,6 +570,43 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
     const pSin = Math.sin(posRad);
 
     const camZoom = getCamera().zoom || 1;
+
+    let anchorX: number;
+    let anchorY: number;
+    let startAnchorRelX: number;
+    let startAnchorRelY: number;
+
+    if (corner === "se") {
+      anchorX = containerX;
+      anchorY = containerY;
+      startAnchorRelX = -startW / 2;
+      startAnchorRelY = -startH / 2;
+      document.body.style.cursor = "se-resize";
+    } else if (corner === "sw") {
+      anchorX = containerX + startW;
+      anchorY = containerY;
+      startAnchorRelX = startW / 2;
+      startAnchorRelY = -startH / 2;
+      document.body.style.cursor = "sw-resize";
+    } else if (corner === "ne") {
+      anchorX = containerX;
+      anchorY = containerY + startH;
+      startAnchorRelX = -startW / 2;
+      startAnchorRelY = startH / 2;
+      document.body.style.cursor = "ne-resize";
+    } else {
+      // "nw"
+      anchorX = containerX + startW;
+      anchorY = containerY + startH;
+      startAnchorRelX = startW / 2;
+      startAnchorRelY = startH / 2;
+      document.body.style.cursor = "nw-resize";
+    }
+
+    const startCenterWx = startWinX + startW / 2;
+    const startCenterWy = startWinY + startH / 2;
+    const anchorWx = startCenterWx + startAnchorRelX * pCos - startAnchorRelY * pSin;
+    const anchorWy = startCenterWy + startAnchorRelX * pSin + startAnchorRelY * pCos;
 
     let rafId = 0;
     let latestClientX = startClientX;
@@ -441,31 +624,68 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
         const localDdx = ddx * cos - ddy * sin;
         const localDdy = ddx * sin + ddy * cos;
 
-        const scaleX = Math.max(0.1, (startW + localDdx) / startW);
-        const scaleY = Math.max(0.1, (startH + localDdy) / startH);
+        let deltaW: number;
+        let deltaH: number;
 
-        const newX1 = Math.round(containerX + (startX1 - containerX) * scaleX);
-        const newY1 = Math.round(containerY + (startY1 - containerY) * scaleY);
-        const newMidX = Math.round(containerX + (startMidX - containerX) * scaleX);
-        const newMidY = Math.round(containerY + (startMidY - containerY) * scaleY);
-        const newX2 = Math.round(containerX + (startX2 - containerX) * scaleX);
-        const newY2 = Math.round(containerY + (startY2 - containerY) * scaleY);
+        if (corner === "se") {
+          deltaW = localDdx;
+          deltaH = localDdy;
+        } else if (corner === "sw") {
+          deltaW = -localDdx;
+          deltaH = localDdy;
+        } else if (corner === "ne") {
+          deltaW = localDdx;
+          deltaH = -localDdy;
+        } else {
+          // "nw"
+          deltaW = -localDdx;
+          deltaH = -localDdy;
+        }
 
-        const minX = Math.min(newX1, newMidX, newX2);
-        const minY = Math.min(newY1, newMidY, newY2);
-        const maxX = Math.max(newX1, newMidX, newX2);
-        const maxY = Math.max(newY1, newMidY, newY2);
+        const scaleX = Math.max(0.1, (baseW + deltaW) / baseW);
+        const scaleY = Math.max(0.1, (baseH + deltaH) / baseH);
 
-        const shiftX = minX - containerX;
-        const shiftY = minY - containerY;
-        const worldShiftX = shiftX * pCos - shiftY * pSin;
-        const worldShiftY = shiftX * pSin + shiftY * pCos;
+        const newX1 = Math.round(anchorX + (startX1 - anchorX) * scaleX);
+        const newY1 = Math.round(anchorY + (startY1 - anchorY) * scaleY);
+        const newMidX = Math.round(anchorX + (startMidX - anchorX) * scaleX);
+        const newMidY = Math.round(anchorY + (startMidY - anchorY) * scaleY);
+        const newX2 = Math.round(anchorX + (startX2 - anchorX) * scaleX);
+        const newY2 = Math.round(anchorY + (startY2 - anchorY) * scaleY);
+
+        let minX: number;
+        let minY: number;
+        let maxX: number;
+        let maxY: number;
+
+        if (shapeType === "arrow") {
+          const { bounds } = getArrowCurvePointsAndPath(newX1, newY1, newMidX, newMidY, newX2, newY2);
+          minX = bounds.minX;
+          maxX = bounds.maxX;
+          minY = bounds.minY;
+          maxY = bounds.maxY;
+        } else {
+          minX = Math.min(newX1, newMidX, newX2);
+          minY = Math.min(newY1, newMidY, newY2);
+          maxX = Math.max(newX1, newMidX, newX2);
+          maxY = Math.max(newY1, newMidY, newY2);
+        }
+
+        const newW = Math.max(2, Math.round(maxX - minX));
+        const newH = Math.max(2, Math.round(maxY - minY));
+
+        const newAnchorLx = anchorX - minX;
+        const newAnchorLy = anchorY - minY;
+        const newAnchorRelX = newAnchorLx - newW / 2;
+        const newAnchorRelY = newAnchorLy - newH / 2;
+
+        const newCenterWx = anchorWx - (newAnchorRelX * pCos - newAnchorRelY * pSin);
+        const newCenterWy = anchorWy - (newAnchorRelX * pSin + newAnchorRelY * pCos);
 
         updateWindow(win.id, {
-          x: Math.round(startWinX + worldShiftX),
-          y: Math.round(startWinY + worldShiftY),
-          width: Math.max(2, Math.round(maxX - minX)),
-          height: Math.max(2, Math.round(maxY - minY)),
+          x: Math.round(newCenterWx - newW / 2),
+          y: Math.round(newCenterWy - newH / 2),
+          width: newW,
+          height: newH,
           shapePoints: [
             Math.round(newX1 - minX),
             Math.round(newY1 - minY),
@@ -485,6 +705,7 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
         cancelAnimationFrame(rafId);
         rafId = 0;
       }
+      document.body.style.cursor = "";
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     }
@@ -558,35 +779,14 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
     window.addEventListener("mouseup", onMouseUp);
   };
 
-  // For 2D shapes (rectangle, circle, diamond), container matches width x height.
-  // For lines and arrows, compute exact mathematical bounding box so the container is the exact same size as the line!
-  let containerX = 0;
-  let containerY = 0;
-  let containerW = width;
-  let containerH = height;
-  let svgViewBox = `0 0 ${width} ${height}`;
-
-  if (isLineOrArrow) {
-    const minBx = Math.min(x1, x2, midX);
-    const maxBx = Math.max(x1, x2, midX);
-    const minBy = Math.min(y1, y2, midY);
-    const maxBy = Math.max(y1, y2, midY);
-
-    containerX = minBx;
-    containerY = minBy;
-    containerW = Math.max(2, maxBx - minBx);
-    containerH = Math.max(2, maxBy - minBy);
-    svgViewBox = `${containerX} ${containerY} ${containerW} ${containerH}`;
-  }
-
   const rotation = win.rotation ?? 0;
 
   return (
     <div
       ref={containerRef}
       className={`group relative select-none transition-shadow ${
-        isFocusedOrActive && !isLineOrArrow ? "ring-2 ring-slate-400/80 rounded-md" : ""
-      } ${isLineOrArrow ? "pointer-events-none" : ""}`}
+        isLineOrArrow ? "pointer-events-none" : ""
+      }`}
       style={{
         width: `${containerW}px`,
         height: `${containerH}px`,
@@ -605,17 +805,18 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
         <defs>
           <marker
             id={`arrowhead-${win.id}`}
-            markerWidth="12"
-            markerHeight="10"
-            refX="10"
-            refY="5"
+            markerUnits="userSpaceOnUse"
+            markerWidth={42}
+            markerHeight={36}
+            refX={38}
+            refY={18}
             orient="auto"
           >
             <path
-              d="M 1 1 L 10 5 L 1 9"
+              d="M 4 4 L 38 18 L 4 32"
               fill="none"
               stroke={strokeColor}
-              strokeWidth="2.2"
+              strokeWidth={Math.max(1.5, Math.min(2.2, strokeWidth * 0.8))}
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -623,38 +824,76 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
         </defs>
 
         {shapeType === "rectangle" && (
-          <rect
-            x={strokeWidth / 2}
-            y={strokeWidth / 2}
-            width={Math.max(0, width - strokeWidth)}
-            height={Math.max(0, height - strokeWidth)}
-            rx={8}
-            fill={fillColor}
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-          />
+          <>
+            {isFocusedOrActive && (
+              <rect
+                x={strokeWidth / 2 - 2.5}
+                y={strokeWidth / 2 - 2.5}
+                width={Math.max(0, width - strokeWidth + 5)}
+                height={Math.max(0, height - strokeWidth + 5)}
+                rx={8 + 2.5}
+                fill="none"
+                stroke="rgb(148 163 184 / 0.8)"
+                strokeWidth={1.8}
+              />
+            )}
+            <rect
+              x={strokeWidth / 2}
+              y={strokeWidth / 2}
+              width={Math.max(0, width - strokeWidth)}
+              height={Math.max(0, height - strokeWidth)}
+              rx={8}
+              fill={fillColor}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+            />
+          </>
         )}
 
         {shapeType === "circle" && (
-          <ellipse
-            cx={width / 2}
-            cy={height / 2}
-            rx={Math.max(0, (width - strokeWidth) / 2)}
-            ry={Math.max(0, (height - strokeWidth) / 2)}
-            fill={fillColor}
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-          />
+          <>
+            {isFocusedOrActive && (
+              <ellipse
+                cx={width / 2}
+                cy={height / 2}
+                rx={Math.max(0, (width - strokeWidth) / 2 + 2.5)}
+                ry={Math.max(0, (height - strokeWidth) / 2 + 2.5)}
+                fill="none"
+                stroke="rgb(148 163 184 / 0.8)"
+                strokeWidth={1.8}
+              />
+            )}
+            <ellipse
+              cx={width / 2}
+              cy={height / 2}
+              rx={Math.max(0, (width - strokeWidth) / 2)}
+              ry={Math.max(0, (height - strokeWidth) / 2)}
+              fill={fillColor}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+            />
+          </>
         )}
 
         {shapeType === "diamond" && (
-          <polygon
-            points={`${width / 2},${strokeWidth / 2} ${width - strokeWidth / 2},${height / 2} ${width / 2},${height - strokeWidth / 2} ${strokeWidth / 2},${height / 2}`}
-            fill={fillColor}
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-            strokeLinejoin="round"
-          />
+          <>
+            {isFocusedOrActive && (
+              <polygon
+                points={`${width / 2},${strokeWidth / 2 - 2.5} ${width - strokeWidth / 2 + 2.5},${height / 2} ${width / 2},${height - strokeWidth / 2 + 2.5} ${strokeWidth / 2 - 2.5},${height / 2}`}
+                fill="none"
+                stroke="rgb(148 163 184 / 0.8)"
+                strokeWidth={1.8}
+                strokeLinejoin="round"
+              />
+            )}
+            <polygon
+              points={`${width / 2},${strokeWidth / 2} ${width - strokeWidth / 2},${height / 2} ${width / 2},${height - strokeWidth / 2} ${strokeWidth / 2},${height / 2}`}
+              fill={fillColor}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+              strokeLinejoin="round"
+            />
+          </>
         )}
 
         {isLineOrArrow && (
@@ -720,12 +959,24 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
                 title="Drag to rotate line"
               />
               {/* 4 Corner handles */}
-              <div className="absolute -top-1 -left-1 w-2 h-2 rounded-[2px] border border-[#6366f1] bg-white" />
-              <div className="absolute -top-1 -right-1 w-2 h-2 rounded-[2px] border border-[#6366f1] bg-white" />
-              <div className="absolute -bottom-1 -left-1 w-2 h-2 rounded-[2px] border border-[#6366f1] bg-white" />
               <div
-                className="absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-[2px] border border-[#6366f1] bg-white pointer-events-auto cursor-se-resize shadow-sm hover:scale-125 transition-transform"
-                onMouseDown={handleLineScaleStart}
+                className="line-corner-handle absolute -top-1 -left-1 w-2.5 h-2.5 rounded-[2px] border border-[#6366f1] bg-white pointer-events-auto cursor-nw-resize shadow-sm hover:scale-125 transition-transform"
+                onMouseDown={(e) => handleLineScaleStart(e, "nw")}
+                title="Drag to resize line"
+              />
+              <div
+                className="line-corner-handle absolute -top-1 -right-1 w-2.5 h-2.5 rounded-[2px] border border-[#6366f1] bg-white pointer-events-auto cursor-ne-resize shadow-sm hover:scale-125 transition-transform"
+                onMouseDown={(e) => handleLineScaleStart(e, "ne")}
+                title="Drag to resize line"
+              />
+              <div
+                className="line-corner-handle absolute -bottom-1 -left-1 w-2.5 h-2.5 rounded-[2px] border border-[#6366f1] bg-white pointer-events-auto cursor-sw-resize shadow-sm hover:scale-125 transition-transform"
+                onMouseDown={(e) => handleLineScaleStart(e, "sw")}
+                title="Drag to resize line"
+              />
+              <div
+                className="line-corner-handle absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-[2px] border border-[#6366f1] bg-white pointer-events-auto cursor-se-resize shadow-sm hover:scale-125 transition-transform"
+                onMouseDown={(e) => handleLineScaleStart(e, "se")}
                 title="Drag to resize line"
               />
             </div>

@@ -77,7 +77,7 @@ const ImageViewer = memo(function ImageViewer({ win, onClose, onActivate, onPosi
 
   return (
     <div
-      className="relative w-full h-full group select-none flex items-center justify-center"
+      className="relative w-full h-full group select-none flex items-center justify-center rounded-2xl overflow-hidden"
       onMouseDown={(e) => {
         onActivate();
         startDrag(e, (pos) => onPositionChange(pos), onActivate);
@@ -101,7 +101,7 @@ const ImageViewer = memo(function ImageViewer({ win, onClose, onActivate, onPosi
         <img
           src={imgUrl}
           alt={win.title.replace(/^File:/i, "").replace(/_/g, " ")}
-          className="w-full h-full object-contain rounded-2xl shadow-[0_10px_35px_rgba(0,0,0,0.35)] block"
+          className="w-full h-full object-cover rounded-2xl shadow-[0_10px_35px_rgba(0,0,0,0.35)] block"
           draggable={false}
           loading="eager"
           decoding="async"

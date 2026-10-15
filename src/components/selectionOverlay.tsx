@@ -205,13 +205,21 @@ const SelectionOverlay = memo(function SelectionOverlay({ marquee }: SelectionOv
                   <defs>
                     <marker
                       id="arrowhead-preview"
-                      markerWidth="8"
-                      markerHeight="6"
-                      refX="6"
-                      refY="3"
+                      markerUnits="userSpaceOnUse"
+                      markerWidth={42}
+                      markerHeight={36}
+                      refX={38}
+                      refY={18}
                       orient="auto"
                     >
-                      <polygon points="0 0, 8 3, 0 6" fill="#64748b" />
+                      <path
+                        d="M 4 4 L 38 18 L 4 32"
+                        fill="none"
+                        stroke="#64748b"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
                     </marker>
                   </defs>
                   <line

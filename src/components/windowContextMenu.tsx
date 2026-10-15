@@ -85,7 +85,11 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
       stackLabel = targetWin?.stacked ? "Unstack image" : "Stack image";
     }
   } else if (isSticky) {
-    stackLabel = targetWin?.stacked ? "Unstack note" : "Stack note";
+    if (childNotes.length > 0) {
+      stackLabel = hasUnstackedNotes ? "Stack notes" : "Unstack notes";
+    } else {
+      stackLabel = targetWin?.stacked ? "Unstack note" : "Stack note";
+    }
   } else {
     stackLabel = childNotes.length > 0 && !hasUnstackedNotes ? "Unstack notes" : "Stack notes";
   }
@@ -162,7 +166,9 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
             } else if (item.id === "always-on-top") {
               useWindows.getState().toggleAlwaysOnTop(pos.windowId);
             } else if (item.id === "stack") {
-              if (isSticky || (isImage && childNotes.length === 0)) {
+              if (childNotes.length > 0) {
+                stackWindowWithAnimation(pos.windowId);
+              } else if (isSticky || isImage) {
                 stackSingleNoteWithAnimation(pos.windowId);
               } else {
                 stackWindowWithAnimation(pos.windowId);

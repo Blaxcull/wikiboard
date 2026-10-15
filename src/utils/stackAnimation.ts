@@ -18,21 +18,37 @@ export function isNoteUnstacking(id: string): boolean {
 export function markWindowStacking(id: string) {
   stackingWinIds.add(id);
   notifyAnimation();
+  setTimeout(() => {
+    if (stackingWinIds.has(id)) {
+      stackingWinIds.delete(id);
+      notifyAnimation();
+    }
+  }, 350);
 }
 
 export function unmarkWindowStacking(id: string) {
-  stackingWinIds.delete(id);
-  notifyAnimation();
+  if (stackingWinIds.has(id)) {
+    stackingWinIds.delete(id);
+    notifyAnimation();
+  }
 }
 
 export function markNoteUnstacking(id: string) {
   unstackingNoteIds.add(id);
   notifyAnimation();
+  setTimeout(() => {
+    if (unstackingNoteIds.has(id)) {
+      unstackingNoteIds.delete(id);
+      notifyAnimation();
+    }
+  }, 400);
 }
 
 export function unmarkNoteUnstacking(id: string) {
-  unstackingNoteIds.delete(id);
-  notifyAnimation();
+  if (unstackingNoteIds.has(id)) {
+    unstackingNoteIds.delete(id);
+    notifyAnimation();
+  }
 }
 
 export function subscribeAnimation(cb: () => void) {
@@ -104,15 +120,20 @@ export function stackWindowWithAnimation(windowId: string) {
         if (noteEl) {
           lastUnstackedRects.set(note.id, noteEl.getBoundingClientRect());
         }
+        markWindowStacking(note.id);
       }
     });
     state.toggleStackWindow(windowId);
   } else {
+    const visibleStub = childNotes.map((c) => document.getElementById(`stub-${c.id}`)).find(Boolean);
+    const fallbackRect = visibleStub ? visibleStub.getBoundingClientRect() : null;
+
     childNotes.forEach((note) => {
       if (note.stacked) {
         const stubEl = document.getElementById(`stub-${note.id}`);
-        if (stubEl) {
-          lastStackedStubRects.set(note.id, stubEl.getBoundingClientRect());
+        const rect = stubEl ? stubEl.getBoundingClientRect() : fallbackRect;
+        if (rect) {
+          lastStackedStubRects.set(note.id, rect);
         }
       }
     });
@@ -136,6 +157,7 @@ export function stackSingleNoteWithAnimation(noteId: string) {
     if (noteEl) {
       lastUnstackedRects.set(noteId, noteEl.getBoundingClientRect());
     }
+    markWindowStacking(noteId);
     state.toggleStackSingleNote(noteId);
   }
 }

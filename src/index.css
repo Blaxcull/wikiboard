@@ -218,10 +218,14 @@
 }
 
 .window-wrapper.wire-target-hover .pdf-window,
-.window.pdf-window.wire-target-hover,
+.window.pdf-window.wire-target-hover {
+  border-radius: 12px !important;
+  box-shadow: 0 0 0 2px #888888, 0 6px 20px rgba(0, 0, 0, 0.16) !important;
+}
+
 .window-wrapper.wire-target-hover .image-window,
 .window.image-window.wire-target-hover {
-  border-radius: 12px !important;
+  border-radius: 1rem !important;
   box-shadow: 0 0 0 2px #888888, 0 6px 20px rgba(0, 0, 0, 0.16) !important;
 }
 
@@ -281,7 +285,7 @@
   background: transparent !important;
   border: none !important;
   outline: none !important;
-  border-radius: 0 !important;
+  border-radius: 1rem !important;
   box-shadow: none !important;
   content-visibility: visible !important;
   min-width: 100px !important;

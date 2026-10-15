@@ -11,7 +11,7 @@ import StickyNote from './components/stickyNote'
 import CanvasTextItem from './components/canvasTextItem'
 import CanvasShapeItem from './components/canvasShapeItem'
 import WindowContextMenu, { type ContextMenuPosition } from './components/windowContextMenu'
-import { useWindows, getConnectedChildNotes, findRootWindow, type WindowData, nextCascadeOffset } from './store/windows'
+import { useWindows, getConnectedChildNotes, type WindowData, nextCascadeOffset } from './store/windows'
 import { deleteScroll } from './utils/scrollMemory'
 import { evictClosedWindowArticles } from './utils/articleCache'
 import { getCamera, subscribeCamera, screenToWorld } from './utils/camera'
@@ -27,6 +27,7 @@ import {
   isWindowStacking,
   markNoteUnstacking,
   unmarkNoteUnstacking,
+  unmarkWindowStacking,
   subscribeAnimation,
   getStubTargetOffset,
   getStubDimensions,
@@ -367,6 +368,7 @@ const StackedNoteStubItem = memo(function StackedNoteStubItem({
   imgUrl,
   side,
   onUnstack,
+  notesToUnstack,
 }: {
   note: WindowData;
   stubW: number;
@@ -377,6 +379,7 @@ const StackedNoteStubItem = memo(function StackedNoteStubItem({
   imgUrl?: string;
   side: "RIGHT" | "LEFT" | "TOP" | "BOTTOM";
   onUnstack: () => void;
+  notesToUnstack?: WindowData[];
 }) {
   const elRef = useRef<HTMLDivElement | null>(null);
 
@@ -392,7 +395,7 @@ const StackedNoteStubItem = memo(function StackedNoteStubItem({
       const scaleX = prevRect.width / Math.max(stubRect.width, 1);
       const scaleY = prevRect.height / Math.max(stubRect.height, 1);
 
-      el.animate(
+      const anim = el.animate(
         [
           { transform: `translate3d(${fromX}px, ${fromY}px, 0) scale(${scaleX}, ${scaleY})`, transformOrigin: "top left", opacity: 1 },
           { transform: "translate3d(0, 0, 0) scale(1, 1)", transformOrigin: "top left", opacity: 1 },
@@ -403,6 +406,10 @@ const StackedNoteStubItem = memo(function StackedNoteStubItem({
           fill: "forwards",
         }
       );
+
+      anim.onfinish = () => {
+        unmarkWindowStacking(note.id);
+      };
     }
   }, [note.id]);
 
@@ -410,7 +417,11 @@ const StackedNoteStubItem = memo(function StackedNoteStubItem({
     e.stopPropagation();
     const el = elRef.current;
     if (el) {
-      lastStackedStubRects.set(note.id, el.getBoundingClientRect());
+      const rect = el.getBoundingClientRect();
+      const targetNotes = notesToUnstack && notesToUnstack.length > 0 ? notesToUnstack : [note];
+      targetNotes.forEach((n) => {
+        lastStackedStubRects.set(n.id, rect);
+      });
     }
     onUnstack();
   };
@@ -424,6 +435,11 @@ const StackedNoteStubItem = memo(function StackedNoteStubItem({
       ? "hover:-translate-y-[4px]"
       : "hover:translate-y-[4px]";
 
+  const stubTitle =
+    notesToUnstack && notesToUnstack.length > 1
+      ? `Click to open ${notesToUnstack.length} notes`
+      : `Click to unstack ${isImage ? "image" : "note"}`;
+
   return (
     <div
       ref={elRef}
@@ -436,7 +452,7 @@ const StackedNoteStubItem = memo(function StackedNoteStubItem({
         ...posStyle,
       }}
       onClick={handleClick}
-      title={`Click to unstack ${isImage ? "image" : "note"}`}
+      title={stubTitle}
     >
       {isImage && imgUrl && (
         <img
@@ -507,8 +523,12 @@ const StackedNoteStubs = memo(function StackedNoteStubs({
       {(["RIGHT", "LEFT", "TOP", "BOTTOM"] as const).map((side) => {
         const notes = bySide[side];
         if (!notes || notes.length === 0) return null;
-        const limit = Math.min(3, (side === "TOP" || side === "BOTTOM") ? maxHoriz : maxVert);
+        const isStickyParent = parentWin.contentType === "sticky";
+        const limit = isStickyParent
+          ? 1
+          : Math.min(3, (side === "TOP" || side === "BOTTOM") ? maxHoriz : maxVert);
         const visibleNotes = notes.slice(0, limit);
+        const targetNotesToUnstack = isStickyParent ? childNotes : undefined;
 
         return (
           <div key={side}>
@@ -529,7 +549,14 @@ const StackedNoteStubs = memo(function StackedNoteStubs({
                   isImage={isImage}
                   imgUrl={note.directImageUrl}
                   side={side}
-                  onUnstack={() => useWindows.getState().unstackNote(note.id)}
+                  notesToUnstack={targetNotesToUnstack}
+                  onUnstack={() => {
+                    if (isStickyParent) {
+                      useWindows.getState().unstackNotes(childNotes.map((c) => c.id));
+                    } else {
+                      useWindows.getState().unstackNote(note.id);
+                    }
+                  }}
                 />
               );
             })}
@@ -620,9 +647,8 @@ const ConnectionArrows = memo(function ConnectionArrows({
       const win = byId.get(id);
       if (win) {
         if (win.stacked) {
-          const rootWin = findRootWindow(win.id, windows);
-          if (rootWin && rootWin.id !== win.id && !rootWin.stacked) {
-            return posMap.get(rootWin.id);
+          if (isWindowStacking(win.id)) {
+            return posMap.get(win.id);
           }
           return null;
         }
@@ -683,7 +709,11 @@ const ConnectionArrows = memo(function ConnectionArrows({
       const isParentHidden = pEl && pEl.style.display === "none";
       const isChildHidden = cEl && cEl.style.display === "none";
 
+      const isEndpointStacked = !!(pWin?.stacked || cWin?.stacked);
+      const isStacking = isWindowStacking(parentId) || isWindowStacking(childId);
+
       if (
+        (isEndpointStacked && !isStacking) ||
         pWin?.pdfMaximized ||
         cWin?.pdfMaximized ||
         pWin?.pdfAnimating ||
@@ -802,13 +832,12 @@ const ConnectionArrows = memo(function ConnectionArrows({
       const childZ = ("zIndex" in childPos ? childPos.zIndex : 0) ?? 0;
       svg.style.zIndex = String(Math.max(1, childZ - 1));
 
-      const isAnimating =
-        isNoteUnstacking(childId) ||
-        isNoteUnstacking(parentId) ||
-        isWindowStacking(parentId) ||
-        isWindowStacking(childId);
+      const isUnstacking = isNoteUnstacking(childId) || isNoteUnstacking(parentId);
 
-      if (isAnimating) {
+      if (isStacking) {
+        svg.style.transition = "opacity 240ms ease-out";
+        svg.style.opacity = "0";
+      } else if (isUnstacking) {
         svg.style.opacity = "0";
         svg.style.transition = "none";
       } else {
@@ -1464,7 +1493,8 @@ const WindowItem = memo(function WindowItem({
     const wasStacked = prevStackedRef.current;
     prevStackedRef.current = !!w.stacked;
 
-    if (wasStacked && !w.stacked && w.contentType === "sticky") {
+    const isImage = !!(w.directImageUrl || w.title?.startsWith("File:"));
+    if (wasStacked && !w.stacked && (w.contentType === "sticky" || isImage)) {
       const el = document.getElementById(`win-${w.id}`);
       const prevStubRect = lastStackedStubRects.get(w.id);
 
@@ -1539,8 +1569,19 @@ const WindowItem = memo(function WindowItem({
 
           const side = determineNoteSide(w, parentEntity);
           const sideNotes = allChildNotes.filter((win) => determineNoteSide(win, parentEntity) === side);
-          const index = Math.max(0, sideNotes.findIndex((win) => win.id === w.id));
-          const total = sideNotes.length || 1;
+          const isStickyParent = parentEntity.contentType === "sticky";
+          const parentW = parentEntity.width ?? 750;
+          const parentH = parentEntity.height ?? 550;
+          const maxHoriz = parentW < 180 ? 0 : Math.max(0, Math.floor((parentW - 40) / 65));
+          const maxVert = parentH < 150 ? 0 : Math.max(0, Math.floor((parentH - 40) / 55));
+          const limit = isStickyParent
+            ? 1
+            : Math.min(3, (side === "TOP" || side === "BOTTOM") ? maxHoriz : maxVert);
+
+          const visibleCount = Math.min(limit, sideNotes.length) || 1;
+          const rawIdx = sideNotes.findIndex((win) => win.id === w.id);
+          const index = Math.max(0, Math.min(rawIdx >= 0 ? rawIdx : 0, visibleCount - 1));
+          const total = visibleCount;
           const { stubW, stubH } = getStubDimensions(w);
 
           const offset = getStubTargetOffset(side, index, total, stubW, stubH, parentRect, noteRect);
@@ -1575,6 +1616,10 @@ const WindowItem = memo(function WindowItem({
       }
     }
   }, [w.stacked, w.id, w.contentType, w.parentId, w.parentIds]);
+
+  if (w.stacked) {
+    return null;
+  }
 
   if (isHiddenOverflowDeckMember) {
     return null;

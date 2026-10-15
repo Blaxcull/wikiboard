@@ -117,6 +117,7 @@ type WindowsStore = {
   toggleStackWindow: (id: string) => void;
   toggleStackSingleNote: (id: string) => void;
   unstackNote: (id: string) => void;
+  unstackNotes: (ids: string[]) => void;
   selectedIds: string[];
   setSelectedIds: (ids: string[]) => void;
   clearSelection: () => void;
@@ -767,12 +768,7 @@ export const useWindows = create<WindowsStore>((set) => ({
 
   breakGroupExternalConnections: (groupId: string) =>
     set((state) => {
-      const group = state.groups.find((g) => g.id === groupId);
-      const memberIds = group ? group.memberIds : [];
-      const memberSet = new Set(memberIds);
-
       const newWindows = state.windows.map((w) => {
-        const isMember = memberSet.has(w.id);
         const existingParents =
           w.parentIds && w.parentIds.length > 0
             ? w.parentIds
@@ -780,22 +776,20 @@ export const useWindows = create<WindowsStore>((set) => ({
             ? [w.parentId]
             : [];
 
-        // For members: keep parents that are ALSO in memberSet (internal window-to-window).
-        // For non-members: drop parents that ARE in memberSet or equal to groupId.
-        const newParentIds = existingParents.filter((pid) => {
-          if (pid === groupId) return false;
-          if (isMember) return memberSet.has(pid);
-          return !memberSet.has(pid);
-        });
+        if (!existingParents.includes(groupId)) return w;
 
-        const newParentId = w.parentId
-          ? (newParentIds.includes(w.parentId) ? w.parentId : newParentIds[0])
-          : newParentIds[0];
+        const newParentIds = existingParents.filter((pid) => pid !== groupId);
+        const newParentId = w.parentId === groupId ? (newParentIds[0] ?? undefined) : w.parentId;
+        const newConnectionStyles = w.connectionStyles ? { ...w.connectionStyles } : undefined;
+        if (newConnectionStyles && groupId in newConnectionStyles) {
+          delete newConnectionStyles[groupId];
+        }
 
         return {
           ...w,
           parentId: newParentId,
           parentIds: newParentIds.length > 0 ? newParentIds : undefined,
+          connectionStyles: newConnectionStyles,
         };
       });
 
@@ -815,13 +809,10 @@ export const useWindows = create<WindowsStore>((set) => ({
             ? [g.parentId]
             : [];
 
-        const newParentIds = existingParents.filter(
-          (pid) => pid !== groupId && !memberSet.has(pid)
-        );
+        if (!existingParents.includes(groupId)) return g;
 
-        const newParentId = g.parentId
-          ? (newParentIds.includes(g.parentId) ? g.parentId : newParentIds[0])
-          : newParentIds[0];
+        const newParentIds = existingParents.filter((pid) => pid !== groupId);
+        const newParentId = g.parentId === groupId ? (newParentIds[0] ?? undefined) : g.parentId;
 
         return {
           ...g,
@@ -1081,6 +1072,56 @@ export const useWindows = create<WindowsStore>((set) => ({
         windows: state.windows.map((w) =>
           w.id === id ? { ...w, stacked: false, stackedParentId: undefined, x: finalX, y: finalY } : w
         ),
+      };
+    }),
+
+  unstackNotes: (ids: string[]) =>
+    set((state) => {
+      const idSet = new Set(ids);
+      let unstackCount = 0;
+      return {
+        windows: state.windows.map((w) => {
+          if (!idSet.has(w.id) || !w.stacked) return w;
+
+          const parentId = w.stackedParentId ?? w.parentId ?? w.parentIds?.[0];
+          const parentGeo = getParentEntityGeometry(parentId, state.windows, state.groups);
+
+          const px = parentGeo?.px ?? w.x ?? 80;
+          const py = parentGeo?.py ?? w.y ?? 80;
+          const pw = parentGeo?.pw ?? DEFAULT_WIDTH;
+          const ph = parentGeo?.ph ?? DEFAULT_HEIGHT;
+
+          const side = w.side ?? "RIGHT";
+          const idx = unstackCount++;
+          const GAP = 160;
+          const childW = w.width ?? 260;
+          const childH = w.height ?? (w.isExcerptNote ? 64 : 200);
+
+          let nx = px + pw + GAP;
+          let ny = py + idx * 40;
+
+          if (side === "LEFT") {
+            nx = px - childW - GAP;
+            ny = py + idx * 40;
+          } else if (side === "TOP") {
+            nx = px + idx * 40;
+            ny = py - childH - GAP;
+          } else if (side === "BOTTOM") {
+            nx = px + idx * 40;
+            ny = py + ph + GAP;
+          }
+
+          const finalX = w.relX != null ? px + w.relX : nx;
+          const finalY = w.relY != null ? py + w.relY : ny;
+
+          return {
+            ...w,
+            stacked: false,
+            stackedParentId: undefined,
+            x: finalX,
+            y: finalY,
+          };
+        }),
       };
     }),
 

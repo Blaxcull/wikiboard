@@ -4,7 +4,7 @@ import { useWindows, getDescendantNotes, type WindowData, type WindowGroup } fro
 import { getWindowWorldBounds } from "./selectionOverlay";
 import { deleteScroll } from "../utils/scrollMemory";
 import { evictClosedWindowArticles } from "../utils/articleCache";
-import { lastUnstackedRects, lastStackedStubRects } from "../utils/stackAnimation";
+import { lastUnstackedRects, lastStackedStubRects, markWindowStacking, unmarkWindowStacking } from "../utils/stackAnimation";
 import { getCamera } from "../utils/camera";
 import { isDraggingWindow, setDraggingWindow } from "../utils/window/drag";
 import { isResizingWindow } from "../utils/window/resize";
@@ -92,7 +92,7 @@ const GroupStackedStubItem = memo(function GroupStackedStubItem({
       const scaleX = prevRect.width / Math.max(stubRect.width, 1);
       const scaleY = prevRect.height / Math.max(stubRect.height, 1);
 
-      el.animate(
+      const anim = el.animate(
         [
           { transform: `translate3d(${fromX}px, ${fromY}px, 0) scale(${scaleX}, ${scaleY})`, transformOrigin: "top left", opacity: 1 },
           { transform: "translate3d(0, 0, 0) scale(1, 1)", transformOrigin: "top left", opacity: 1 },
@@ -103,6 +103,10 @@ const GroupStackedStubItem = memo(function GroupStackedStubItem({
           fill: "forwards",
         }
       );
+
+      anim.onfinish = () => {
+        unmarkWindowStacking(note.id);
+      };
     }
   }, [note.id]);
 
@@ -128,7 +132,7 @@ const GroupStackedStubItem = memo(function GroupStackedStubItem({
     <div
       ref={elRef}
       id={`stub-${note.id}`}
-      className={`absolute pointer-events-auto cursor-pointer transition-transform duration-150 ${hoverClass} rounded-[10px] border border-black/20 shadow-md overflow-hidden`}
+      className={`absolute pointer-events-auto cursor-pointer transition-transform duration-150 ${hoverClass} rounded-[6px] border border-black/20 shadow-md overflow-hidden`}
       style={{
         width: `${stubW}px`,
         height: `${stubH}px`,
@@ -144,11 +148,6 @@ const GroupStackedStubItem = memo(function GroupStackedStubItem({
           alt={note.title}
           className="w-full h-full object-cover opacity-90"
         />
-      )}
-      {!isImage && (
-        <div className="p-3 text-[12px] font-sans text-neutral-800 line-clamp-5">
-          {note.stickyText || note.title || "Note"}
-        </div>
       )}
     </div>
   );
@@ -919,6 +918,7 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
             if (noteEl) {
               lastUnstackedRects.set(note.id, noteEl.getBoundingClientRect());
             }
+            markWindowStacking(note.id);
             state.toggleStackSingleNote(note.id);
           }
         });
@@ -1023,6 +1023,11 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
     (w) => w.contentType === "sticky" && w.stacked && (w.parentId === group.id || w.parentIds?.includes(group.id))
   );
 
+  const hasTopStacked = stackedGroupNotes.some((n) => (n.side ?? "RIGHT") === "TOP");
+  const hasRightStacked = stackedGroupNotes.some((n) => (n.side ?? "RIGHT") === "RIGHT");
+  const hasBottomStacked = stackedGroupNotes.some((n) => (n.side ?? "RIGHT") === "BOTTOM");
+  const hasLeftStacked = stackedGroupNotes.some((n) => (n.side ?? "RIGHT") === "LEFT");
+
   const borderColor = group.color || "#333333";
   const allSelectedAlwaysOnTop = memberWins.every((w) => w.alwaysOnTop);
 
@@ -1090,21 +1095,21 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
                         left: `calc(100% - ${stubW - 22}px)`,
                         top: `calc(50% + ${spreadY - stubH / 2}px)`,
                         zIndex,
-                        clipPath: "inset(0 0 0 calc(100% - 70px))",
+                        clipPath: "inset(0 0 0 calc(100% - 22px))",
                       };
                     } else if (side === "LEFT") {
                       posStyle = {
                         left: `calc(-22px)`,
                         top: `calc(50% + ${spreadY - stubH / 2}px)`,
                         zIndex,
-                        clipPath: "inset(0 calc(100% - 70px) 0 0)",
+                        clipPath: "inset(0 calc(100% - 22px) 0 0)",
                       };
                     } else if (side === "TOP") {
                       posStyle = {
                         top: `calc(-${peek}px)`,
                         left: `calc(50% + ${spreadX - stubW / 2}px)`,
                         zIndex,
-                        clipPath: `inset(0 0 calc(100% - ${peek + 50}px) 0)`,
+                        clipPath: `inset(0 0 calc(100% - ${peek}px) 0)`,
                       };
                     } else {
                       // BOTTOM
@@ -1113,7 +1118,7 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
                         top: `calc(100% - ${stubH - botPeek}px)`,
                         left: `calc(50% + ${spreadX - stubW / 2}px)`,
                         zIndex,
-                        clipPath: `inset(calc(100% - ${botPeek + 50}px) 0 0 0)`,
+                        clipPath: `inset(calc(100% - ${botPeek}px) 0 0 0)`,
                       };
                     }
 
@@ -1142,90 +1147,98 @@ function SingleGroupItem({ group }: { group: WindowGroup }) {
         )}
 
         {/* Connection Points (4 dots at the edges) */}
-        <button
-          type="button"
-          className="connection-point point-top"
-          title="Add sticky note"
-          onMouseDown={(e) => {
-            startWireDrag(
-              e,
-              group.id,
-              "TOP",
-              (side) => {
-                useWindows.getState().addWindow({
-                  contentType: "sticky",
-                  parentId: group.id,
-                  side,
-                });
-              },
-              `group-box-${group.id}`,
-              group.memberIds
-            );
-          }}
-        />
-        <button
-          type="button"
-          className="connection-point point-right"
-          title="Add sticky note"
-          onMouseDown={(e) => {
-            startWireDrag(
-              e,
-              group.id,
-              "RIGHT",
-              (side) => {
-                useWindows.getState().addWindow({
-                  contentType: "sticky",
-                  parentId: group.id,
-                  side,
-                });
-              },
-              `group-box-${group.id}`,
-              group.memberIds
-            );
-          }}
-        />
-        <button
-          type="button"
-          className="connection-point point-bottom"
-          title="Add sticky note"
-          onMouseDown={(e) => {
-            startWireDrag(
-              e,
-              group.id,
-              "BOTTOM",
-              (side) => {
-                useWindows.getState().addWindow({
-                  contentType: "sticky",
-                  parentId: group.id,
-                  side,
-                });
-              },
-              `group-box-${group.id}`,
-              group.memberIds
-            );
-          }}
-        />
-        <button
-          type="button"
-          className="connection-point point-left"
-          title="Add sticky note"
-          onMouseDown={(e) => {
-            startWireDrag(
-              e,
-              group.id,
-              "LEFT",
-              (side) => {
-                useWindows.getState().addWindow({
-                  contentType: "sticky",
-                  parentId: group.id,
-                  side,
-                });
-              },
-              `group-box-${group.id}`,
-              group.memberIds
-            );
-          }}
-        />
+        {!hasTopStacked && (
+          <button
+            type="button"
+            className="connection-point point-top"
+            title="Add sticky note"
+            onMouseDown={(e) => {
+              startWireDrag(
+                e,
+                group.id,
+                "TOP",
+                (side) => {
+                  useWindows.getState().addWindow({
+                    contentType: "sticky",
+                    parentId: group.id,
+                    side,
+                  });
+                },
+                `group-box-${group.id}`,
+                group.memberIds
+              );
+            }}
+          />
+        )}
+        {!hasRightStacked && (
+          <button
+            type="button"
+            className="connection-point point-right"
+            title="Add sticky note"
+            onMouseDown={(e) => {
+              startWireDrag(
+                e,
+                group.id,
+                "RIGHT",
+                (side) => {
+                  useWindows.getState().addWindow({
+                    contentType: "sticky",
+                    parentId: group.id,
+                    side,
+                  });
+                },
+                `group-box-${group.id}`,
+                group.memberIds
+              );
+            }}
+          />
+        )}
+        {!hasBottomStacked && (
+          <button
+            type="button"
+            className="connection-point point-bottom"
+            title="Add sticky note"
+            onMouseDown={(e) => {
+              startWireDrag(
+                e,
+                group.id,
+                "BOTTOM",
+                (side) => {
+                  useWindows.getState().addWindow({
+                    contentType: "sticky",
+                    parentId: group.id,
+                    side,
+                  });
+                },
+                `group-box-${group.id}`,
+                group.memberIds
+              );
+            }}
+          />
+        )}
+        {!hasLeftStacked && (
+          <button
+            type="button"
+            className="connection-point point-left"
+            title="Add sticky note"
+            onMouseDown={(e) => {
+              startWireDrag(
+                e,
+                group.id,
+                "LEFT",
+                (side) => {
+                  useWindows.getState().addWindow({
+                    contentType: "sticky",
+                    parentId: group.id,
+                    side,
+                  });
+                },
+                `group-box-${group.id}`,
+                group.memberIds
+              );
+            }}
+          />
+        )}
 
       </div>
 

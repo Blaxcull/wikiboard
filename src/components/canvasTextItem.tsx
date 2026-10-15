@@ -312,64 +312,35 @@ export default function CanvasTextItem({
     const ctx = canvas.getContext("2d");
     if (ctx) {
       ctx.font = `600 ${fontSizeToUse}px 'Caveat', 'Kalam', 'Patrick Hand', 'Comic Sans MS', cursive, sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
     }
 
     let maxVisualW = 0;
-    let totalVisualH = 0;
-    let netShiftX = 0;
-    let netShiftY = 0;
-
-    if (lines.length === 1 && lines[0] && ctx) {
-      const m = ctx.measureText(lines[0]);
-      const left = m.actualBoundingBoxLeft ?? (m.width / 2);
-      const right = m.actualBoundingBoxRight ?? (m.width / 2);
-      const ascent = m.actualBoundingBoxAscent ?? (fontSizeToUse * 0.5);
-      const descent = m.actualBoundingBoxDescent ?? (fontSizeToUse * 0.5);
-
-      maxVisualW = Math.max(16, left + right);
-      totalVisualH = Math.max(16, ascent + descent);
-
-      // Exact pixel shift so the visual ink center aligns with the box center
-      netShiftX = Math.round((left - right) / 2);
-      netShiftY = Math.round((ascent - descent) / 2);
-    } else {
-      let maxLineW = 0;
-      let maxAscent = fontSizeToUse * 0.5;
-      let maxDescent = fontSizeToUse * 0.5;
-
-      for (const line of lines) {
-        if (!line) continue;
-        if (ctx) {
-          const m = ctx.measureText(line);
-          const left = m.actualBoundingBoxLeft ?? (m.width / 2);
-          const right = m.actualBoundingBoxRight ?? (m.width / 2);
-          const w = left + right;
-          if (w > maxLineW) maxLineW = w;
-          if (m.actualBoundingBoxAscent != null && m.actualBoundingBoxAscent > maxAscent) {
-            maxAscent = m.actualBoundingBoxAscent;
-          }
-          if (m.actualBoundingBoxDescent != null && m.actualBoundingBoxDescent > maxDescent) {
-            maxDescent = m.actualBoundingBoxDescent;
-          }
-        }
+    for (const line of lines) {
+      if (!line) continue;
+      if (ctx) {
+        const m = ctx.measureText(line);
+        const left = m.actualBoundingBoxLeft ?? (m.width / 2);
+        const right = m.actualBoundingBoxRight ?? (m.width / 2);
+        const w = Math.max(m.width, left + right);
+        if (w > maxVisualW) maxVisualW = w;
       }
-      maxVisualW = Math.max(20, maxLineW || fontSizeToUse * 0.6);
-      const lineH = Math.max(fontSizeToUse * 0.85, maxAscent + maxDescent);
-      totalVisualH = lineH * Math.max(1, lines.length);
-      netShiftY = Math.round((maxAscent - maxDescent) / 2);
+    }
+    if (maxVisualW === 0) {
+      maxVisualW = fontSizeToUse * 0.6;
     }
 
+    const lineCount = Math.max(1, lines.length);
+    const lineH = Math.round(fontSizeToUse * 1.15);
+    const totalTextH = lineCount * lineH;
+
     // Symmetrical padding on both axes that scales proportionally with font size
-    // Constant across both transparent and color states so no shift occurs when toggling color
     const padX = Math.max(16, Math.round(fontSizeToUse * 0.14));
     const padY = Math.max(12, Math.round(fontSizeToUse * 0.10));
 
     const measuredW = Math.max(36, Math.ceil(maxVisualW + padX * 2));
-    const measuredH = Math.max(32, Math.ceil(totalVisualH + padY * 2));
+    const measuredH = Math.max(32, Math.ceil(totalTextH + padY * 2));
 
-    return { measuredW, measuredH, padX, padY, shiftX: netShiftX, shiftY: netShiftY };
+    return { measuredW, measuredH, padX, padY };
   }, [currentFontSize]);
 
   // Ensure width and height are measured and synced symmetrically
@@ -382,6 +353,20 @@ export default function CanvasTextItem({
           height: measuredH,
         });
       }
+    }
+  }, [win.id, win.isUserResized, win.width, win.height, win.stickyText, getMeasuredTextBounds, updateWindow]);
+
+  // When fonts finish downloading, re-sync bounds to exact glyph widths
+  useEffect(() => {
+    if (document.fonts?.ready) {
+      document.fonts.ready.then(() => {
+        if (!win.isUserResized) {
+          const { measuredW, measuredH } = getMeasuredTextBounds(win.stickyText || "");
+          if (win.width !== measuredW || win.height !== measuredH) {
+            updateWindow(win.id, { width: measuredW, height: measuredH });
+          }
+        }
+      });
     }
   }, [win.id, win.isUserResized, win.width, win.height, win.stickyText, getMeasuredTextBounds, updateWindow]);
 
@@ -547,7 +532,8 @@ export default function CanvasTextItem({
         const w = ctx.measureText(line || "").width;
         if (w > maxLineWidth) maxLineWidth = w;
       }
-      minAllowedWidth = Math.max(36, Math.ceil(maxLineWidth + 16));
+      const padX = Math.max(16, Math.round(currentFontSize * 0.14));
+      minAllowedWidth = Math.max(36, Math.ceil(maxLineWidth + padX * 2));
     }
 
     function onMouseMove(ev: MouseEvent) {
@@ -596,7 +582,6 @@ export default function CanvasTextItem({
   };
 
   const showSelectionBorder = !isEditing && isFocusedOrActive && !showColorPicker;
-  const { shiftX, shiftY } = getMeasuredTextBounds(win.stickyText || "");
 
   return (
     <div
@@ -814,12 +799,12 @@ export default function CanvasTextItem({
           textAlign: "center",
           whiteSpace: "pre",
           wordBreak: "normal",
-          overflow: "visible",
+          overflow: "hidden",
+          boxSizing: "border-box",
           WebkitFontSmoothing: "antialiased",
           MozOsxFontSmoothing: "grayscale",
           textRendering: "optimizeLegibility",
           display: isEditing ? "block" : "none",
-          transform: `translate(${shiftX}px, ${shiftY}px)`,
         }}
         onContextMenu={handleContextMenu}
         onKeyDown={(e) => {
@@ -852,7 +837,6 @@ export default function CanvasTextItem({
             WebkitFontSmoothing: "antialiased",
             MozOsxFontSmoothing: "grayscale",
             textRendering: "optimizeLegibility",
-            transform: `translate(${shiftX}px, ${shiftY}px)`,
           }}
           onContextMenu={handleContextMenu}
         >

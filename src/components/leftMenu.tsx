@@ -379,7 +379,7 @@ export default function LeftMenu() {
                 }`}
               >
                 <img
-                  src="/icons/curved-line.svg"
+                  src="/icons/curved-line.png"
                   alt=""
                   aria-hidden="true"
                   draggable={false}
@@ -413,18 +413,17 @@ export default function LeftMenu() {
                     : "text-gray-900 hover:bg-black/6 active:scale-95"
                 }`}
               >
-                <svg
-                  className="w-5 h-5"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                >
-                  <circle cx="5" cy="18" r="1.8" fill="currentColor" stroke="none" />
-                  <path d="M5 18 C 11 18, 9 6, 15 6" />
-                  <path d="M14 2.5 L19.5 6 L14 9.5 Z" fill="currentColor" stroke="none" />
-                </svg>
+                <img
+                  src="/icons/curved-arrow.png"
+                  alt=""
+                  aria-hidden="true"
+                  draggable={false}
+                  className={`w-5 h-5 object-contain transition-opacity duration-150 select-none pointer-events-none ${
+                    connectionStyle === "pointy"
+                      ? "opacity-100"
+                      : "opacity-90"
+                  }`}
+                />
               </button>
 
               {/* Right Flyout Tooltip */}

@@ -12,6 +12,8 @@ import { saveCanvasToFile } from './utils/canvasPersistence'
 import ArticleView from './components/articleView'
 import PdfViewer from './components/pdfViewer'
 import ImageViewer from './components/imageViewer'
+import YouTubeViewer from './components/youtubeViewer'
+import MediaInsertButton from './components/mediaInsertButton'
 import StickyNote from './components/stickyNote'
 import CanvasTextItem from './components/canvasTextItem'
 import CanvasShapeItem from './components/canvasShapeItem'
@@ -1563,7 +1565,7 @@ const WindowItem = memo(function WindowItem({
     const wasStacked = prevStackedRef.current;
     prevStackedRef.current = !!w.stacked;
 
-    const isImage = !!(w.directImageUrl || w.title?.startsWith("File:"));
+    const isImage = !!(w.contentType === "image" || w.directImageUrl || w.title?.startsWith("File:"));
     if (wasStacked && !w.stacked && (w.contentType === "sticky" || isImage)) {
       const el = document.getElementById(`win-${w.id}`);
       const prevStubRect = lastStackedStubRects.get(w.id);
@@ -1949,7 +1951,7 @@ const WindowItem = memo(function WindowItem({
     );
   }
 
-  if (w.directImageUrl || w.title.startsWith("File:")) {
+  if (w.contentType === "image" || w.directImageUrl || w.title?.startsWith("File:")) {
     const itemW = isCompressedGroupMember ? 220 : (w.width ?? 250);
     const itemH = isCompressedGroupMember ? 140 : (w.height ?? 190);
 
@@ -2014,6 +2016,44 @@ const WindowItem = memo(function WindowItem({
     );
   }
 
+  if (w.contentType === "youtube") {
+    const itemW = isCompressedGroupMember ? 220 : (w.width ?? 480);
+    const itemH = isCompressedGroupMember ? 140 : (w.height ?? 320);
+
+    return (
+      <Window
+        id={`win-${w.id}`}
+        className={`youtube-window ${w.active ? "active" : "inactive"} ${isCompressedGroupMember ? "is-compressed" : ""}`}
+        style={zIndexStyle}
+        stubs={isCompressedGroupMember ? null : <StackedNoteStubs parentWin={w} />}
+        titleBarContent={
+          <div className="flex items-center gap-2 overflow-hidden text-sm font-medium">
+            <svg className="w-4 h-4 text-red-600 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+            </svg>
+            <span className="truncate">{w.title || "YouTube Video"}</span>
+          </div>
+        }
+        x={w.x}
+        y={w.y}
+        width={itemW}
+        height={itemH}
+        onActivate={handleActivate}
+        onClose={isCompressedGroupMember ? undefined : handleClose}
+        onPositionChange={handlePositionChange}
+        onAddSticky={isCompressedGroupMember ? undefined : handleAddSticky}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onContextMenu?.(e, w.id);
+        }}
+      >
+        <YouTubeViewer win={w} onActivate={handleActivate} />
+        {!isCompressedGroupMember && <StackedNotesDrawer parentWin={w} />}
+      </Window>
+    );
+  }
+
   const itemW = isCompressedGroupMember ? 220 : w.width;
   const itemH = isCompressedGroupMember ? 140 : w.height;
 
@@ -2048,7 +2088,6 @@ function App() {
   const windows = useWindows((s) => s.windows)
   const spawnWindows = useWindows((s) => s.spawnWindows)
   const addWindow = useWindows((s) => s.addWindow)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [contextMenuPos, setContextMenuPos] = useState<ContextMenuPosition | null>(null);
 
@@ -2072,37 +2111,6 @@ function App() {
     }
     setContextMenuPos({ x: e.clientX, y: e.clientY, windowId });
   }, []);
-
-  const handleOpenPdf = useCallback(() => {
-    const name = window.prompt("PDF path (e.g. /myfile.pdf):", "/viewer.pdf")
-    if (!name) return
-    addWindow({
-      contentType: "pdf",
-      pdfUrl: name,
-      title: name.replace(/^\/|\.pdf$/gi, ""),
-      pdfCurrentPage: 1,
-      width: 620,
-      height: 945,
-    })
-  }, [addWindow])
-
-  const handlePdfFileChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0]
-      if (!file) return
-
-      const url = URL.createObjectURL(file)
-      addWindow({
-        contentType: "pdf",
-        pdfUrl: url,
-        title: file.name.replace(/\.pdf$/i, ""),
-        pdfCurrentPage: 1,
-      })
-
-      if (fileInputRef.current) fileInputRef.current.value = ""
-    },
-    [addWindow],
-  )
 
   const isEraserToolActive = useWindows((s) => s.isEraserToolActive);
   const isTextToolActive = useWindows((s) => s.isTextToolActive);
@@ -2594,7 +2602,7 @@ function App() {
       viewport.removeEventListener("mousedown", onPanMouseDown);
       viewport.removeEventListener("wheel", onWheel);
     };
-  }, [isShiftPressed, isEraserToolActive, isTextToolActive, isStickyToolActive, isSelectToolActive, drawingTool]);
+  }, [isShiftPressed, isEraserToolActive, isTextToolActive, isStickyToolActive, isSelectToolActive, drawingTool, addWindow]);
 
   async function spawnWithRealTitles() {
     try {
@@ -2621,22 +2629,10 @@ function App() {
         <UndoRedoControl />
       </div>
       <SearchBox />
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".pdf"
-        onChange={handlePdfFileChange}
-        style={{ display: "none" }}
-      />
-      <button
-        onClick={handleOpenPdf}
-        style={{ position: 'fixed', top: 210, right: 10, zIndex: 9999 }}
-      >
-        Open PDF
-      </button>
+      <MediaInsertButton />
       <button
         onClick={spawnWithRealTitles}
-        style={{ position: 'fixed', top: 240, right: 10, zIndex: 9999 }}
+        style={{ position: 'fixed', top: 280, right: 10, zIndex: 9999 }}
       >
         Spawn 100 Windows
       </button>
@@ -2655,7 +2651,7 @@ function App() {
             spawnWindows(50, 0)
           }
         }}
-        style={{ position: 'fixed', top: 270, right: 10, zIndex: 9999 }}
+        style={{ position: 'fixed', top: 310, right: 10, zIndex: 9999 }}
       >
         Spawn 50 Windows
       </button>
@@ -2674,7 +2670,7 @@ function App() {
             spawnWindows(75, 0)
           }
         }}
-        style={{ position: 'fixed', top: 300, right: 10, zIndex: 9999 }}
+        style={{ position: 'fixed', top: 340, right: 10, zIndex: 9999 }}
       >
         Spawn 75 Windows
       </button>
@@ -2688,6 +2684,51 @@ function App() {
             : isTextToolActive
             ? "text"
             : (isShiftPressed || isSelectToolActive || drawingTool ? "crosshair" : undefined),
+        }}
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes("Files")) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+          }
+        }}
+        onDrop={(e) => {
+          if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            e.preventDefault();
+            const mousePos = screenToWorld(e.clientX, e.clientY);
+            let offset = 0;
+            for (const file of Array.from(e.dataTransfer.files)) {
+              const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+              const isImage = file.type.startsWith("image/") || /\.(png|jpe?g|webp|svg|gif|bmp|ico|avif)$/i.test(file.name);
+              if (isPdf) {
+                const url = URL.createObjectURL(file);
+                addWindow({
+                  contentType: "pdf",
+                  pdfUrl: url,
+                  url,
+                  title: file.name.replace(/\.pdf$/i, ""),
+                  pdfCurrentPage: 1,
+                  x: mousePos.x + offset - 310,
+                  y: mousePos.y + offset - 100,
+                  width: 620,
+                  height: 945,
+                });
+                offset += 24;
+              } else if (isImage) {
+                const url = URL.createObjectURL(file);
+                addWindow({
+                  contentType: "image",
+                  directImageUrl: url,
+                  url,
+                  title: file.name,
+                  x: mousePos.x + offset - 160,
+                  y: mousePos.y + offset - 120,
+                  width: 320,
+                  height: 240,
+                });
+                offset += 24;
+              }
+            }
+          }
         }}
       >
         <div ref={gridRef} className="canvas-grid" />

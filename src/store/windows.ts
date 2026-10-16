@@ -24,8 +24,12 @@ export type WindowData = {
   sourceHref?: string;
   /** Pre-extracted image src for File: pages — skips the fetchFileUrl API call */
   directImageUrl?: string;
-  /** Content type discriminator: "article" (default), "pdf", "sticky", "text", or "shape" */
-  contentType?: "article" | "pdf" | "sticky" | "text" | "shape";
+  /** Content type discriminator: "article" (default), "pdf", "sticky", "text", "shape", "image", or "youtube" */
+  contentType?: "article" | "pdf" | "sticky" | "text" | "shape" | "image" | "youtube";
+  /** YouTube video embed URL */
+  youtubeUrl?: string;
+  /** Extracted YouTube video ID (e.g. dQw4w9WgXcQ) */
+  youtubeId?: string;
   /** Shape type for contentType === "shape" */
   shapeType?: "rectangle" | "circle" | "diamond" | "line" | "arrow";
   /** Stroke color for shape */

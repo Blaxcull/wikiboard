@@ -185,7 +185,7 @@ function TextHighlightColorPicker({
                   onMouseDown={(e) => e.stopPropagation()}
                   className={`relative p-0.5 rounded-full cursor-pointer transition-transform duration-150 shrink-0 bg-transparent border-none outline-none focus:outline-none focus-visible:outline-none ${
                     isSelected
-                      ? "scale-115 opacity-100 ring-2 ring-blue-500 ring-offset-1"
+                      ? "scale-115 opacity-100"
                       : "opacity-70 hover:opacity-100 hover:scale-105 active:scale-95"
                   }`}
                   style={{ outline: "none", border: "none", boxShadow: "none" }}

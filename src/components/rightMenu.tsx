@@ -60,7 +60,7 @@ export default function RightMenu() {
     <>
       <aside
         aria-label="Right actions menu"
-        className="right-menu fixed right-4 top-10 z-[9990] flex flex-col items-center bg-white/80 backdrop-blur-2xl border border-black/10 shadow-[0_8px_32px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.06)] rounded-2xl p-1.5 select-none"
+        className="right-menu fixed right-4 top-[76px] z-[9990] flex flex-col items-center bg-white/80 backdrop-blur-2xl border border-black/10 shadow-[0_8px_32px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.06)] rounded-2xl p-1.5 select-none"
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >

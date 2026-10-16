@@ -2,11 +2,11 @@ import { useWindows, type WindowData, type WindowGroup } from "../store/windows"
 import { getCamera } from "./camera";
 import { setZoomImmediate } from "./canvas/zoom";
 
-export const DEFAULT_FILE_EXTENSION = ".xboard";
-export const ACCEPTED_EXTENSIONS = [".xboard", ".wikiboard", ".json"];
+export const DEFAULT_FILE_EXTENSION = ".elsegrid";
+export const ACCEPTED_EXTENSIONS = [".elsegrid", ".xboard", ".wikiboard", ".json"];
 
-export interface XBoardDocument {
-  app: "Xboard";
+export interface ElsegridDocument {
+  app: "elsegrid" | "Xboard";
   version: 1;
   name: string;
   savedAt: string;
@@ -20,6 +20,8 @@ export interface XBoardDocument {
   windows: WindowData[];
   groups: WindowGroup[];
 }
+
+export type XBoardDocument = ElsegridDocument;
 
 /**
  * Converts a local blob: URL (from local file uploads) to a base64 data URL
@@ -37,16 +39,16 @@ async function blobUrlToDataUrl(url: string): Promise<string> {
       reader.readAsDataURL(blob);
     });
   } catch (err) {
-    console.warn("[Xboard] Could not convert blob URL to data URL:", url, err);
+    console.warn("[elsegrid] Could not convert blob URL to data URL:", url, err);
     return url;
   }
 }
 
 /**
  * Gathers all canvas state, converts ephemeral blob URLs into data URLs,
- * and builds a complete XBoardDocument object.
+ * and builds a complete ElsegridDocument object.
  */
-export async function exportCanvasDocument(): Promise<XBoardDocument> {
+export async function exportCanvasDocument(): Promise<ElsegridDocument> {
   const state = useWindows.getState();
   const camera = getCamera();
 
@@ -67,7 +69,7 @@ export async function exportCanvasDocument(): Promise<XBoardDocument> {
   );
 
   return {
-    app: "Xboard",
+    app: "elsegrid",
     version: 1,
     name: "Canvas",
     savedAt: new Date().toISOString(),
@@ -84,11 +86,11 @@ export async function exportCanvasDocument(): Promise<XBoardDocument> {
 }
 
 /**
- * Restores a loaded XBoardDocument into the canvas state and camera.
+ * Restores a loaded ElsegridDocument into the canvas state and camera.
  */
-export function applyCanvasDocument(doc: Partial<XBoardDocument>): boolean {
+export function applyCanvasDocument(doc: Partial<ElsegridDocument>): boolean {
   if (!doc || !Array.isArray(doc.windows)) {
-    throw new Error("Invalid Xboard file: Missing windows array.");
+    throw new Error("Invalid elsegrid file: Missing windows array.");
   }
 
   useWindows.getState().loadBoard({
@@ -109,14 +111,14 @@ export function applyCanvasDocument(doc: Partial<XBoardDocument>): boolean {
 }
 
 /**
- * Saves the current Xboard canvas to the user's local PC via the native File Manager.
+ * Saves the current elsegrid canvas to the user's local PC via the native File Manager.
  * Uses window.showSaveFilePicker if available, otherwise falls back to browser download.
  */
 export async function saveCanvasToFile(): Promise<boolean> {
   const doc = await exportCanvasDocument();
   const jsonContent = JSON.stringify(doc, null, 2);
   const dateStr = new Date().toISOString().slice(0, 10);
-  const fileName = `xboard-${dateStr}${DEFAULT_FILE_EXTENSION}`;
+  const fileName = `elsegrid-${dateStr}${DEFAULT_FILE_EXTENSION}`;
 
   // Native Chromium File System Access API
   if ("showSaveFilePicker" in window) {
@@ -126,7 +128,7 @@ export async function saveCanvasToFile(): Promise<boolean> {
         suggestedName: fileName,
         types: [
           {
-            description: "Xboard Canvas Document (*.xboard, *.wikiboard, *.json)",
+            description: "elsegrid Canvas Document (*.elsegrid, *.xboard, *.wikiboard, *.json)",
             accept: {
               "application/json": ACCEPTED_EXTENSIONS,
             },
@@ -142,7 +144,7 @@ export async function saveCanvasToFile(): Promise<boolean> {
         // User deliberately cancelled the file picker dialog
         return false;
       }
-      console.warn("[Xboard] showSaveFilePicker failed, falling back to download:", err);
+      console.warn("[elsegrid] showSaveFilePicker failed, falling back to download:", err);
     }
   }
 
@@ -159,13 +161,13 @@ export async function saveCanvasToFile(): Promise<boolean> {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     return true;
   } catch (err) {
-    console.error("[Xboard] Fallback download failed:", err);
+    console.error("[elsegrid] Fallback download failed:", err);
     return false;
   }
 }
 
 /**
- * Opens a local file picker to load an Xboard document and restores the board.
+ * Opens a local file picker to load an elsegrid document and restores the board.
  * Uses window.showOpenFilePicker if available, otherwise falls back to a hidden file input.
  */
 export async function loadCanvasFromFile(): Promise<void> {
@@ -175,7 +177,7 @@ export async function loadCanvasFromFile(): Promise<void> {
       const handles = await picker({
         types: [
           {
-            description: "Xboard Canvas Document (*.xboard, *.wikiboard, *.json)",
+            description: "elsegrid Canvas Document (*.elsegrid, *.xboard, *.wikiboard, *.json)",
             accept: {
               "application/json": ACCEPTED_EXTENSIONS,
               "text/plain": ACCEPTED_EXTENSIONS,
@@ -188,7 +190,7 @@ export async function loadCanvasFromFile(): Promise<void> {
       if (!handles || handles.length === 0) return;
       const file = await handles[0].getFile();
       const content = await file.text();
-      const parsed = JSON.parse(content) as Partial<XBoardDocument>;
+      const parsed = JSON.parse(content) as Partial<ElsegridDocument>;
       applyCanvasDocument(parsed);
       return;
     } catch (err: unknown) {
@@ -196,7 +198,7 @@ export async function loadCanvasFromFile(): Promise<void> {
         // User cancelled the file picker dialog
         return;
       }
-      console.warn("[Xboard] showOpenFilePicker failed, falling back to file input:", err);
+      console.warn("[elsegrid] showOpenFilePicker failed, falling back to file input:", err);
     }
   }
 
@@ -211,11 +213,11 @@ export async function loadCanvasFromFile(): Promise<void> {
     if (!file) return;
     try {
       const content = await file.text();
-      const parsed = JSON.parse(content) as Partial<XBoardDocument>;
+      const parsed = JSON.parse(content) as Partial<ElsegridDocument>;
       applyCanvasDocument(parsed);
     } catch (parseErr) {
-      console.error("[Xboard] Failed to parse imported file:", parseErr);
-      alert("Failed to load Xboard file. Please verify it is a valid .xboard or .json file.");
+      console.error("[elsegrid] Failed to parse imported file:", parseErr);
+      alert("Failed to load elsegrid file. Please verify it is a valid .elsegrid, .xboard, or .json file.");
     } finally {
       input.remove();
     }

@@ -9,7 +9,9 @@ import startDrag from "../utils/window/drag";
 import { startWireDrag } from "../utils/window/wireDrag";
 import PdfSelectionToolbox from "./pdfSelectionToolbox";
 
-GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+
+GlobalWorkerOptions.workerSrc = pdfWorker;
 
 const QUALITY_SCALE = 1.5;
 const MIN_PDF_ZOOM = 0.25;

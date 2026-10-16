@@ -101,7 +101,7 @@ export default function RightMenu() {
             <button
               type="button"
               onClick={handleSave}
-              aria-label="Save Xboard"
+              aria-label="Save elsegrid"
               className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-900 hover:text-gray-950 hover:bg-black/6 active:scale-95 transition-all duration-150 cursor-pointer border-none outline-none"
             >
               <svg
@@ -127,7 +127,7 @@ export default function RightMenu() {
               role="tooltip"
               className="pointer-events-none absolute right-full top-1/2 -translate-y-1/2 mr-3 px-2.5 py-1.5 bg-gray-900/90 text-white text-xs font-medium rounded-lg shadow-lg opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150 whitespace-nowrap flex items-center gap-2 z-50 backdrop-blur-md"
             >
-              <span>Save Xboard</span>
+              <span>Save elsegrid</span>
               <kbd className="px-1.5 py-0.5 text-[10px] bg-white/20 rounded font-sans leading-none text-gray-200">
                 Ctrl + S
               </kbd>
@@ -142,7 +142,7 @@ export default function RightMenu() {
             <button
               type="button"
               onClick={handleLoad}
-              aria-label="Open Xboard"
+              aria-label="Open elsegrid"
               className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-900 hover:text-gray-950 hover:bg-black/6 active:scale-95 transition-all duration-150 cursor-pointer border-none outline-none"
             >
               <svg
@@ -165,7 +165,7 @@ export default function RightMenu() {
               role="tooltip"
               className="pointer-events-none absolute right-full top-1/2 -translate-y-1/2 mr-3 px-2.5 py-1.5 bg-gray-900/90 text-white text-xs font-medium rounded-lg shadow-lg opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150 whitespace-nowrap flex items-center gap-2 z-50 backdrop-blur-md"
             >
-              <span>Open Xboard</span>
+              <span>Open elsegrid</span>
             </div>
           </div>
         </div>

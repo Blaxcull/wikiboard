@@ -33,6 +33,13 @@ export function canRedo(): boolean {
   return future.length > 0;
 }
 
+/** Clear both past and future undo/redo history stacks */
+export function clearHistory() {
+  past.length = 0;
+  future.length = 0;
+  notify();
+}
+
 export function captureSnapshot(): CanvasSnapshot {
   const state = useWindows.getState();
   return {

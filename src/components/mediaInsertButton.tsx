@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useWindows } from "../store/windows";
 import { extractYouTubeId, fetchYouTubeInfo } from "../utils/media";
 
@@ -67,7 +67,7 @@ export default function MediaInsertButton() {
         setLinkInput("");
         setLinkError("");
       } else {
-        setLinkError("Unsupported file type. Please upload a PDF or an Image.");
+        setLinkError("Unsupported file type. Please drop a PDF or an Image.");
       }
     },
     [addWindow]
@@ -102,6 +102,22 @@ export default function MediaInsertButton() {
       processFiles(e.dataTransfer.files);
     }
   };
+
+  const detectedType = useMemo(() => {
+    const trimmed = linkInput.trim();
+    if (!trimmed) return null;
+    if (extractYouTubeId(trimmed)) return "youtube";
+    if (/\.pdf(\?.*)?$/i.test(trimmed)) return "pdf";
+    if (
+      /\.(png|jpe?g|webp|svg|gif|bmp|ico|avif)(\?.*)?$/i.test(trimmed) ||
+      trimmed.startsWith("data:image/") ||
+      trimmed.startsWith("blob:")
+    ) {
+      return "image";
+    }
+    if (/^https?:\/\//i.test(trimmed)) return "link";
+    return null;
+  }, [linkInput]);
 
   const handleLinkSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -179,7 +195,7 @@ export default function MediaInsertButton() {
       return;
     }
 
-    // 4. Any other http/https URL that might be an image
+    // 4. Any other http/https URL fallback
     if (/^https?:\/\//i.test(trimmed)) {
       addWindow({
         contentType: "image",
@@ -201,7 +217,7 @@ export default function MediaInsertButton() {
 
   return (
     <>
-      {/* Floating Insert Media Button */}
+      {/* Floating Toolbar Button */}
       <div
         className="media-insert-container fixed right-4 top-[14px] z-[9990] select-none"
         onMouseDown={(e) => e.stopPropagation()}
@@ -219,7 +235,6 @@ export default function MediaInsertButton() {
                 : "text-gray-900 hover:text-gray-950 hover:bg-black/6 active:scale-95"
             }`}
           >
-            {/* Unified Upload / Media Card Icon */}
             <svg
               className="w-5 h-5"
               viewBox="0 0 24 24"
@@ -229,18 +244,14 @@ export default function MediaInsertButton() {
               strokeLinecap="round"
               strokeLinejoin="round"
             >
-              {/* Outer frame */}
               <rect x="3" y="3" width="18" height="18" rx="4" />
-              {/* Mountain/hill graphic */}
               <circle cx="8.5" cy="8.5" r="1.5" />
               <path d="m21 15-5-5L5 21" />
-              {/* Plus badge */}
               <path d="M16 6h4" strokeWidth="2.2" />
               <path d="M18 4v4" strokeWidth="2.2" />
             </svg>
           </button>
 
-          {/* Tooltip on hover when closed */}
           {!isOpen && (
             <div
               role="tooltip"
@@ -252,13 +263,13 @@ export default function MediaInsertButton() {
         </div>
       </div>
 
-      {/* Unified Drop Square Centered Modal */}
+      {/* Modern Center Modal */}
       {isOpen && (
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Upload or Insert Media"
-          className="dialog-overlay fixed inset-0 z-[10000] bg-black/25 backdrop-blur-[6px] flex items-center justify-center p-4 select-none animate-[spotlight-in_0.15s_cubic-bezier(0.16,1,0.3,1)]"
+          aria-label="Insert Media"
+          className="dialog-overlay fixed inset-0 z-[10000] bg-black/40 backdrop-blur-md flex items-center justify-center p-4 select-none animate-[spotlight-in_0.15s_cubic-bezier(0.16,1,0.3,1)]"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) {
               setIsOpen(false);
@@ -267,45 +278,39 @@ export default function MediaInsertButton() {
           }}
         >
           <div
-            className="w-full max-w-md bg-white/95 backdrop-blur-2xl border border-black/10 shadow-[0_20px_60px_rgba(0,0,0,0.2),0_6px_20px_rgba(0,0,0,0.08)] rounded-3xl p-6 relative flex flex-col gap-4 text-gray-900"
+            className="w-full max-w-[420px] bg-white/95 backdrop-blur-2xl border border-white/80 shadow-[0_30px_90px_-20px_rgba(0,0,0,0.3),0_0_0_1px_rgba(0,0,0,0.06),inset_0_1px_1px_rgba(255,255,255,0.9)] rounded-[32px] p-6 relative flex flex-col gap-4 text-gray-900"
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Close Button */}
-            <button
-              type="button"
-              onClick={() => {
-                setIsOpen(false);
-                setLinkError("");
-              }}
-              className="absolute top-5 right-5 w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/5 transition-colors cursor-pointer border-none outline-none"
-              aria-label="Close dialog"
-            >
-              <span className="text-xl leading-none">&times;</span>
-            </button>
-
             {/* Header */}
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-black/5 flex items-center justify-center text-gray-800">
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="18" height="18" rx="4" />
-                  <circle cx="8.5" cy="8.5" r="1.5" />
-                  <path d="m21 15-5-5L5 21" />
-                  <path d="M16 6h4" strokeWidth="2.2" />
-                  <path d="M18 4v4" strokeWidth="2.2" />
-                </svg>
-              </div>
+            <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-base font-semibold text-gray-900 leading-tight">
+                <h3 className="text-[17px] font-semibold text-gray-950 tracking-tight leading-none">
                   Insert Media
                 </h3>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Upload files or paste media links onto your canvas
+                <p className="text-xs text-gray-400 mt-1 font-normal">
+                  Drop documents, images, or paste video links
                 </p>
               </div>
+
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  setLinkError("");
+                }}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-900 hover:bg-black/5 active:scale-95 transition-all cursor-pointer border-none outline-none"
+                aria-label="Close"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
             </div>
 
-            {/* The Big "Drop Square" - using label for 100% native click file picker */}
+            {/* Magnetic Drop Surface */}
             <label
               onDragOver={(e) => {
                 e.preventDefault();
@@ -318,10 +323,10 @@ export default function MediaInsertButton() {
                 setIsDraggingOver(false);
               }}
               onDrop={handleDrop}
-              className={`w-full h-44 rounded-2xl border-2 border-dashed transition-all duration-150 cursor-pointer flex flex-col items-center justify-center p-6 text-center group ${
+              className={`relative w-full h-[190px] rounded-2xl transition-all duration-300 cursor-pointer flex flex-col items-center justify-center p-6 text-center group border ${
                 isDraggingOver
-                  ? "border-blue-500 bg-blue-500/10 scale-[1.01]"
-                  : "border-black/15 hover:border-black/35 bg-black/[0.02] hover:bg-black/[0.04]"
+                  ? "border-blue-500 bg-blue-50/80 ring-4 ring-blue-500/10 scale-[1.01]"
+                  : "border-black/[0.07] hover:border-black/20 bg-gradient-to-b from-gray-50/80 to-gray-100/40 hover:from-gray-50 hover:to-gray-100/80 shadow-inner/10"
               }`}
             >
               <input
@@ -333,83 +338,143 @@ export default function MediaInsertButton() {
                 className="hidden"
               />
 
-              <div className="w-12 h-12 rounded-2xl bg-white shadow-sm border border-black/5 flex items-center justify-center text-gray-700 group-hover:scale-110 group-hover:text-black transition-all mb-2.5 pointer-events-none">
-                <svg
-                  className="w-6 h-6"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.9"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="17 8 12 3 7 8" />
-                  <line x1="12" y1="3" x2="12" y2="15" />
-                </svg>
-              </div>
-
-              <p className="text-sm font-semibold text-gray-900 leading-tight pointer-events-none">
-                Drag & drop file here, or <span className="text-blue-600 underline">browse</span>
-              </p>
-              <p className="text-xs text-gray-400 mt-1.5 pointer-events-none">
-                Supports any PDF document or image (PNG, JPG, SVG, WebP)
-              </p>
-            </label>
-
-            {/* Divider with 'or' */}
-            <div className="flex items-center gap-2 px-1">
-              <div className="flex-1 h-px bg-black/10" />
-              <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-                or paste link
-              </span>
-              <div className="flex-1 h-px bg-black/10" />
-            </div>
-
-            {/* Smart URL / Link Input */}
-            <form onSubmit={handleLinkSubmit} className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <input
-                    ref={linkInputRef}
-                    type="text"
-                    value={linkInput}
-                    onChange={(e) => {
-                      setLinkInput(e.target.value);
-                      if (linkError) setLinkError("");
-                    }}
-                    placeholder="Paste YouTube, image, or PDF link..."
-                    className={`w-full pl-9 pr-3.5 py-2.5 bg-gray-50/80 border rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:bg-white transition-all ${
-                      linkError
-                        ? "border-red-400 focus:ring-2 focus:ring-red-400/20"
-                        : "border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                    }`}
-                  />
-                  <svg
-                    className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+              {/* Floating Media Stack Graphic */}
+              <div className="relative w-16 h-12 mb-3 flex items-center justify-center pointer-events-none">
+                {/* Left card: Image indicator */}
+                <div className="absolute left-1 w-9 h-10 rounded-xl bg-gradient-to-br from-emerald-50 to-teal-100/80 border border-emerald-300/40 shadow-xs flex items-center justify-center text-emerald-600 -rotate-6 group-hover:-rotate-12 group-hover:-translate-x-1 transition-all duration-300">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="3" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <path d="m21 15-5-5L5 21" />
                   </svg>
                 </div>
+
+                {/* Right card: Document indicator */}
+                <div className="absolute right-1 w-9 h-10 rounded-xl bg-gradient-to-br from-rose-50 to-amber-100/80 border border-rose-300/40 shadow-xs flex items-center justify-center text-rose-600 rotate-6 group-hover:rotate-12 group-hover:translate-x-1 transition-all duration-300">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                </div>
+
+                {/* Center card: Upload Arrow Badge */}
+                <div className="relative z-10 w-11 h-11 rounded-2xl bg-white shadow-[0_6px_20px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)] border border-black/[0.06] flex items-center justify-center text-gray-900 group-hover:scale-108 group-hover:shadow-[0_8px_24px_rgba(0,0,0,0.12)] transition-all duration-300">
+                  <svg className="w-5 h-5 text-gray-800" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Title Prompt */}
+              <p className="text-[13px] font-medium text-gray-800 pointer-events-none leading-snug">
+                Drop files here, or{" "}
+                <span className="text-gray-950 font-semibold underline underline-offset-4 decoration-gray-300 group-hover:decoration-gray-950 transition-colors">
+                  browse
+                </span>
+              </p>
+
+              {/* Subtle Format Chips */}
+              <div className="flex items-center gap-1.5 mt-2.5 pointer-events-none">
+                <span className="px-2 py-0.5 rounded-full bg-white/90 border border-black/[0.06] text-[10px] font-semibold text-gray-600 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  PDF
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-white/90 border border-black/[0.06] text-[10px] font-semibold text-gray-600 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  PNG
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-white/90 border border-black/[0.06] text-[10px] font-semibold text-gray-600 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  JPG
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-white/90 border border-black/[0.06] text-[10px] font-semibold text-gray-600 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  WebP
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-white/90 border border-black/[0.06] text-[10px] font-semibold text-gray-600 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  SVG
+                </span>
+              </div>
+            </label>
+
+            {/* Seamless URL Bar */}
+            <form onSubmit={handleLinkSubmit} className="flex flex-col gap-1.5">
+              <div
+                className={`relative flex items-center bg-gray-100/70 hover:bg-gray-100/90 focus-within:bg-white border rounded-2xl p-1.5 pl-3 transition-all duration-200 ${
+                  linkError
+                    ? "border-red-400 ring-4 ring-red-400/15"
+                    : "border-black/[0.06] focus-within:border-black/25 focus-within:shadow-[0_0_0_4px_rgba(0,0,0,0.03)]"
+                }`}
+              >
+                {/* Detected Type Icon / Link Icon */}
+                <div className="mr-2.5 shrink-0 flex items-center">
+                  {detectedType === "youtube" ? (
+                    <span className="px-1.5 py-0.5 rounded bg-red-500 text-white text-[9px] font-bold tracking-wider uppercase">
+                      YouTube
+                    </span>
+                  ) : detectedType === "pdf" ? (
+                    <span className="px-1.5 py-0.5 rounded bg-rose-500 text-white text-[9px] font-bold tracking-wider uppercase">
+                      PDF
+                    </span>
+                  ) : detectedType === "image" ? (
+                    <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[9px] font-bold tracking-wider uppercase">
+                      Image
+                    </span>
+                  ) : (
+                    <svg
+                      className="w-4 h-4 text-gray-400"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                    </svg>
+                  )}
+                </div>
+
+                <input
+                  ref={linkInputRef}
+                  type="text"
+                  value={linkInput}
+                  onChange={(e) => {
+                    setLinkInput(e.target.value);
+                    if (linkError) setLinkError("");
+                  }}
+                  placeholder="Or paste media link (YouTube, PDF, Image)…"
+                  className="flex-1 bg-transparent text-[13px] text-gray-900 placeholder-gray-400 border-none outline-none font-sans"
+                />
+
                 <button
                   type="submit"
                   disabled={!linkInput.trim()}
-                  className="px-4 py-2.5 bg-gray-900 hover:bg-black text-white text-xs font-semibold rounded-xl cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95 border-none outline-none shrink-0"
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold tracking-tight transition-all active:scale-95 cursor-pointer border-none outline-none shrink-0 flex items-center gap-1 ${
+                    linkInput.trim()
+                      ? "bg-gray-950 text-white shadow-xs hover:bg-black"
+                      : "bg-black/[0.04] text-gray-400 cursor-not-allowed"
+                  }`}
                 >
-                  Add
+                  <span>Insert</span>
+                  <span className="text-[10px] opacity-60">↵</span>
                 </button>
               </div>
+
               {linkError && (
                 <p className="text-xs text-red-500 px-1 leading-tight">{linkError}</p>
               )}
             </form>
+
+            {/* Quick Keyboard Paste Hint */}
+            <div className="pt-0.5 flex items-center justify-between text-[11px] text-gray-400">
+              <span className="flex items-center gap-1.5">
+                <span>Direct paste:</span>
+                <kbd className="font-sans px-1.5 py-0.5 rounded-md bg-black/[0.04] text-gray-600 font-medium border border-black/[0.05]">
+                  Ctrl + V
+                </kbd>
+              </span>
+              <span>Drop onto canvas anytime</span>
+            </div>
           </div>
         </div>
       )}

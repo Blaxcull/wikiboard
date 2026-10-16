@@ -401,7 +401,7 @@ export default function SearchBox() {
             placeholder={
               mode === "vector"
                 ? "Ask open pages (e.g. 'when did WWI occur?')..."
-                : "Spotlight Search Wikipedia…"
+                : "Search Wikipedia…"
             }
             autoFocus
           />

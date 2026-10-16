@@ -12,6 +12,7 @@ export default defineConfig({
     babel({ presets: [reactCompilerPreset()] })
   ],
   resolve: {
+    dedupe: ['react', 'react-dom'],
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { screenToWorld } from "../utils/camera";
 import { focusWindowAndParent, setZoomImmediate } from "../utils/canvas/zoom";
-import { recordSnapshot, type CanvasSnapshot } from "../utils/history";
+import { recordSnapshot, clearHistory, type CanvasSnapshot } from "../utils/history";
 
 export type WindowLink = {
   label: string;
@@ -386,7 +386,7 @@ export const useWindows = create<WindowsStore>((set, get) => ({
     });
   },
   clearBoard: () => {
-    recordSnapshot();
+    clearHistory();
     set({
       windows: [],
       groups: [],

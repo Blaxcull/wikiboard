@@ -91,6 +91,14 @@ export function Resize(
   const startY = e.clientY;
   const preResizeSnapshot = captureSnapshot();
 
+  try {
+    for (const a of target.getAnimations()) {
+      a.cancel();
+    }
+  } catch {
+    /* ignore */
+  }
+
   isResizingWindow = true;
   activeResizingWindowId = target.id.replace(/^win-/, "");
   let rafId = 0;
@@ -111,7 +119,7 @@ export function Resize(
     document.body.style.userSelect = "none";
     target.classList.add("resizing");
     target.closest(".canvas-world")?.classList.add("gesture-active");
-    target.style.zIndex = String(nextZ);
+    target.style.zIndex = "99990";
   }
 
   applyGestureSetup();
@@ -168,6 +176,14 @@ export function Resize(
     target.style.left = `${baseLeft}px`;
     target.style.top = `${baseTop}px`;
 
+    try {
+      for (const a of target.getAnimations()) {
+        a.cancel();
+      }
+    } catch {
+      /* ignore */
+    }
+
     const curCam = getCamera();
     const screenDx = lastX - startX;
     const screenDy = lastY - startY;
@@ -191,6 +207,8 @@ export function Resize(
       recordSnapshot(preResizeSnapshot);
     }
 
+    target.classList.remove("resizing");
+    target.style.zIndex = String(nextZ);
     onResizeEnd?.({ x: baseLeft, y: baseTop, width: finalW, height: finalH });
 
     useWindows.setState({ maxZIndex: nextZ });

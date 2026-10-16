@@ -16,7 +16,7 @@ import StickyNote from './components/stickyNote'
 import CanvasTextItem from './components/canvasTextItem'
 import CanvasShapeItem from './components/canvasShapeItem'
 import WindowContextMenu, { type ContextMenuPosition } from './components/windowContextMenu'
-import { useWindows, getConnectedChildNotes, type WindowData, nextCascadeOffset } from './store/windows'
+import { useWindows, getConnectedChildNotes, findRootWindow, type WindowData, nextCascadeOffset } from './store/windows'
 import { deleteScroll } from './utils/scrollMemory'
 import { evictClosedWindowArticles } from './utils/articleCache'
 import { getCamera, subscribeCamera, screenToWorld } from './utils/camera'
@@ -83,6 +83,7 @@ function computeArrow(
   px: number, py: number, pw: number, ph: number,
   cx: number, cy: number, cw: number, ch: number,
   preferredSide?: Side,
+  allowedParentSides?: Side[],
 ): ArrowResult {
   const ncx = cx + cw / 2;
   const ncy = cy + ch / 2;
@@ -103,6 +104,7 @@ function computeArrow(
   } else {
     let bestCost = Infinity;
     for (const [ps, cs] of PAIRS) {
+      if (allowedParentSides && !allowedParentSides.includes(ps)) continue;
       const exit = sidePoint(ps, px, py, pw, ph);
       const entry = sidePoint(cs, cx, cy, cw, ch);
       const dist = Math.hypot(entry.x - exit.x, entry.y - exit.y);
@@ -449,6 +451,7 @@ const StackedNoteStubItem = memo(function StackedNoteStubItem({
     <div
       ref={elRef}
       id={`stub-${note.id}`}
+      data-side={side}
       className={`absolute pointer-events-auto cursor-pointer transition-transform duration-150 ${hoverClass} rounded-[6px] border border-black/20 shadow-md overflow-hidden`}
       style={{
         width: `${stubW}px`,
@@ -648,16 +651,30 @@ const ConnectionArrows = memo(function ConnectionArrows({
       }
     }
 
-    const getEntityPos = (id: string) => {
+    const getEntityPos = (
+      id: string,
+      visited = new Set<string>()
+    ): { x: number; y: number; w: number; h: number; zIndex?: number; allowedSides?: Side[] } | null => {
+      if (visited.has(id)) return null;
+      visited.add(id);
+
       const win = byId.get(id);
       if (win) {
         if (win.stacked) {
           if (isWindowStacking(win.id)) {
-            return posMap.get(win.id);
+            return posMap.get(win.id) ?? null;
+          }
+          const rootWin = findRootWindow(win.id, windows);
+          if (rootWin && rootWin.id !== win.id && !visited.has(rootWin.id)) {
+            return getEntityPos(rootWin.id, visited);
+          }
+          const pId = win.stackedParentId ?? win.parentId ?? win.parentIds?.[0];
+          if (pId && pId !== win.id && !visited.has(pId)) {
+            return getEntityPos(pId, visited);
           }
           return null;
         }
-        return posMap.get(win.id);
+        return posMap.get(win.id) ?? null;
       }
       const grp = groupsById.get(id);
       if (grp) {
@@ -711,17 +728,23 @@ const ConnectionArrows = memo(function ConnectionArrows({
 
       const pEl = document.getElementById(`win-${parentId}`);
       const cEl = document.getElementById(`win-${childId}`);
-      const isParentHidden = pEl && pEl.style.display === "none";
+      const rootPWin = pWin?.stacked ? findRootWindow(parentId, windows) : pWin;
+      const rootPEl = rootPWin ? document.getElementById(`win-${rootPWin.id}`) : null;
+      const effPWin = rootPWin ?? pWin;
+      const effPEl = pWin?.stacked ? rootPEl : pEl;
+      const isParentHidden = effPEl && effPEl.style.display === "none";
       const isChildHidden = cEl && cEl.style.display === "none";
 
-      const isEndpointStacked = !!(pWin?.stacked || cWin?.stacked);
-      const isStacking = isWindowStacking(parentId) || isWindowStacking(childId);
+      const isChildStacked = !!cWin?.stacked;
+      const isChildStacking = isWindowStacking(childId);
+      const isParentStacking = isWindowStacking(parentId);
+      const isStacking = isChildStacking || (isParentStacking && !isChildStacked);
 
       if (
-        (isEndpointStacked && !isStacking) ||
-        pWin?.pdfMaximized ||
+        (isChildStacked && !isChildStacking) ||
+        effPWin?.pdfMaximized ||
         cWin?.pdfMaximized ||
-        pWin?.pdfAnimating ||
+        effPWin?.pdfAnimating ||
         cWin?.pdfAnimating ||
         pGrpHasMax ||
         cGrpHasMax ||
@@ -751,7 +774,7 @@ const ConnectionArrows = memo(function ConnectionArrows({
       const px = parentPos.x, py = parentPos.y, pw = parentPos.w, ph = parentPos.h;
       const cx = childPos.x, cy = childPos.y, cw = childPos.w, ch = childPos.h;
 
-      const a = computeArrow(px, py, pw, ph, cx, cy, cw, ch);
+      const a = computeArrow(px, py, pw, ph, cx, cy, cw, ch, undefined, parentPos.allowedSides);
 
       const dist = Math.hypot(a.ex - a.sx, a.ey - a.sy);
 
@@ -834,8 +857,32 @@ const ConnectionArrows = memo(function ConnectionArrows({
       svg.setAttribute('viewBox', `${minX} ${minY} ${w} ${h}`);
       svg.style.display = '';
 
-      const childZ = ("zIndex" in childPos ? childPos.zIndex : 0) ?? 0;
-      svg.style.zIndex = String(Math.max(1, childZ - 1));
+      const isEraser = useWindows.getState().isEraserToolActive;
+      const isMovingAny = isDraggingWindow || isResizingWindow;
+      const activeId = activeDraggedWindowId || activeResizingWindowId;
+      const selectedIds = useWindows.getState().selectedIds;
+
+      const isConnectedToMoving =
+        isMovingAny &&
+        Boolean(
+          (activeId && (parentId === activeId || childId === activeId || rootPWin?.id === activeId)) ||
+          selectedIds.some((sId) => parentId === sId || childId === sId || rootPWin?.id === sId) ||
+          pWin?.active ||
+          cWin?.active ||
+          rootPWin?.active
+        );
+
+      let targetZ: number;
+      if (isEraser) {
+        targetZ = 999999;
+      } else if (isConnectedToMoving) {
+        targetZ = 99989;
+      } else {
+        const parentZ = ("zIndex" in parentPos ? parentPos.zIndex : 0) ?? 0;
+        const childZ = ("zIndex" in childPos ? childPos.zIndex : 0) ?? 0;
+        targetZ = Math.max(1, Math.max(parentZ, childZ) - 1);
+      }
+      svg.style.zIndex = String(targetZ);
 
       const isUnstacking = isNoteUnstacking(childId) || isNoteUnstacking(parentId);
 
@@ -943,7 +990,7 @@ const ConnectionArrows = memo(function ConnectionArrows({
             height: 1,
             overflow: 'visible',
             pointerEvents: isEraserToolActive ? 'auto' : 'none',
-            zIndex: isEraserToolActive ? 9999 : 1,
+            zIndex: isEraserToolActive ? 999999 : 1,
             display: 'none',
             cursor: isEraserToolActive ? 'pointer' : undefined,
           }}
@@ -1372,17 +1419,20 @@ const WindowItem = memo(function WindowItem({
       let curHeight = parseFloat(el.style.height);
 
       if (activeAnimRef.current) {
+        const animToCancel = activeAnimRef.current;
+        activeAnimRef.current = null;
+        animToCancel.onfinish = null;
+        animToCancel.oncancel = null;
         const cs = window.getComputedStyle(el);
         curLeft = parseFloat(cs.left) || curLeft;
         curTop = parseFloat(cs.top) || curTop;
         curWidth = parseFloat(cs.width) || curWidth;
         curHeight = parseFloat(cs.height) || curHeight;
         try {
-          activeAnimRef.current.cancel();
+          animToCancel.cancel();
         } catch {
           /* ignore */
         }
-        activeAnimRef.current = null;
       }
 
       let startBounds: { left: number; top: number; width: number; height: number };
@@ -1439,8 +1489,20 @@ const WindowItem = memo(function WindowItem({
       const handleDone = () => {
         if (activeAnimRef.current === anim) {
           activeAnimRef.current = null;
-          useWindows.getState().updateWindow(w.id, { pdfAnimating: false });
         }
+        anim.onfinish = null;
+        anim.oncancel = null;
+        try {
+          anim.commitStyles();
+        } catch {
+          /* ignore */
+        }
+        try {
+          anim.cancel();
+        } catch {
+          /* ignore */
+        }
+        useWindows.getState().updateWindow(w.id, { pdfAnimating: false });
       };
       anim.onfinish = handleDone;
       anim.oncancel = handleDone;
@@ -1472,12 +1534,15 @@ const WindowItem = memo(function WindowItem({
 
     return () => {
       if (activeAnimRef.current) {
+        const animToCancel = activeAnimRef.current;
+        activeAnimRef.current = null;
+        animToCancel.onfinish = null;
+        animToCancel.oncancel = null;
         try {
-          activeAnimRef.current.cancel();
+          animToCancel.cancel();
         } catch {
           /* ignore */
         }
-        activeAnimRef.current = null;
       }
       window.removeEventListener("resize", handleResize);
     };
@@ -1692,6 +1757,7 @@ const WindowItem = memo(function WindowItem({
           onActivate={handleActivate}
           onPositionChange={handlePositionChange}
           onAddSticky={handleAddSticky}
+          onContextMenu={(e) => onContextMenu?.(e, w.id)}
         />
       </div>
     );

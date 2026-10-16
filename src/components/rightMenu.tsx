@@ -71,10 +71,10 @@ export default function RightMenu() {
               type="button"
               onClick={handleNewClick}
               aria-label="New Board"
-              className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-600 hover:text-gray-950 hover:bg-black/6 active:scale-95 transition-all duration-150 cursor-pointer border-none outline-none"
+              className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-900 hover:text-gray-950 hover:bg-black/6 active:scale-95 transition-all duration-150 cursor-pointer border-none outline-none"
             >
               <svg
-                className="w-5 h-5 transition-transform duration-150 group-hover:scale-105"
+                className="w-5 h-5"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -102,10 +102,10 @@ export default function RightMenu() {
               type="button"
               onClick={handleSave}
               aria-label="Save Xboard"
-              className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-600 hover:text-gray-950 hover:bg-black/6 active:scale-95 transition-all duration-150 cursor-pointer border-none outline-none"
+              className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-900 hover:text-gray-950 hover:bg-black/6 active:scale-95 transition-all duration-150 cursor-pointer border-none outline-none"
             >
               <svg
-                className="w-5 h-5 transition-transform duration-150 group-hover:scale-105"
+                className="w-5 h-5"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -143,10 +143,10 @@ export default function RightMenu() {
               type="button"
               onClick={handleLoad}
               aria-label="Open Xboard"
-              className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-600 hover:text-gray-950 hover:bg-black/6 active:scale-95 transition-all duration-150 cursor-pointer border-none outline-none"
+              className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-900 hover:text-gray-950 hover:bg-black/6 active:scale-95 transition-all duration-150 cursor-pointer border-none outline-none"
             >
               <svg
-                className="w-5 h-5 transition-transform duration-150 group-hover:scale-105"
+                className="w-5 h-5"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"

@@ -565,6 +565,10 @@
   pointer-events: none;
 }
 
+.connection-arrow-item {
+  z-index: 0;
+}
+
 /* during any window gesture, stop the browser from routing mouse events
    into cross-origin iframes of overlapping windows (causes stalls) */
 .canvas-world.gesture-active > .window:not(.dragging):not(.resizing) {

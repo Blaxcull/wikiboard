@@ -22,7 +22,7 @@ const GROUP_COLORS: { id: string; name: string; border: string; bg: string }[] =
 function MiniGroupBoxIcon({ border, bg, size = 26 }: { border: string; bg: string; size?: number }) {
   return (
     <div
-      className="shrink-0 rounded-[7px] border-[2.2px] transition-transform flex items-center justify-center"
+      className="shrink-0 rounded-full border-[2.2px] transition-transform flex items-center justify-center"
       style={{
         width: size,
         height: size,
@@ -176,10 +176,9 @@ function GroupColorPickerPortal({
     const groupEl = document.getElementById(`group-box-${groupId}`);
     if (groupEl && pickerEl) {
       const rect = groupEl.getBoundingClientRect();
-      const pickerH = pickerEl.offsetHeight;
       const pickerW = pickerEl.offsetWidth;
 
-      const top = Math.min(window.innerHeight - pickerH - 12, rect.bottom + 14);
+      const top = rect.bottom + 14;
       let left = rect.left + rect.width / 2;
 
       if (left + pickerW / 2 > window.innerWidth - 12) left = window.innerWidth - 12 - pickerW / 2;
@@ -259,8 +258,8 @@ function GroupColorPickerPortal({
       <div
         className={`bg-white/95 backdrop-blur-md border-2 border-[#d0d0d0] shadow-[0_8px_24px_rgba(0,0,0,0.14)] flex items-center justify-center transition-all duration-200 ease-out ${
           isHovered
-            ? "w-[270px] h-[48px] px-3.5 py-1.5 gap-3 rounded-[18px] overflow-hidden"
-            : "w-[48px] h-[48px] p-2 rounded-[14px] cursor-pointer"
+            ? "w-[270px] h-[48px] px-3.5 py-1.5 gap-3 rounded-full overflow-hidden"
+            : "w-[48px] h-[48px] p-2 rounded-full cursor-pointer"
         }`}
         onClick={() => {
           if (!isHovered) setIsHovered(true);
@@ -287,7 +286,7 @@ function GroupColorPickerPortal({
                     e.stopPropagation();
                     e.preventDefault();
                   }}
-                  className={`relative p-0.5 rounded-[9px] cursor-pointer transition-all duration-150 shrink-0 bg-transparent border-none ${
+                  className={`relative p-0.5 rounded-full cursor-pointer transition-all duration-150 shrink-0 bg-transparent border-none ${
                     isSelected
                       ? "scale-110 opacity-100 ring-2 ring-neutral-700"
                       : "opacity-75 hover:opacity-100 hover:scale-105 active:scale-95"

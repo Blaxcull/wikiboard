@@ -1,9 +1,210 @@
-import { memo, useRef, useState } from "react";
+import { memo, useRef, useState, useEffect, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import type { WindowData } from "../store/windows";
 import { useWindows } from "../store/windows";
 import startDrag from "../utils/window/drag";
 import { getCamera } from "../utils/camera";
 import { startWireDrag, type Side } from "../utils/window/wireDrag";
+import { getHighlightBgColor } from "../App";
+
+const HIGHLIGHT_COLORS: { id: string; name: string; bg: string; displayBg: string }[] = [
+  { id: "none", name: "None (Transparent)", bg: "transparent", displayBg: "transparent" },
+  { id: "yellow", name: "Yellow", bg: "rgba(254, 240, 138, 0.85)", displayBg: "#fef08a" },
+  { id: "lime", name: "Lime", bg: "rgba(226, 248, 159, 0.85)", displayBg: "#e2f89f" },
+  { id: "green", name: "Green", bg: "rgba(187, 247, 208, 0.85)", displayBg: "#bbf7d0" },
+  { id: "tan", name: "Tan", bg: "rgba(254, 215, 170, 0.85)", displayBg: "#fed7aa" },
+  { id: "blue", name: "Blue", bg: "rgba(186, 230, 253, 0.85)", displayBg: "#bae6fd" },
+];
+
+function CircleColorIcon({ bg, size = 26 }: { bg: string; size?: number }) {
+  return (
+    <div
+      className="relative shrink-0 rounded-full border border-black/15 shadow-sm transition-transform flex items-center justify-center overflow-hidden"
+      style={{ width: size, height: size, backgroundColor: bg }}
+    />
+  );
+}
+
+function NoneColorIcon({ size = 28 }: { size?: number }) {
+  return (
+    <div
+      className="relative shrink-0 flex items-center justify-center rounded-full border border-gray-300 bg-white"
+      style={{ width: size, height: size }}
+      title="No background"
+    >
+      <svg width={size - 12} height={size - 12} viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round">
+        <circle cx="12" cy="12" r="9" />
+        <line x1="5.5" y1="5.5" x2="18.5" y2="18.5" />
+      </svg>
+    </div>
+  );
+}
+
+function ShapeHighlightColorPicker({
+  winId,
+  currentColor,
+  isOpen,
+  onClose,
+  onSelectColor,
+}: {
+  winId: string;
+  currentColor?: string;
+  isOpen: boolean;
+  onClose: () => void;
+  onSelectColor?: (colorId?: string) => void;
+}) {
+  const updateWindow = useWindows((s) => s.updateWindow);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const [isHovered, setIsHovered] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [stylePos, setStylePos] = useState({ left: 0, top: 0 });
+
+  useLayoutEffect(() => {
+    if (!isOpen || !pickerRef.current) return;
+    const pickerEl = pickerRef.current;
+    const winEl = document.getElementById(`win-${winId}`);
+    if (winEl && pickerEl) {
+      const rect = winEl.getBoundingClientRect();
+      const pickerW = isHovered ? 240 : 48;
+
+      const top = rect.bottom + 14;
+      let left = rect.left + rect.width / 2;
+
+      if (left + pickerW / 2 > window.innerWidth - 12) left = window.innerWidth - 12 - pickerW / 2;
+      if (left - pickerW / 2 < 12) left = 12 + pickerW / 2;
+
+      setStylePos({ left, top });
+    }
+  }, [isOpen, winId, isHovered]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleDismiss = (e: Event) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        pickerRef.current &&
+        !pickerRef.current.contains(target as Node) &&
+        !target?.closest(".window-context-menu")
+      ) {
+        onClose();
+      }
+    };
+    const timer = setTimeout(() => {
+      window.addEventListener("mousedown", handleDismiss, true);
+      window.addEventListener("pointerdown", handleDismiss, true);
+      window.addEventListener("click", handleDismiss, true);
+      window.addEventListener("wheel", handleDismiss, true);
+    }, 0);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("mousedown", handleDismiss, true);
+      window.removeEventListener("pointerdown", handleDismiss, true);
+      window.removeEventListener("click", handleDismiss, true);
+      window.removeEventListener("wheel", handleDismiss, true);
+    };
+  }, [isOpen, onClose]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleCloseMenus = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.exceptWindowId !== winId) {
+        onClose();
+      }
+    };
+    window.addEventListener("wikiboard:close-menus", handleCloseMenus as EventListener);
+    return () => {
+      window.removeEventListener("wikiboard:close-menus", handleCloseMenus as EventListener);
+    };
+  }, [isOpen, winId, onClose]);
+
+  if (!isOpen) return null;
+
+  const handleMouseEnter = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    setIsHovered(true);
+  };
+
+  const handleMouseLeave = () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      setIsHovered(false);
+    }, 300);
+  };
+
+  const activeId = currentColor || "none";
+  const currentOpt =
+    HIGHLIGHT_COLORS.find((c) => c.id === activeId) || HIGHLIGHT_COLORS[0];
+
+  return createPortal(
+    <div
+      ref={pickerRef}
+      className="shape-color-picker text-color-picker fixed z-[100000] flex items-center justify-center pointer-events-auto select-none p-1"
+      style={{ left: stylePos.left, top: stylePos.top, transform: "translateX(-50%)" }}
+      onMouseDown={(e) => e.stopPropagation()}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <div
+        className="bg-white border-2 border-[#d0d0d0] shadow-[0_8px_24px_rgba(0,0,0,0.14)] flex items-center justify-center rounded-full overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        style={{
+          width: isHovered ? "240px" : "48px",
+          height: "48px",
+          padding: isHovered ? "6px 10px" : "6px",
+        }}
+        onClick={() => {
+          if (!isHovered) setIsHovered(true);
+        }}
+      >
+        {!isHovered ? (
+          <div className="w-8 h-8 flex items-center justify-center cursor-pointer transition-transform hover:scale-105 shrink-0">
+            {currentOpt.id === "none" ? (
+              <NoneColorIcon size={28} />
+            ) : (
+              <CircleColorIcon bg={currentOpt.displayBg} size={28} />
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center justify-center gap-2 w-full shrink-0 transition-opacity duration-200">
+            {HIGHLIGHT_COLORS.map((opt) => {
+              const isSelected = activeId === opt.id;
+              return (
+                <button
+                  type="button"
+                  key={opt.id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const newColor = opt.id === "none" ? undefined : opt.id;
+                    updateWindow(winId, { fillColor: newColor, noteColor: newColor });
+                    onSelectColor?.(newColor);
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  className={`relative p-0.5 rounded-full cursor-pointer transition-transform duration-150 shrink-0 bg-transparent border-none outline-none focus:outline-none focus-visible:outline-none ${
+                    isSelected
+                      ? "scale-115 opacity-100 ring-2 ring-blue-500 ring-offset-1"
+                      : "opacity-70 hover:opacity-100 hover:scale-105 active:scale-95"
+                  }`}
+                  style={{ outline: "none", border: "none", boxShadow: "none" }}
+                  title={opt.name}
+                >
+                  {opt.id === "none" ? (
+                    <NoneColorIcon size={26} />
+                  ) : (
+                    <CircleColorIcon bg={opt.displayBg} size={26} />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
 
 type Props = {
   win: WindowData;
@@ -11,6 +212,7 @@ type Props = {
   onActivate: () => void;
   onPositionChange: (pos: { x?: number; y?: number; width?: number; height?: number }) => void;
   onAddSticky?: (side: Side) => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
 };
 
 // Generates a smooth Catmull-Rom spline converted to cubic Bezier segments passing cleanly
@@ -116,8 +318,10 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
   onActivate,
   onPositionChange,
   onAddSticky,
+  onContextMenu,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [showColorPicker, setShowColorPicker] = useState(false);
   const [isDraggingPoint, setIsDraggingPoint] = useState(false);
   const selectedIds = useWindows((s) => s.selectedIds);
   const updateWindow = useWindows((s) => s.updateWindow);
@@ -128,13 +332,30 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
   const height = Math.max(20, win.height ?? 120);
   const shapeType = win.shapeType ?? "rectangle";
   const strokeColor = win.strokeColor ?? "#64748b";
+  const rawColor = win.fillColor || win.noteColor;
   const fillColor =
-    !win.fillColor || win.fillColor === "rgba(100, 116, 139, 0.08)"
+    !rawColor || rawColor === "none" || rawColor === "transparent" || rawColor === "rgba(100, 116, 139, 0.08)"
       ? "transparent"
-      : win.fillColor;
+      : getHighlightBgColor(rawColor);
   const strokeWidth = win.strokeWidth ?? 2.5;
 
   const isLineOrArrow = shapeType === "line" || shapeType === "arrow";
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onActivate();
+    useWindows.getState().setSelectedIds([win.id]);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("wikiboard:close-menus", { detail: { exceptWindowId: win.id } }));
+    }
+    if (!isLineOrArrow) {
+      setShowColorPicker(true);
+    }
+    if (onContextMenu) {
+      onContextMenu(e);
+    }
+  };
 
   // Coordinates for line/arrow:
   const [x1, y1, x2, y2] = win.shapePoints ?? [
@@ -794,12 +1015,14 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
         transform: rotation ? `rotate(${rotation}deg)` : undefined,
         transformOrigin: "center center",
       }}
+      onContextMenu={handleContextMenu}
     >
       <svg
         width={containerW}
         height={containerH}
         viewBox={svgViewBox}
         className="overflow-visible block w-full h-full pointer-events-none"
+        onContextMenu={handleContextMenu}
       >
         <defs>
           <marker
@@ -831,11 +1054,12 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
               width={Math.max(0, width - strokeWidth)}
               height={Math.max(0, height - strokeWidth)}
               rx={8}
-              fill="none"
+              fill="transparent"
               stroke="transparent"
               strokeWidth={Math.max(16, strokeWidth + 14)}
-              style={{ pointerEvents: "stroke", cursor: "move" }}
+              style={{ pointerEvents: (fillColor !== "transparent" || isFocusedOrActive) ? "all" : "stroke", cursor: "move" }}
               onMouseDown={handleMouseDown}
+              onContextMenu={handleContextMenu}
             />
             {/* Visible rectangle boundary */}
             <rect
@@ -847,8 +1071,9 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
               fill={fillColor}
               stroke={strokeColor}
               strokeWidth={strokeWidth}
-              style={{ pointerEvents: "stroke", cursor: "move" }}
+              style={{ pointerEvents: fillColor !== "transparent" ? "all" : "stroke", cursor: "move" }}
               onMouseDown={handleMouseDown}
+              onContextMenu={handleContextMenu}
             />
           </>
         )}
@@ -861,11 +1086,12 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
               cy={height / 2}
               rx={Math.max(0, (width - strokeWidth) / 2)}
               ry={Math.max(0, (height - strokeWidth) / 2)}
-              fill="none"
+              fill="transparent"
               stroke="transparent"
               strokeWidth={Math.max(16, strokeWidth + 14)}
-              style={{ pointerEvents: "stroke", cursor: "move" }}
+              style={{ pointerEvents: (fillColor !== "transparent" || isFocusedOrActive) ? "all" : "stroke", cursor: "move" }}
               onMouseDown={handleMouseDown}
+              onContextMenu={handleContextMenu}
             />
             {/* Visible circle boundary */}
             <ellipse
@@ -876,8 +1102,9 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
               fill={fillColor}
               stroke={strokeColor}
               strokeWidth={strokeWidth}
-              style={{ pointerEvents: "stroke", cursor: "move" }}
+              style={{ pointerEvents: fillColor !== "transparent" ? "all" : "stroke", cursor: "move" }}
               onMouseDown={handleMouseDown}
+              onContextMenu={handleContextMenu}
             />
           </>
         )}
@@ -887,12 +1114,13 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
             {/* Invisible thick stroke for easy boundary clicking/dragging to open box */}
             <polygon
               points={`${width / 2},${strokeWidth / 2} ${width - strokeWidth / 2},${height / 2} ${width / 2},${height - strokeWidth / 2} ${strokeWidth / 2},${height / 2}`}
-              fill="none"
+              fill="transparent"
               stroke="transparent"
               strokeWidth={Math.max(16, strokeWidth + 14)}
               strokeLinejoin="round"
-              style={{ pointerEvents: "stroke", cursor: "move" }}
+              style={{ pointerEvents: (fillColor !== "transparent" || isFocusedOrActive) ? "all" : "stroke", cursor: "move" }}
               onMouseDown={handleMouseDown}
+              onContextMenu={handleContextMenu}
             />
             {/* Visible diamond boundary */}
             <polygon
@@ -901,8 +1129,9 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
               stroke={strokeColor}
               strokeWidth={strokeWidth}
               strokeLinejoin="round"
-              style={{ pointerEvents: "stroke", cursor: "move" }}
+              style={{ pointerEvents: fillColor !== "transparent" ? "all" : "stroke", cursor: "move" }}
               onMouseDown={handleMouseDown}
+              onContextMenu={handleContextMenu}
             />
           </>
         )}
@@ -919,6 +1148,7 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
               strokeLinejoin="round"
               style={{ pointerEvents: "stroke", cursor: "move" }}
               onMouseDown={handleMouseDown}
+              onContextMenu={handleContextMenu}
             />
             {/* Visible line or arrow */}
             <path
@@ -930,6 +1160,7 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
               strokeLinejoin="round"
               style={{ pointerEvents: "stroke", cursor: "move" }}
               onMouseDown={handleMouseDown}
+              onContextMenu={handleContextMenu}
               markerEnd={shapeType === "arrow" ? `url(#arrowhead-${win.id})` : undefined}
             />
           </>
@@ -1064,6 +1295,15 @@ const CanvasShapeItem = memo(function CanvasShapeItem({
             title="Drag end point"
           />
         </>
+      )}
+      {/* Floating Highlight Color Picker Centered Below Shape (for rectangle, circle, diamond) */}
+      {!isLineOrArrow && (
+        <ShapeHighlightColorPicker
+          winId={win.id}
+          currentColor={win.fillColor || win.noteColor}
+          isOpen={showColorPicker}
+          onClose={() => setShowColorPicker(false)}
+        />
       )}
     </div>
   );

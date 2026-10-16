@@ -22,34 +22,14 @@ const STICKY_COLORS: { id: string; name: string; bg: string; isDark?: boolean }[
   { id: "blue", name: "Blue", bg: "#bae6fd" },
 ];
 
-function MiniStickyIcon({ bg, isDark, size = 28 }: { bg: string; isDark?: boolean; size?: number }) {
+function CircleColorIcon({ bg, isDark, size = 28 }: { bg: string; isDark?: boolean; size?: number }) {
   return (
-    <div className="relative shrink-0 flex items-center justify-center" style={{ width: size, height: size }}>
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-        {/* Main Sticky Note Body with cut bottom-left corner */}
-        <path
-          d="M 3.5 2 H 20.5 C 21.328 2 22 2.672 22 3.5 V 20.5 C 22 21.328 21.328 22 20.5 22 H 7.5 L 2 16.5 V 3.5 C 2 2.672 2.672 2 3.5 2 Z"
-          fill={bg}
-        />
-        {/* Soft shadow underneath folded corner */}
-        <path
-          d="M 2 16.5 L 7.5 22 L 7.5 16.5 Z"
-          fill="rgba(0,0,0,0.2)"
-        />
-        {/* Folded paper corner flap curling from bottom-left */}
-        <path
-          d="M 2 16.5 L 7.5 22 C 5.5 19.5 4 18 2 16.5 Z"
-          fill={bg}
-          style={{ filter: isDark ? "brightness(1.5)" : "brightness(0.82)" }}
-        />
-        {/* Crease line shadow */}
-        <path
-          d="M 2 16.5 L 7.5 22"
-          stroke={isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.15)"}
-          strokeWidth="0.75"
-        />
-      </svg>
-    </div>
+    <div
+      className={`relative shrink-0 rounded-full shadow-sm transition-transform flex items-center justify-center overflow-hidden ${
+        isDark ? "border border-white/20" : "border border-black/15"
+      }`}
+      style={{ width: size, height: size, backgroundColor: bg }}
+    />
   );
 }
 
@@ -76,10 +56,8 @@ function StickyColorPicker({
     const winEl = document.getElementById(`win-${winId}`);
     if (winEl && pickerEl) {
       const rect = winEl.getBoundingClientRect();
-      const pickerH = pickerEl.offsetHeight;
       const pickerW = isHovered ? 230 : 48;
-
-      const top = Math.min(window.innerHeight - pickerH - 12, rect.bottom + 14);
+      const top = rect.bottom + 14;
       let left = rect.left + rect.width / 2;
 
       if (left + pickerW / 2 > window.innerWidth - 12) left = window.innerWidth - 12 - pickerW / 2;
@@ -159,7 +137,7 @@ function StickyColorPicker({
       onMouseLeave={handleMouseLeave}
     >
       <div
-        className="bg-white border-2 border-[#d0d0d0] shadow-[0_8px_24px_rgba(0,0,0,0.14)] flex items-center justify-center rounded-[18px] overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        className="bg-white border-2 border-[#d0d0d0] shadow-[0_8px_24px_rgba(0,0,0,0.14)] flex items-center justify-center rounded-full overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
         style={{
           width: isHovered ? "224px" : "48px",
           height: "48px",
@@ -171,7 +149,7 @@ function StickyColorPicker({
       >
         {!isHovered ? (
           <div className="w-8 h-8 flex items-center justify-center cursor-pointer transition-transform hover:scale-105 shrink-0">
-            <MiniStickyIcon bg={currentOpt.bg} isDark={currentOpt.isDark} size={28} />
+            <CircleColorIcon bg={currentOpt.bg} isDark={currentOpt.isDark} size={28} />
           </div>
         ) : (
           <div className="flex items-center justify-center gap-2.5 w-full shrink-0 transition-opacity duration-200">
@@ -186,14 +164,14 @@ function StickyColorPicker({
                     updateWindow(winId, { noteColor: opt.id });
                   }}
                   onMouseDown={(e) => e.stopPropagation()}
-                  className={`relative p-0.5 rounded-[8px] cursor-pointer transition-transform duration-150 shrink-0 bg-transparent border-none ${
+                  className={`relative p-0.5 rounded-full cursor-pointer transition-transform duration-150 shrink-0 bg-transparent border-none ${
                     isSelected
-                      ? "scale-115 opacity-100"
+                      ? "scale-115 opacity-100 ring-2 ring-blue-500 ring-offset-1"
                       : "opacity-70 hover:opacity-100 hover:scale-105 active:scale-95"
                   }`}
                   title={opt.name}
                 >
-                  <MiniStickyIcon bg={opt.bg} isDark={opt.isDark} size={28} />
+                  <CircleColorIcon bg={opt.bg} isDark={opt.isDark} size={28} />
                 </button>
               );
             })}

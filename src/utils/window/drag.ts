@@ -75,8 +75,15 @@ export default function startDrag(
     if (setupDone) return;
     setupDone = true;
     for (const gt of groupTargets) {
+      try {
+        for (const a of gt.el.getAnimations()) {
+          a.cancel();
+        }
+      } catch {
+        /* ignore */
+      }
       gt.el.classList.add("dragging");
-      gt.el.style.zIndex = String(nextZ);
+      gt.el.style.zIndex = "99990";
     }
     target.closest(".canvas-world")?.classList.add("gesture-active");
     document.body.style.cursor = "move";
@@ -135,13 +142,21 @@ export default function startDrag(
     }
 
     for (const gt of groupTargets) {
+      try {
+        for (const a of gt.el.getAnimations()) {
+          a.cancel();
+        }
+      } catch {
+        /* ignore */
+      }
       const finalLeft = gt.baseLeft + rdx;
       const finalTop = gt.baseTop + rdy;
       gt.el.style.transform = "";
       gt.el.style.left = `${finalLeft}px`;
       gt.el.style.top = `${finalTop}px`;
       gt.el.classList.remove("dragging");
-      useWindows.getState().updateWindow(gt.id, { x: finalLeft, y: finalTop });
+      gt.el.style.zIndex = String(nextZ);
+      useWindows.getState().updateWindow(gt.id, { x: finalLeft, y: finalTop, zIndex: nextZ });
     }
 
     useWindows.setState({ maxZIndex: nextZ });

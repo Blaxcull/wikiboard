@@ -59,11 +59,11 @@ export default function LeftMenu() {
             className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border-none outline-none ${
               searchOpen
                 ? "bg-black/10 text-gray-950 shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)] scale-[0.98]"
-                : "text-gray-600 hover:text-gray-900 hover:bg-black/6 active:scale-95"
+                : "text-gray-900 hover:bg-black/6 active:scale-95"
             }`}
           >
             <svg
-              className="w-5 h-5 transition-transform duration-150 group-hover:scale-105"
+              className="w-5 h-5"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -98,11 +98,11 @@ export default function LeftMenu() {
             className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border-none outline-none ${
               isTextToolActive
                 ? "bg-black/10 text-gray-950 shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)] scale-[0.98]"
-                : "text-gray-600 hover:text-gray-900 hover:bg-black/6 active:scale-95"
+                : "text-gray-900 hover:bg-black/6 active:scale-95"
             }`}
           >
             <svg
-              className="w-5 h-5 transition-transform duration-150 group-hover:scale-105"
+              className="w-5 h-5"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -144,10 +144,10 @@ export default function LeftMenu() {
                 className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border-none outline-none ${
                   drawingTool === "rectangle"
                     ? "bg-black/10 text-gray-950 shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)] scale-[0.98]"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-black/6 active:scale-95"
+                    : "text-gray-900 hover:bg-black/6 active:scale-95"
                 }`}
               >
-                <svg className="w-5 h-5 transition-transform duration-150 group-hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="4" y="4" width="16" height="16" rx="2" />
                 </svg>
               </button>
@@ -169,10 +169,10 @@ export default function LeftMenu() {
                 className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border-none outline-none ${
                   drawingTool === "circle"
                     ? "bg-black/10 text-gray-950 shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)] scale-[0.98]"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-black/6 active:scale-95"
+                    : "text-gray-900 hover:bg-black/6 active:scale-95"
                 }`}
               >
-                <svg className="w-5 h-5 transition-transform duration-150 group-hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="8" />
                 </svg>
               </button>
@@ -194,10 +194,10 @@ export default function LeftMenu() {
                 className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border-none outline-none ${
                   drawingTool === "diamond"
                     ? "bg-black/10 text-gray-950 shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)] scale-[0.98]"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-black/6 active:scale-95"
+                    : "text-gray-900 hover:bg-black/6 active:scale-95"
                 }`}
               >
-                <svg className="w-5 h-5 transition-transform duration-150 group-hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <polygon points="12 3 21 12 12 21 3 12" />
                 </svg>
               </button>
@@ -219,10 +219,10 @@ export default function LeftMenu() {
                 className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border-none outline-none ${
                   drawingTool === "line"
                     ? "bg-black/10 text-gray-950 shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)] scale-[0.98]"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-black/6 active:scale-95"
+                    : "text-gray-900 hover:bg-black/6 active:scale-95"
                 }`}
               >
-                <svg className="w-5 h-5 transition-transform duration-150 group-hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                   <line x1="4" y1="20" x2="20" y2="4" />
                 </svg>
               </button>
@@ -244,10 +244,10 @@ export default function LeftMenu() {
                 className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border-none outline-none ${
                   drawingTool === "arrow"
                     ? "bg-black/10 text-gray-950 shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)] scale-[0.98]"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-black/6 active:scale-95"
+                    : "text-gray-900 hover:bg-black/6 active:scale-95"
                 }`}
               >
-                <svg className="w-5 h-5 transition-transform duration-150 group-hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="5" y1="19" x2="19" y2="5" />
                   <polyline points="10 5 19 5 19 14" />
                 </svg>
@@ -269,7 +269,7 @@ export default function LeftMenu() {
                 className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border-none outline-none bg-black/10 text-gray-950 shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)] active:scale-95"
               >
                 <svg
-                  className="w-5 h-5 transition-transform duration-150 group-hover:scale-105"
+                  className="w-5 h-5"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -299,10 +299,10 @@ export default function LeftMenu() {
                 type="button"
                 onClick={handleAddStickyNote}
                 aria-label="Add Sticky Note"
-                className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border-none outline-none text-gray-600 hover:text-gray-900 hover:bg-black/6 active:scale-95"
+                className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border-none outline-none text-gray-900 hover:bg-black/6 active:scale-95"
               >
                 <svg
-                  className="w-5 h-5 transition-transform duration-150 group-hover:scale-105"
+                  className="w-5 h-5"
                   viewBox="0 0 24 24"
                   fill="#fef08a"
                   stroke="#ca8a04"
@@ -337,32 +337,20 @@ export default function LeftMenu() {
                 className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border-none outline-none ${
                   isSelectToolActive
                     ? "bg-black/10 text-gray-950 shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)] scale-[0.98]"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-black/6 active:scale-95"
+                    : "text-gray-900 hover:bg-black/6 active:scale-95"
                 }`}
               >
-                <svg
-                  className="w-5 h-5 transition-transform duration-150 group-hover:scale-105"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                >
-                  <rect
-                    x="3.5"
-                    y="3.5"
-                    width="13"
-                    height="13"
-                    rx="2"
-                    strokeDasharray="2.5 2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M13.5 12.5L20.5 19.5L17.5 20.2L16 23.5L14 22.5L15.5 19.2L12.5 18Z"
-                    fill="currentColor"
-                    stroke="none"
-                  />
-                </svg>
+                <img
+                  src="/icons/selection.png"
+                  alt=""
+                  aria-hidden="true"
+                  draggable={false}
+                  className={`w-5 h-5 object-contain transition-opacity duration-150 select-none pointer-events-none ${
+                    isSelectToolActive
+                      ? "opacity-100"
+                      : "opacity-90"
+                  }`}
+                />
               </button>
 
               {/* Right Flyout Tooltip */}
@@ -387,21 +375,20 @@ export default function LeftMenu() {
                 className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border-none outline-none ${
                   connectionStyle === "curved"
                     ? "bg-black/10 text-gray-950 shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)] scale-[0.98]"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-black/6 active:scale-95"
+                    : "text-gray-900 hover:bg-black/6 active:scale-95"
                 }`}
               >
-                <svg
-                  className="w-5 h-5 transition-transform duration-150 group-hover:scale-105"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                >
-                  <circle cx="5" cy="18" r="1.8" fill="currentColor" stroke="none" />
-                  <path d="M5 18 C 11 18, 9 6, 17 6" />
-                  <circle cx="17" cy="6" r="1.8" fill="currentColor" stroke="none" />
-                </svg>
+                <img
+                  src="/icons/curved-line.svg"
+                  alt=""
+                  aria-hidden="true"
+                  draggable={false}
+                  className={`w-5 h-5 object-contain transition-opacity duration-150 select-none pointer-events-none ${
+                    connectionStyle === "curved"
+                      ? "opacity-100"
+                      : "opacity-90"
+                  }`}
+                />
               </button>
 
               {/* Right Flyout Tooltip */}
@@ -423,11 +410,11 @@ export default function LeftMenu() {
                 className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border-none outline-none ${
                   connectionStyle === "pointy"
                     ? "bg-black/10 text-gray-950 shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)] scale-[0.98]"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-black/6 active:scale-95"
+                    : "text-gray-900 hover:bg-black/6 active:scale-95"
                 }`}
               >
                 <svg
-                  className="w-5 h-5 transition-transform duration-150 group-hover:scale-105"
+                  className="w-5 h-5"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -459,11 +446,11 @@ export default function LeftMenu() {
                 className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border-none outline-none ${
                   isEraserToolActive
                     ? "bg-black/10 text-gray-950 shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)] scale-[0.98]"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-black/6 active:scale-95"
+                    : "text-gray-900 hover:bg-black/6 active:scale-95"
                 }`}
               >
                 <svg
-                  className="w-5 h-5 transition-transform duration-150 group-hover:scale-105"
+                  className="w-5 h-5"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -496,10 +483,10 @@ export default function LeftMenu() {
                 }}
                 aria-label="Shapes Tool"
                 aria-pressed={drawingTool !== null}
-                className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border-none outline-none text-gray-600 hover:text-gray-900 hover:bg-black/6 active:scale-95"
+                className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border-none outline-none text-gray-900 hover:bg-black/6 active:scale-95"
               >
                 <svg
-                  className="w-5 h-5 transition-transform duration-150 group-hover:scale-105"
+                  className="w-5 h-5"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"

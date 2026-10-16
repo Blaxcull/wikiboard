@@ -30,10 +30,7 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
       const menuH = menuEl.offsetHeight;
       const menuW = menuEl.offsetWidth;
 
-      let top = rect.top - menuH - 18;
-      if (top < 12) {
-        top = Math.min(window.innerHeight - menuH - 12, rect.bottom + 18);
-      }
+      const top = rect.top - menuH - 18;
       let left = rect.left + (rect.width - menuW) / 2;
 
       if (left + menuW > window.innerWidth - 12) left = window.innerWidth - menuW - 12;
@@ -53,7 +50,8 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
         menuRef.current &&
         !menuRef.current.contains(target as Node) &&
         !target?.closest(".sticky-color-picker") &&
-        !target?.closest(".text-color-picker")
+        !target?.closest(".text-color-picker") &&
+        !target?.closest(".shape-color-picker")
       ) {
         onClose();
       }
@@ -80,20 +78,23 @@ export default function WindowContextMenu({ pos, onClose }: Props) {
   const isSticky = targetWin?.contentType === "sticky";
   const isImage = !!(targetWin?.directImageUrl || targetWin?.title?.startsWith("File:"));
   const isText = targetWin?.contentType === "text";
+  const isShape = targetWin?.contentType === "shape";
 
   const childNotes = pos?.windowId ? getConnectedChildNotes(pos.windowId, windows, groups) : [];
-  const canStack = isSticky || isImage || childNotes.length > 0;
+  const canStack = !isText && !isShape;
   const hasUnstackedNotes = childNotes.some((w) => !w.stacked || w.stackedParentId !== pos?.windowId);
 
   let stackLabel: string;
   if (childNotes.length > 0) {
-    stackLabel = hasUnstackedNotes ? "Stack notes" : "Unstack notes";
+    stackLabel = hasUnstackedNotes
+      ? childNotes.length === 1 ? "Stack note" : "Stack notes"
+      : childNotes.length === 1 ? "Unstack note" : "Unstack notes";
   } else if (isImage) {
     stackLabel = targetWin?.stacked ? "Unstack image" : "Stack image";
   } else if (isSticky) {
     stackLabel = targetWin?.stacked ? "Unstack note" : "Stack note";
   } else {
-    stackLabel = "Stack notes";
+    stackLabel = "Stack note";
   }
 
   if (!pos) return null;

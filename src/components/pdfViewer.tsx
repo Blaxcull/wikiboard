@@ -517,6 +517,7 @@ export default function PdfViewer({ win, onAddSticky, onPositionChange, onActiva
         height: expectedH,
         pdfMaximized: false,
         pdfAnimating: true,
+        pdfPreMaximizedBounds: undefined,
       });
 
       prevWindowRef.current = null;
